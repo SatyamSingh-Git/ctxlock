@@ -1,11 +1,13 @@
 import { execFile } from 'node:child_process';
-import { lstat, readFile, readdir, readlink, stat } from 'node:fs/promises';
+import { lstat, readFile, readdir, readlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
 const MAX_BUFFER = 256 * 1024 * 1024;
 
+// Paths are POSIX and relative to the repository's top level, or to root outside git.
+// Only listed files can be read: a symlink is never read through, wherever it points.
 export interface RepoReader {
   readonly root: string;
   readonly ref: string | null;
@@ -28,7 +30,9 @@ export class RefNotFound extends Error {
 }
 
 interface Listing {
+  top: string;
   files: string[];
+  fileSet: Set<string>;
   links: Map<string, string | null>;
 }
 
@@ -45,11 +49,6 @@ async function gitBuffer(root: string, args: string[]): Promise<Buffer> {
 // execFile reports a non-zero exit as a numeric code; a string code means git itself could not start.
 function exitedNonZero(err: unknown): boolean {
   return typeof (err as { code?: unknown }).code === 'number';
-}
-
-function isMissing(err: unknown): boolean {
-  const code = (err as NodeJS.ErrnoException).code;
-  return code === 'ENOENT' || code === 'ENOTDIR';
 }
 
 const nulSplit = (s: string) => s.split('\0').filter(Boolean);
@@ -74,18 +73,23 @@ function resolveFsTarget(root: string, linkPath: string, target: string): string
   return insideRepo(toPosix(rel));
 }
 
-async function isGitWorkTree(root: string): Promise<boolean> {
+async function gitTopLevel(root: string): Promise<string | null> {
   try {
-    return (await git(root, ['rev-parse', '--is-inside-work-tree'])).trim() === 'true';
+    return (await git(root, ['rev-parse', '--show-toplevel'])).trim();
   } catch (err) {
-    if (exitedNonZero(err)) return false;
+    if (exitedNonZero(err)) return null;
     throw err;
   }
 }
 
+function listing(top: string, files: string[], links: Map<string, string | null>): Listing {
+  files.sort();
+  return { top, files, fileSet: new Set(files), links };
+}
+
 async function listGitWorkTree(root: string): Promise<Listing> {
   const [staged, untracked, deletedOut, localOut] = await Promise.all([
-    git(root, ['ls-files', '-z', '-s']),
+    git(root, ['ls-files', '-z', '-s', '-t']),
     git(root, ['ls-files', '-z', '--others', '--exclude-standard']),
     git(root, ['ls-files', '-z', '--deleted']),
     // CLAUDE.local.md is usually gitignored, yet Claude Code still loads it on this machine.
@@ -97,15 +101,17 @@ async function listGitWorkTree(root: string): Promise<Listing> {
 
   for (const entry of nulSplit(staged)) {
     const tab = entry.indexOf('\t');
-    const [mode, object] = entry.slice(0, tab).split(' ');
+    const [tag, mode, object] = entry.slice(0, tab).split(' ');
     const path = entry.slice(tab + 1);
-    if (deleted.has(path) || skipped(path) || mode === '160000') continue;
+    // S is skip-worktree: a sparse checkout left the file out of the working tree.
+    if (tag === 'S' || deleted.has(path) || skipped(path) || mode === '160000') continue;
     if (mode === '120000') links.set(path, resolveGitTarget(path, await git(root, ['cat-file', 'blob', object!])));
     else files.add(path);
   }
 
   for (const path of nulSplit(untracked)) {
-    if (skipped(path)) continue;
+    // A trailing slash is a nested repository, which git does not descend into.
+    if (path.endsWith('/') || skipped(path)) continue;
     if ((await lstat(join(root, path))).isSymbolicLink()) {
       links.set(path, resolveFsTarget(root, path, await readlink(join(root, path))));
     } else {
@@ -114,7 +120,7 @@ async function listGitWorkTree(root: string): Promise<Listing> {
   }
   for (const path of nulSplit(localOut)) if (!skipped(path)) files.add(path);
 
-  return { files: [...files].sort(), links };
+  return listing(root, [...files], links);
 }
 
 async function walk(root: string): Promise<Listing> {
@@ -130,12 +136,12 @@ async function walk(root: string): Promise<Listing> {
     }
   }
   await visit('');
-  return { files: files.sort(), links };
+  return listing(root, files, links);
 }
 
 export function fsReader(root: string): RepoReader {
-  let listing: Promise<Listing> | undefined;
-  const list = () => (listing ??= isGitWorkTree(root).then((inGit) => (inGit ? listGitWorkTree(root) : walk(root))));
+  let cached: Promise<Listing> | undefined;
+  const list = () => (cached ??= gitTopLevel(root).then((top) => (top ? listGitWorkTree(top) : walk(root))));
 
   return {
     root,
@@ -144,21 +150,13 @@ export function fsReader(root: string): RepoReader {
       return (await list()).files;
     },
     async readFile(path) {
-      try {
-        return await readFile(join(root, path));
-      } catch (err) {
-        if (isMissing(err)) throw new FileNotFound(path);
-        throw err;
-      }
+      const { top, fileSet } = await list();
+      if (!fileSet.has(path)) throw new FileNotFound(path);
+      return readFile(join(top, path));
     },
     async exists(path) {
-      try {
-        await stat(join(root, path));
-        return true;
-      } catch (err) {
-        if (isMissing(err)) return false;
-        throw err;
-      }
+      const { files, fileSet } = await list();
+      return fileSet.has(path) || files.some((f) => f.startsWith(`${path}/`));
     },
     async listSymlinks() {
       return (await list()).links;

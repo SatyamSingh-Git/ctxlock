@@ -1,9 +1,23 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 const created: string[] = [];
+
+// Windows allows symlinks only with developer mode or admin rights; tests that need real links skip without them.
+export const canSymlink = (() => {
+  const dir = mkdtempSync(join(tmpdir(), 'ctxlock-link-'));
+  try {
+    symlinkSync('target', join(dir, 'link'));
+    return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EPERM') return false;
+    throw err;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+})();
 
 export function tempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), 'ctxlock-'));
