@@ -1,0 +1,37 @@
+{
+  "name": "ctxlock",
+  "version": "0.0.0",
+  "description": "CI, a dependency graph and a feedback loop for AI agent context",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "ctxlock": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "ci": "npm run typecheck && npm test && npm run build"
+  },
+  "dependencies": {
+    "commander": "^15.0.0",
+    "ignore": "^7.0.14",
+    "picomatch": "^4.0.7",
+    "smol-toml": "^1.9.1",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/picomatch": "^4.0.3",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
