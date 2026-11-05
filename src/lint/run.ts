@@ -4,11 +4,26 @@ import { skillSpec } from './rules/l0-skill-spec.js';
 import { hiddenUnicode, htmlComment } from './rules/l1-hidden.js';
 import { execConfig, riskyInstruction } from './rules/l2-exec.js';
 import { harnessBudget } from './rules/l3-budget.js';
+import { discoverable } from './rules/l4-discoverable.js';
 import { instructionCount } from './rules/l5-instructions.js';
 import { skillLength } from './rules/l6-skill-length.js';
+import { duplicateSkills } from './rules/l7-duplicates.js';
+import { procedure } from './rules/l8-procedure.js';
 import type { LintContext, Rule } from './types.js';
 
-export const RULES: Rule[] = [skillSpec, hiddenUnicode, htmlComment, riskyInstruction, execConfig, harnessBudget, instructionCount, skillLength];
+export const RULES: Rule[] = [
+  skillSpec,
+  hiddenUnicode,
+  htmlComment,
+  riskyInstruction,
+  execConfig,
+  harnessBudget,
+  discoverable,
+  instructionCount,
+  skillLength,
+  duplicateSkills,
+  procedure,
+];
 
 const RANK = { must: 0, should: 1, info: 2 };
 const byCodeUnit = (a = '', b = '') => (a < b ? -1 : a > b ? 1 : 0);
