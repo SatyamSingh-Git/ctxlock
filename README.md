@@ -6,8 +6,7 @@
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)
 ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-339933.svg)
 
-> **Status: pre-alpha.** Research and design are complete, and the first release is being built.
-> Nothing here is ready to install yet. Everything below describes what is planned unless it is marked as done.
+> **Status: pre-alpha.** The static checks work: `ctxlock scan`, `lint`, `budget` and `diff` run from source, and a GitHub Action posts the result on pull requests. Nothing is on npm yet, and there is no release tag. Behavioral checks, the dependency graph and the feedback loop are still being designed. Everything below that isn't marked as done is planned.
 
 ---
 
@@ -38,29 +37,77 @@ ctxlock adds the layer the open formats are missing. It does not replace them, a
 
 Think of it as **dbt + Dependabot + Sentry, for agent context.**
 
-### What a pull request check will look like
+### What a pull request check looks like
 
-*Illustrative. This is the planned output of the first release.*
+Real output from `ctxlock diff` for a pull request that adds a rule containing a zero-width space and a `SessionStart` hook. The Action posts the same result as a pull request comment:
 
 ```text
-ctxlock · context check
-❌ 1 must-fix
+ctxlock diff HEAD~1 -> HEAD
+2 must-fix
 
-Changed: rule/.claude/rules/testing.md, instructions/AGENTS.md
+Changed units:
+  added     config/.claude/settings.json
+  modified  instructions/AGENTS.md
+  added     rule/.claude/rules/testing.md
 
-Budget
-  codex        (root)  24,310 → 33,902 bytes   limit 32,768   ⚠ AGENTS.md truncated
-  claude-code  (root)  11,204 → 11,980 bytes
+Budget:
+  claude-code  .  74 -> 133
+  codex        .  63 -> 89   limit 32768
 
-Must fix
-  .claude/rules/testing.md:14 — hidden character U+200B ZERO WIDTH SPACE at 14:7
-Should fix
-  AGENTS.md — Claude Code ignores AGENTS.md because CLAUDE.md exists; add @AGENTS.md to CLAUDE.md
-  AGENTS.md — AGENTS.md chain at (root) is 33,902 bytes; Codex loads the first 32,768
+New findings:
+must  L1-hidden-unicode  .claude/rules/testing.md:1  hidden character U+200B ZERO WIDTH SPACE at 1:30
+info  L11-coverage       .claude/rules/testing.md    .claude/rules/testing.md reaches claude-code only
 
-Execution-affecting changes
-  .claude/settings.json — new SessionStart hook: curl -fsSL https://… | sh
+1 must, 0 should, 1 info
+
+Execution-affecting changes:
+  must .claude/settings.json  New or changed: SessionStart hook for startup runs "curl -fsSL https://setup.example.dev/install.sh | sh"
+
+Resolved: 0
 ```
+
+## Usage
+
+### On pull requests
+
+Add a workflow such as `.github/workflows/ctxlock.yml`:
+
+```yaml
+name: ctxlock
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write   # for the pull request comment
+
+jobs:
+  context:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # ctxlock compares against the base commit, so it needs the history
+      - uses: SatyamSingh-Git/ctxlock@main   # pin a release tag once one exists
+```
+
+The check fails when the pull request introduces a **must** finding. That means something an agent would read wrongly or not at all, or something that hides text from reviewers (hidden Unicode, a hidden HTML comment, a skill whose frontmatter agents can't load), or any new or changed hook, MCP server, environment variable or auto-approval in agent config. A `must` finding that was already on the base branch is reported but does not fail the check. The pull request is judged with the base branch's `ctxlock.yaml`, so it cannot switch off the checks that judge it.
+
+| Input | Default | Meaning |
+|---|---|---|
+| `base` | the pull request's base commit | The ref to compare against |
+| `fail-on-must` | `'true'` | Set `'false'` to report without failing |
+| `comment` | `'true'` | Post the result as one pull request comment, updated on each push. Pull requests from forks get a read-only token, so there the result is in the job summary only |
+
+### Locally
+
+```sh
+git clone https://github.com/SatyamSingh-Git/ctxlock.git
+cd ctxlock && npm ci && npm run build
+node dist/cli.js lint /path/to/your/repo
+node dist/cli.js diff --base origin/main /path/to/your/repo
+```
+
+[The guide](the-guide/commands.md) covers every command, flag and exit code, and [rules.md](the-guide/rules.md) covers every rule.
 
 ## How it works
 
@@ -92,7 +139,7 @@ flowchart LR
 - [x] **Research.** The state of agent context as of November 2026, drawn from about 400 sources ([synthesis](research/00-synthesis.md)).
 - [x] **Design.** Goals, architecture and phases ([design](docs/superpowers/specs/2026-11-05-ctxlock-design.md)).
 - [x] **Implementation plan** for the static core ([plan](docs/superpowers/plans/2026-11-05-ctxlock-static-core-and-spikes.md)).
-- [ ] **Static core** *(in progress)*: `ctxlock scan`, `lint`, `budget`, `diff`, and a GitHub Action.
+- [ ] **Static core** *(nearly done)*: `ctxlock scan`, `lint`, `budget` and `diff` are built, with 20 checks (L0–L11 and L13) and the GitHub Action. A first pass over real public repositories comes next.
 - [ ] **Behavioral CI:** adherence and trigger probes, plus paired base-vs-head evals through `claude -p`.
 - [ ] **Dependency graph and propagation:** `who-uses`, blast radius, and update pull requests into dependent repos.
 - [ ] **Feedback loop:** agent misses routed to the owner, fixed, validated by replay, and tracked for durability.

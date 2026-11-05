@@ -1,0 +1,98 @@
+name: ctxlock
+description: Check a pull request's changes to AI agent context (AGENTS.md, CLAUDE.md, rules, skills, agent config)
+author: SatyamSingh-Git
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  base:
+    description: The ref to compare against. Set automatically on pull_request events.
+    default: ${{ github.event.pull_request.base.sha }}
+  fail-on-must:
+    description: Fail the check when the change adds a must finding or an execution-affecting change.
+    default: 'true'
+  comment:
+    description: Post the result as a sticky pull request comment.
+    default: 'true'
+
+outputs:
+  exit-code:
+    description: 0 clean, 1 must-fix issues, 2 could not run.
+    value: ${{ steps.diff.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 22
+
+    - name: Build ctxlock
+      shell: bash
+      run: |
+        npm ci --prefix "$GITHUB_ACTION_PATH" --no-audit --no-fund
+        npm run build --prefix "$GITHUB_ACTION_PATH"
+
+    - name: Check context
+      id: diff
+      shell: bash
+      # Inputs reach the script through env, never through ${{ }} inside it, so they cannot inject shell.
+      env:
+        BASE: ${{ inputs.base }}
+      run: |
+        report="$RUNNER_TEMP/ctxlock.md"
+        errors="$RUNNER_TEMP/ctxlock.err"
+        if [ -z "$BASE" ]; then
+          echo "ctxlock: no base ref. On pull_request events it is set automatically; otherwise pass the base input." > "$errors"
+          code=2
+        else
+          set +e
+          node "$GITHUB_ACTION_PATH/dist/cli.js" diff --base "$BASE" --format markdown "$GITHUB_WORKSPACE" > "$report" 2> "$errors"
+          code=$?
+          set -e
+        fi
+        if [ "$code" -eq 2 ]; then
+          {
+            echo '### ctxlock · context check'
+            echo
+            echo 'ctxlock could not run:'
+            echo
+            echo '```'
+            cat "$errors"
+            echo '```'
+          } > "$report"
+        fi
+        cat "$errors" >&2
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+
+    - name: Job summary
+      if: always()
+      shell: bash
+      run: |
+        if [ -f "$RUNNER_TEMP/ctxlock.md" ]; then cat "$RUNNER_TEMP/ctxlock.md" >> "$GITHUB_STEP_SUMMARY"; fi
+
+    # Pull requests from forks get a read-only token, so the comment can fail; the job summary still shows the result.
+    - name: Pull request comment
+      if: always() && inputs.comment == 'true' && github.event_name == 'pull_request' && steps.diff.outputs.exit-code != ''
+      continue-on-error: true
+      uses: marocchino/sticky-pull-request-comment@v3
+      with:
+        header: ctxlock
+        path: ${{ runner.temp }}/ctxlock.md
+
+    - name: Result
+      if: always()
+      shell: bash
+      env:
+        CODE: ${{ steps.diff.outputs.exit-code }}
+        FAIL_ON_MUST: ${{ inputs.fail-on-must }}
+      run: |
+        if [ "$CODE" = "2" ]; then
+          echo "::error title=ctxlock::ctxlock could not run; the job summary has the reason"
+          exit 1
+        fi
+        if [ "$CODE" = "1" ] && [ "$FAIL_ON_MUST" = "true" ]; then
+          echo "::error title=ctxlock::must-fix context issues; the job summary lists them"
+          exit 1
+        fi

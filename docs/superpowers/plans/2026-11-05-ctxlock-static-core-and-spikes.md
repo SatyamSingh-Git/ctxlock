@@ -26,7 +26,8 @@
 | 11 | Done | `98a1d89`, `07eccd8` |
 | 12 | Done | `cee346f`, `b991f5f` |
 | Batch-2 review (Tasks 6–10) | Done; fixes in | `abbf135` |
-| 13–14, S1–S4 | Not started | |
+| 13 | Built and checked locally; a live pull request needs Satyam's OK for a test branch | `feat: GitHub Action posting the static context check on PRs` |
+| 14, S1–S4 | Not started | |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in three places: there is no tinyglobby (D17); jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7); and markdown-it 15 (MIT) finds code blocks the way CommonMark does, after the batch-2 review found two ways past a hand-written fence scanner.
 
@@ -823,11 +824,11 @@ docs/dogfood/           # Task 14 report
 - `uses: SatyamSingh-Git/ctxlock@main`, until a release tag exists;
 - what MUST means.
 
-- [ ] **Step 1: Write `action.yml`, `self-test.yml` and the README Usage section.**
-- [ ] **Step 2: Verify locally.** Run `node dist/cli.js diff --base HEAD~1 --format markdown` in this repo. Expected: exit 0 and the `✅ no must-fix issues` status line.
+- [x] **Step 1: Write `action.yml`, `self-test.yml` and the README Usage section.**
+- [x] **Step 2: Verify locally.** Run `node dist/cli.js diff --base HEAD~1 --format markdown` in this repo. Expected: exit 0 and the `✅ no must-fix issues` status line.
 - [ ] **Step 3: Ask Satyam** before pushing a test branch and opening a PR. Creating a branch needs his OK (CLAUDE.md).
 - [ ] **Step 4: With his OK, open the PR and confirm three things:** the sticky comment appears, the job summary renders, and the check passes. Then push a commit adding a U+200B to a test rule, and confirm the check fails with exit 1.
-- [ ] **Step 5: Commit:** `feat: GitHub Action posting the static context check on PRs`.
+- [x] **Step 5: Commit:** `feat: GitHub Action posting the static context check on PRs`.
 
 ### Task 14: Dogfood on three public repos
 
