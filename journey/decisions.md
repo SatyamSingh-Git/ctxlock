@@ -29,6 +29,12 @@ Every significant decision, why it was made, and whether it still stands. Revers
 | D16 | agnix is an opt-in adapter; skill-spec checks (L0) are native | Discovery depends on L0, and agnix needs `npx`/network | Stands |
 | D17 | No `tinyglobby` dependency | Git lists ignored `CLAUDE.local.md` files itself; non-git folders need only a small walker | Stands (Task 1) |
 | D18 | L8 "excessive procedure" is `info`, not `should` | It is a heuristic until evals can validate it | Stands |
+| D21 | A symlink makes the unit it points to visible at the symlink's path, for every kind of unit | The AGENTS.md FAQ recommends `ln -s AGENTS.md CLAUDE.md`; Claude Code then reads AGENTS.md through that link, and both agents share one file | Stands (Task 2) |
+| D22 | Frontmatter is parsed only for rules and skills | No agent gives `AGENTS.md` or `CLAUDE.md` frontmatter any meaning, and a markdown file that opens with `---` would raise a false error | Stands (Task 2) |
+| D23 | Claude Code's always-on and skill-listing totals are reported without a limit | Claude Code documents no total cap on always-on instructions. The skill listing does have one, 1% of the context window, but its unit (tokens or characters) is undocumented, and an invented number would raise false alarms | Stands, corrected after the batch-1 review: the first version said neither had a cap |
+| D24 | Codex predictions are checked by Codex's own loader tests, ported with the upstream commit recorded | The concrete form of D13; the tests encode Codex's behaviour more precisely than its docs | Stands (Task 5) |
+| D25 | Readers serve only the files they list; discovery follows in-repo symlinks itself | One place decides what a link may reach, so no lookup can read through a link out of the repository | Stands (batch-1 review) |
+| D26 | Unit IDs are `<kind>/<path>`, not the design's `<kind>/<name>` | Names collide across directories: two skills called `review`, two rules called `style` | Stands for now; decide before lockfiles in phase 2 |
 
 ## Process
 

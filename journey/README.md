@@ -2,7 +2,13 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [04 — the plan, and the environment that reshaped it](04-plan.md).
+**Latest:** [05 — the first batch: reading repos and predicting what agents load](05-first-batch.md).
+- Tasks 1–5: the repository readers, unit discovery, `ctxlock.yaml` and CODEOWNERS, and predictions for Claude Code and Codex.
+- Codex is checked against Codex's own ported loader tests.
+- The first worked example found a silent loss: a sub-team's `AGENTS.md` that Claude Code never loads and Codex cuts short.
+- A fresh review found the reader could follow a symlink out of the repo, and that the Claude Code prediction had drifted from the docs. Both were fixed test-first; 89 tests.
+
+**Earlier:** [04 — the plan, and the environment that reshaped it](04-plan.md).
 - The plan has two parts: the static core, and four spikes.
 - The first version assumed Docker, Codex and API keys; none was available.
 - Each was replaced:

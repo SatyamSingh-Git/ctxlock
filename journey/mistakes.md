@@ -99,3 +99,45 @@ While mutation-checking Task 2, one planned mutation would not apply: its find-a
 - `tests/hygiene.test.ts` fails the build if any file under `src/` or `tests/` contains one. It was checked both ways: planted U+200B and U+E0001 both fail it.
 
 The same thinking later caught the scan flagging the plan's own emoji examples. The plan quotes 👨‍👩‍👧 to show legitimate ZWJ sequences, and a naive scan flags those characters. That is why lint rule L1 has an emoji exception.
+
+### A mutation run that "killed" everything against a red baseline
+
+The first mutation run for Task 5 reported 19 of 19 mutations killed. A test added just before it, a nested Claude skill in the budget fixture, was already failing on the unmodified code. So every mutation "failed the tests" whether or not the tests could see it.
+
+*Cause:* the script checked that the tests failed after each mutation, but never checked that they passed before it.
+
+*Cost:* none in the end. The suite output printed one line above the mutation results showed `1 failed`, and the failure turned out to be a real bug (lazily loaded skills reported as truncated).
+
+*Changed:* the mutation script runs the suite unmodified first and stops unless it is green. It is the same lesson as the scan that never ran: a check needs a control that proves it can tell pass from fail.
+
+### A test that could not fail
+
+In Task 4, the test "`@` inside inline code is not an import" passed even with the inline-code handling deleted. Its fixture was `` `@inline.md` ``, with the `@` right after a backtick, and the import pattern only matches an `@` at the start of a line or after whitespace. The test was checking something the code never did.
+
+*Cause:* the fixture was written to look like the case, not to exercise it.
+
+*Cost:* caught by its mutation check, before commit.
+
+*Changed:* fixtures put the `@` where it would otherwise match (`` `pnpm add @x.md` ``).
+
+## Building
+
+### A safety rule enforced at one door out of three
+
+The design says a symlink that leaves the repository is never followed. The reader enforced that when *listing* files, so discovery never saw such a link. But its `readFile` and `exists` methods opened any path they were given, and two callers asked for fixed paths: `ctxlock.yaml` and `CODEOWNERS`. A pull request adding `ctxlock.yaml -> /some/secret` would have had the secret read and parsed, and a YAML error quotes the offending line into the CI log.
+
+*Cause:* the rule was attached to the obvious entry point, the listing, instead of to the reader as a whole. The tests only exercised the listing.
+
+*Cost:* found by the batch-1 review before any release; nothing shipped.
+
+*Changed:* readers now serve only files in their own listing, and discovery follows in-repo links itself (decision D25). A test with a real symlink to a file outside the repo runs on both Ubuntu and Windows.
+
+### Building from research notes instead of the docs
+
+Task 4 predicted Claude Code's loading from the research summary written earlier the same day, not from Claude Code's docs. The plan said to re-verify vendor behaviour at build time; that step was skipped because the notes felt fresh. The review found five rules missing or wrong: skills and rules in parent directories, the reach of the 40,000-character cap, `.claude/AGENTS.md`, nested `AGENTS.md`, and nested `CLAUDE.local.md`. The guide had also claimed "ctxlock follows symlinks inside the repository" when it only followed links that pointed straight at a unit.
+
+*Cause:* a summary was treated as the source, and the guide was written from the intent instead of the code.
+
+*Cost:* one fix pass; the predictions were never released.
+
+*Changed:* before fixing, an agent fetched the docs and quoted each rule with its section, and the fix follows the quotes. Guide claims are checked against code and tests, and its examples are run, not written.
