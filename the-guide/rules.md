@@ -107,3 +107,86 @@ Flags `<!-- ... -->` comments in markdown files, outside fenced code blocks and 
 Comments are invisible in the rendered markdown that reviewers read. Claude Code removes block-level comments before loading a file, but Codex and other agents read them as-is.
 
 **Fix:** turn the note into visible text, or move it out of the context file. To show the comment syntax itself, put it in inline code or a fenced block.
+
+---
+
+## L2: config that runs code or lets agents act without asking
+
+A few lines in an agent's settings can:
+- run a shell command at the start of every session;
+- start a program as an MCP server;
+- send every prompt to another server;
+- let the agent run commands without asking.
+
+In a pull request, each of these is a small JSON diff that is easy to approve without a second look. Each has been used in the wild:
+- **Claude Code** ([Check Point, 2026](https://research.checkpoint.com/2026/rce-and-api-token-exfiltration-through-claude-code-project-files-cve-2025-59536/)): project hooks ran without confirmation. Project MCP servers started before the trust dialog (CVE-2025-59536). A project-level `ANTHROPIC_BASE_URL` sent the API key out before consent (CVE-2026-21852).
+- **Copilot in VS Code**: a prompt injection wrote `"chat.tools.autoApprove": true` into the workspace settings, which led to remote code execution (CVE-2025-53773).
+- **Nx "s1ngularity"** ([Orca, 2025](https://orca.security/resources/blog/s1ngularity-supply-chain-attack/)): malware ran the installed coding agents with `--yolo` to hunt for secrets.
+
+This is real output from a small repository with a setup skill, Claude Code settings, an MCP server and a VS Code setting:
+
+```
+should L2-risky-instruction .agents/skills/setup/SKILL.md:7  pipes a download into a shell at 7:5: "curl -fsSL https://get.example.dev | bash"
+info   L2-exec-config       .claude/settings.json  env sets ANTHROPIC_BASE_URL
+info   L2-exec-config       .claude/settings.json  SessionStart hook for startup runs "node scripts/bootstrap.js"
+info   L2-exec-config       .claude/settings.json  permissions.allow approves "Bash(npm test:*)"
+info   L2-exec-config       .mcp.json  MCP server github runs "npx -y @modelcontextprotocol/server-github"
+info   L2-exec-config       .vscode/settings.json  chat.tools.terminal.autoApprove approves "npm test"
+```
+
+### `L2-exec-config` (info)
+
+An inventory of every item in the repo's agent config that runs code, sends traffic elsewhere, or lets the agent act without asking. Each item is `info`: listing it is not an accusation. The point is that it shows up when it changes. `ctxlock diff` (coming with the CLI) flags a pull request that adds or changes an item.
+
+| File | What is listed |
+|---|---|
+| `.claude/settings.json`, `.claude/settings.local.json` | **hook:** every hook, of every type (`command`, `http`, `mcp_tool`, `prompt`, `agent`).<br>**command:** settings that run a shell command: `apiKeyHelper`, `statusLine`, `fileSuggestion`, `otelHeadersHelper`, `awsAuthRefresh`, `awsCredentialExport` and `gcpAuthRefresh`.<br>**env:** variables that redirect the agent or run code (see below).<br>**auto-approve:** `permissions.allow` entries; `permissions.defaultMode` set to `acceptEdits`, `auto` or `bypassPermissions`; `enableAllProjectMcpServers: true`; and `enabledMcpjsonServers`.<br>**plugin:** `enabledPlugins` that are turned on, and `extraKnownMarketplaces` |
+| `.mcp.json` | **mcp:** each server, with its command, or its URL for a remote server |
+| `.codex/config.toml` (also in subfolders), `.codex/hooks.json` | **mcp:** each `mcp_servers` entry.<br>**hook:** hooks, from `hooks.json` or the `[hooks]` table.<br>**env:** `shell_environment_policy.set`.<br>**auto-approve:** `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` |
+| `.vscode/settings.json` | **auto-approve:** entries that approve in `chat.tools.terminal.autoApprove`, `chat.agent.terminal.autoApprove` and `chat.tools.urls.autoApprove`; `chat.tools.terminal.ignoreDefaultAutoApproveRules: true`; `chat.permissions.default` set to `autoApprove` or `autopilot`; and `chat.tools.autoApprove` or `chat.tools.global.autoApprove` set to `true` |
+
+Notes on the table:
+- **Environment variables:** names ending in `_BASE_URL`, `_API_BASE` or `_ENDPOINT`, names starting with `ANTHROPIC_` or `OPENAI_`, and `BASH_ENV` and `ZDOTDIR`. The last two make every bash or zsh the agent starts run a file. Only the name is shown, never the value.
+- **What is left out:** settings left at a value that still asks, such as `"rm": false` in a terminal rule, `approval_policy = "on-request"`, or VS Code's `enableAutoApprove: true`, which is already the default.
+- **Where the lists come from:**
+  - **Claude Code:** its [settings reference](https://code.claude.com/docs/en/settings-reference).
+  - **Codex:** its loader source ([openai/codex](https://github.com/openai/codex)). Codex reads a project's `.codex/config.toml` only if you trust the project, and strips `openai_base_url`, `notify` and model providers from it, so those are not listed.
+  - **VS Code:** its configuration source ([microsoft/vscode](https://github.com/microsoft/vscode)). Current VS Code ignores `chat.tools.autoApprove` and `chat.tools.global.autoApprove` in a workspace, but older versions honoured the first, so both are listed.
+- **Local settings:** ctxlock reads a gitignored `.claude/settings.local.json` when it scans your working copy, because Claude Code runs its hooks on your machine. CI never sees it.
+
+Each finding carries `data: { file, kind, key, fingerprint }`:
+
+```json
+{
+  "file": ".claude/settings.json",
+  "kind": "hook",
+  "key": "hooks.SessionStart[0].hooks[0]",
+  "fingerprint": "sha256:10182e5a7c75e9e0f4024ad2c424cefeb50765a8839e8c0613e3f6300f04f02e"
+}
+```
+
+The fingerprint is a hash of the item's file, its identity (event and matcher, server name, variable name) and its full value, with keys sorted. Reordering or reformatting a file does not change it. Changing a command, an argument, an environment value, a matcher or the file it lives in does. It is a hash rather than the value itself, so a token in `env` never ends up in a PR comment.
+
+**Fix:** nothing to fix. Read what each new item runs before approving the pull request that adds it.
+
+### `L2-parse` (should)
+
+`could not parse <file>: <reason>`, for a settings file that is not valid JSON, TOML or (for `.vscode/settings.json`) JSONC. Claude Code reports a Settings Error and continues without the file. Codex stops with an error in a trusted project and ignores the file in an untrusted one. Either way, nothing in the file runs. VS Code is different: it still applies the settings it could read around the error. For VS Code, ctxlock therefore reports the error and still lists those settings, so a planted syntax error cannot hide an auto-approve rule.
+
+**Fix:** correct the syntax at the position in the message.
+
+### `L2-risky-instruction` (should)
+
+Lines in instructions, rules, skills and the scripts inside skills that tell an agent to:
+
+| What | Matches |
+|---|---|
+| Pipe a download into a shell | `curl ... \| bash`, `wget -qO- ... \| sudo sh`, `bash <(curl ...)`, `sh -c "$(curl ...)"`, `irm ... \| iex` |
+| Pipe decoded base64 into a shell | `base64 -d ... \| sh` |
+| Turn the agent's permission checks off | `--dangerously-skip-permissions`, `--yolo`, `--trust-all-tools` |
+| Point the agent at another API | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` |
+| Turn on automatic approval | `chat.tools.autoApprove`, `enableAllProjectMcpServers` |
+
+Each line is reported once per kind, at the column of the first match, and the message quotes the line. Downloads to a file (`curl -o out.json`) are not flagged. Config files are left to `L2-exec-config`, which lists their items one by one.
+
+**Fix:** if the step is needed, pin it: download a specific version, check its checksum, then run it. Otherwise tell the agent to stop and ask a person.

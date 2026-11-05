@@ -13,6 +13,17 @@
 
 **Tech Stack:** TypeScript 7 on Node ≥ 22 (ESM), commander, yaml, zod, ignore, picomatch, tinyglobby, smol-toml, vitest. The Action reuses marocchino/sticky-pull-request-comment@v3. agnix is optional, via `npx`. All of these were license-checked on 2026-11-05: MIT, ISC, Apache-2.0 or BSD-3-Clause.
 
+**Progress** (kept current as tasks land):
+
+| Task | Status | Commits |
+|---|---|---|
+| 1–5 | Done; fixes from the batch-1 review are in | `55a0b4f`..`87da695` |
+| 6 | Done | `2822b38` |
+| 7 | Done | `feat: inventory execution-affecting config and flag risky instructions` |
+| 8–14, S1–S4 | Not started | |
+
+As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in two places: there is no tinyglobby (D17), and jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7).
+
 **Spec:** [docs/superpowers/specs/2026-11-05-ctxlock-design.md](../specs/2026-11-05-ctxlock-design.md). The harness behaviour it relies on is in [research/08-agent-runtime-internals.md](../../../research/08-agent-runtime-internals.md).
 
 **Scope:**
@@ -197,7 +208,7 @@ docs/dogfood/           # Task 14 report
   - `gitSymlink(dir, path, target)` stages a symlink with `git update-index --add --cacheinfo 120000,<blob>,<path>`, so the tests run on Windows without developer mode.
   - `memReader(files: Record<string, string | Buffer>, symlinks?: Record<string, string | null>): RepoReader`, with a `reads` counter for asserting which files were read.
 
-- [ ] **Step 1: Write the scaffold.**
+- [x] **Step 1: Write the scaffold.**
   - `package.json`:
     - `"name": "ctxlock"`, `"type": "module"`, `"bin": { "ctxlock": "dist/cli.js" }`, `"files": ["dist"]`, `"private": true`, `"license": "Apache-2.0"`.
     - Scripts: `build` (`tsc -p tsconfig.build.json`), `typecheck` (`tsc --noEmit`), `test` (`vitest run`), `ci` (`npm run typecheck && npm test && npm run build`).
@@ -205,7 +216,7 @@ docs/dogfood/           # Task 14 report
   - `tsconfig.json`: `module`/`moduleResolution` `nodenext`, `strict`, `target es2023`. `tsconfig.build.json` excludes `tests`.
   - `.gitattributes`: `* text=auto eol=lf`.
   - `ci.yml`: a matrix of `[ubuntu-latest, windows-latest]`, Node 22, `npm ci`, `npm run ci`.
-- [ ] **Step 2: Write the failing tests in `tests/repo/reader.test.ts`:**
+- [x] **Step 2: Write the failing tests in `tests/repo/reader.test.ts`:**
   - `fsReader lists tracked and untracked-unignored files, POSIX-sorted, without .git or node_modules`
   - `fsReader includes CLAUDE.local.md even when .gitignore excludes it`. That file changes what Claude Code loads on that machine.
   - `fsReader works in a directory that is not a git repo`
@@ -213,13 +224,13 @@ docs/dogfood/           # Task 14 report
   - `gitReader rejects an unknown ref with RefNotFound`
   - `readFile on a missing path throws FileNotFound`
   - `gitReader listSymlinks maps in-repo targets and returns null for ../../outside`
-- [ ] **Step 3: Run `npx vitest run tests/repo`.** Expected: FAIL (module not found).
-- [ ] **Step 4: Implement `src/repo/reader.ts`.**
+- [x] **Step 3: Run `npx vitest run tests/repo`.** Expected: FAIL (module not found).
+- [x] **Step 4: Implement `src/repo/reader.ts`.**
   - `fsReader` inside a git work tree uses `git ls-files -z --cached --others --exclude-standard`, plus a tinyglobby pass for `**/CLAUDE.local.md`. Outside git it uses tinyglobby (`dot: true`, `followSymbolicLinks: false`, ignoring `**/.git/**` and `**/node_modules/**`).
   - `gitReader` verifies the ref with `git rev-parse --verify <ref>^{commit}`, lists files with `git ls-tree -r -z <ref>` (mode `120000` = symlink), and reads with `git show <ref>:<path>` as a Buffer.
   - Normalize `\` to `/`.
-- [ ] **Step 5: Run `npm run ci`.** Expected: PASS on the local OS.
-- [ ] **Step 6: Commit** with `git add -A` and `git commit -m "feat: scaffold ctxlock and add RepoReader for working tree and git refs"`.
+- [x] **Step 5: Run `npm run ci`.** Expected: PASS on the local OS.
+- [x] **Step 6: Commit** with `git add -A` and `git commit -m "feat: scaffold ctxlock and add RepoReader for working tree and git refs"`.
 
 ### Task 2: Units — frontmatter, digests, discovery
 
@@ -252,7 +263,7 @@ docs/dogfood/           # Task 14 report
 
 - A skill unit's `files` are every listed file under its directory.
 - A symlink whose target resolves to a discovered skill directory adds its link path to that unit's `aliases`.
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `discovers each convention as the right kind and family`. A memReader holds one file per row; the expected `id` list is asserted exactly, e.g. `skill/.agents/skills/release-notes`.
   - `skill digest changes when a script inside the skill changes, and not when a file outside it changes`
   - `unitDigest is independent of input order`
@@ -263,12 +274,12 @@ docs/dogfood/           # Task 14 report
   - `a symlinked skill directory becomes an alias of its target, not a second unit`
   - `a symlink leaving the repo is not followed and becomes an L0-symlink-outside info problem`
   - `discovery reads only candidate files`. A memReader with 20,000 non-context files and 3 context files must have `reads === 3` plus the skill files.
-- [ ] **Step 2: Run `npx vitest run tests/units`.** Expected: FAIL.
-- [ ] **Step 3: Implement the three modules.**
+- [x] **Step 2: Run `npx vitest run tests/units`.** Expected: FAIL.
+- [x] **Step 3: Implement the three modules.**
   - YAML is parsed with the `yaml` package, core schema, so dates stay strings.
   - The frontmatter must start at byte 0 after an optional BOM and be fenced by `---` lines, accepting CRLF.
-- [ ] **Step 4: Run `npx vitest run tests/units`.** Expected: PASS.
-- [ ] **Step 5: Commit:** `feat: discover agent context units with content digests`.
+- [x] **Step 4: Run `npx vitest run tests/units`.** Expected: PASS.
+- [x] **Step 5: Commit:** `feat: discover agent context units with content digests`.
 
 ### Task 3: Registry (`ctxlock.yaml`) and CODEOWNERS
 
@@ -303,7 +314,7 @@ docs/dogfood/           # Task 14 report
 - Looked up at `.github/CODEOWNERS`, then `CODEOWNERS`, then `docs/CODEOWNERS`; the first one found is used.
 - Each pattern is tested with its own `ignore()` instance. The last matching line wins, and a line with no owners unassigns.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `absent ctxlock.yaml gives present false and harnesses [claude-code, codex]`
   - `kebab-case unit fields map to camelCase and 2026-10-01 stays the string '2026-10-01'`
   - `an unknown key throws RegistryError naming units.AGENTS.md.ownr`
@@ -312,10 +323,10 @@ docs/dogfood/           # Task 14 report
   - `CODEOWNERS: the last matching pattern wins, a docs/ pattern covers docs/a/b.md, and an owner-less line unassigns`
   - `CODEOWNERS is read from .github/ before root before docs/`
   - `a registry owner overrides CODEOWNERS for that unit, and a skill matches its entry by directory path`
-- [ ] **Step 2: Run `npx vitest run tests/registry`.** Expected: FAIL.
-- [ ] **Step 3: Implement both modules.**
-- [ ] **Step 4: Run `npx vitest run tests/registry`.** Expected: PASS.
-- [ ] **Step 5: Commit:** `feat: load ctxlock.yaml registry and CODEOWNERS ownership`.
+- [x] **Step 2: Run `npx vitest run tests/registry`.** Expected: FAIL.
+- [x] **Step 3: Implement both modules.**
+- [x] **Step 4: Run `npx vitest run tests/registry`.** Expected: PASS.
+- [x] **Step 5: Commit:** `feat: load ctxlock.yaml registry and CODEOWNERS ownership`.
 
 ### Task 4: Claude Code resolver
 
@@ -369,7 +380,7 @@ docs/dogfood/           # Task 14 report
 7. **`.agents/skills`.** A skill under `.agents/skills/` with no alias under `.claude/skills/` adds the note `skill <name> not visible to Claude Code: .agents/skills is not scanned (anthropics/claude-code#31005)`.
 8. **Oversized files.** An `always` file larger than `claudeLaunchFileBytes` is skipped, with a note.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `ancestor CLAUDE.md files load always, shallowest first`
   - `AGENTS.md loads when no CLAUDE.md exists, and gets the not-loaded note when one does`
   - `@AGENTS.md in CLAUDE.md loads AGENTS.md with reason import:CLAUDE.md`
@@ -382,10 +393,10 @@ docs/dogfood/           # Task 14 report
   - `a disable-model-invocation skill is omitted with a note`
   - `an .agents/skills skill is invisible unless aliased under .claude/skills`
   - `a 5 MiB CLAUDE.md is skipped with a note`
-- [ ] **Step 2: Run `npx vitest run tests/harness`.** Expected: FAIL.
-- [ ] **Step 3: Implement the four modules.**
-- [ ] **Step 4: Run `npx vitest run tests/harness`.** Expected: PASS.
-- [ ] **Step 5: Commit:** `feat: predict Claude Code effective context per site`.
+- [x] **Step 2: Run `npx vitest run tests/harness`.** Expected: FAIL.
+- [x] **Step 3: Implement the four modules.**
+- [x] **Step 4: Run `npx vitest run tests/harness`.** Expected: PASS.
+- [x] **Step 5: Commit:** `feat: predict Claude Code effective context per site`.
 
 ### Task 5: Codex resolver, context sites, budget report
 
@@ -418,7 +429,7 @@ docs/dogfood/           # Task 14 report
 - `limitBytes` is `codexChainBytes` for Codex and `null` for Claude Code, which documents no total cap.
 - `catalogLimit` is `codexSkillCatalogChars` for Codex and `null` for Claude Code.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `one file per directory from root to site, and AGENTS.override.md beats AGENTS.md`
   - `files of 20,000 + 20,000 bytes: the second gets loadedBytes 12,768 and any third gets 0 with reason chain-dropped`
   - `an AGENTS.md below the site is not loaded`
@@ -428,7 +439,7 @@ docs/dogfood/           # Task 14 report
   - `contextSites returns '' plus every directory with an instructions unit`
   - `budgetReport lists truncated paths per harness and site`
   - `a codexChainBytes override of 65536 removes the truncation`
-- [ ] **Step 1b: Write conformance tests ported from Codex's own loader tests.**
+- [x] **Step 1b: Write conformance tests ported from Codex's own loader tests.**
   - Source: `openai/codex`, `codex-rs/core/src/agents_md_tests.rs`, Apache-2.0.
   - Put them in `tests/harness/codex.conformance.test.ts`.
   - Read each upstream test body and port its fixture and expectation.
@@ -442,10 +453,10 @@ docs/dogfood/           # Task 14 report
     - `finds_doc_in_repo_root`
     - `project_doc_invalid_utf8_uses_lossy_text` (the doc still loads, and its bytes count)
   - These are what validate our Codex predictions, since we cannot run Codex.
-- [ ] **Step 2: Run `npx vitest run tests/harness/codex.test.ts tests/harness/codex.conformance.test.ts tests/report`.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run the same command.** Expected: PASS.
-- [ ] **Step 5: Commit:** `feat: predict Codex effective context and report budgets`.
+- [x] **Step 2: Run `npx vitest run tests/harness/codex.test.ts tests/harness/codex.conformance.test.ts tests/report`.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run the same command.** Expected: PASS.
+- [x] **Step 5: Commit:** `feat: predict Codex effective context and report budgets`.
 
 ### Task 6: Lint framework, L0 skill spec, L1 hidden content
 
@@ -480,7 +491,7 @@ docs/dogfood/           # Task 14 report
   - **should:** any other `\p{Cf}`, such as U+200E, U+200F, U+061C or U+00AD.
   - The message gives the code point, its name if known, and the line:column, e.g. `hidden character U+200B ZERO WIDTH SPACE at 14:7`.
 - **`L1-html-comment`** (must): `<!-- … -->` outside fenced code blocks in markdown units. The message quotes up to the first 60 characters of the comment.
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - L0:
     - `a valid skill passes`
     - `Bad-Name, a--b and a 65-char name fail`
@@ -501,10 +512,10 @@ docs/dogfood/           # Task 14 report
     - `a lint.severity override downgrades a rule, and off drops it`
     - `lint.ignore drops findings under the glob`
     - `findings sort must, should, info, then by path, then by line`
-- [ ] **Step 2: Run `npx vitest run tests/lint`.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run the same command.** Expected: PASS. Then mutation-check: widen the U+200D exception to any position, and watch the ZWJ test fail.
-- [ ] **Step 5: Commit:** `feat: lint framework with skill-spec and hidden-content rules`.
+- [x] **Step 2: Run `npx vitest run tests/lint`.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run the same command.** Expected: PASS. Then mutation-check: widen the U+200D exception to any position, and watch the ZWJ test fail.
+- [x] **Step 5: Commit:** `feat: lint framework with skill-spec and hidden-content rules`.
 
 ### Task 7: L2 execution-affecting config and risky instructions
 
@@ -534,7 +545,7 @@ docs/dogfood/           # Task 14 report
   - `ANTHROPIC_BASE_URL` or `OPENAI_BASE_URL`;
   - `chat.tools.autoApprove`, `enableAllProjectMcpServers`.
 - **`L2-parse`** (should): `could not parse <file>: <reason>`, for invalid JSON or TOML.
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `a SessionStart hook is inventoried with its event and command`
   - `ANTHROPIC_BASE_URL in env is inventoried`
   - `chat.tools.autoApprove true is inventoried and false is not`
@@ -544,10 +555,10 @@ docs/dogfood/           # Task 14 report
   - `invalid JSON in .claude/settings.json yields L2-parse and no throw`
   - `invalid TOML in .codex/config.toml yields L2-parse and no throw`
   - `the fingerprint ignores key order and changes when a command changes`
-- [ ] **Step 2: Run `npx vitest run tests/lint/l2.test.ts`.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run the same command.** Expected: PASS.
-- [ ] **Step 5: Commit:** `feat: inventory execution-affecting config and flag risky instructions`.
+- [x] **Step 2: Run `npx vitest run tests/lint/l2.test.ts`.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run the same command.** Expected: PASS.
+- [x] **Step 5: Commit:** `feat: inventory execution-affecting config and flag risky instructions`.
 
 ### Task 8: L3 budgets, L5 instruction count, L6 skill length
 

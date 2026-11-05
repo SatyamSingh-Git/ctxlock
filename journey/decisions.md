@@ -35,6 +35,9 @@ Every significant decision, why it was made, and whether it still stands. Revers
 | D24 | Codex predictions are checked by Codex's own loader tests, ported with the upstream commit recorded | The concrete form of D13; the tests encode Codex's behaviour more precisely than its docs | Stands (Task 5) |
 | D25 | Readers serve only the files they list; discovery follows in-repo symlinks itself | One place decides what a link may reach, so no lookup can read through a link out of the repository | Stands (batch-1 review) |
 | D26 | Unit IDs are `<kind>/<path>`, not the design's `<kind>/<name>` | Names collide across directories: two skills called `review`, two rules called `style` | Stands for now; decide before lockfiles in phase 2 |
+| D27 | Each hook, MCP server, command, approval or endpoint variable in an agent's config gets a fingerprint: a sha256 of its file, its identity and its value, not its position | `ctxlock diff` flags a PR that adds or changes one. Reordering a file should not trip it, and a hash keeps tokens in `env` out of PR comments | Stands (Task 7) |
+| D28 | The L2 inventory follows each vendor's current source or docs, not the plan's list of keys | The plan's VS Code key, `chat.tools.autoApprove`, has been renamed, and current VS Code ignores it in a repo; the settings VS Code still honours there, and Codex's and Claude Code's code-running settings, were missing | Stands (Task 7); pinned to the commits and pages in the code comments |
+| D29 | A gitignored file the agent still uses on this machine is read locally: `CLAUDE.local.md` and `.claude/settings.local.json` | Claude Code loads the first and runs the hooks in the second. CI never sees either, since it reads git refs | Stands (Task 7 extended D17's rule to settings) |
 
 ## Process
 
