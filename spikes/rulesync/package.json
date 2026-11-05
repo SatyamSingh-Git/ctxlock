@@ -1,0 +1,8 @@
+{
+  "name": "ctxlock-spike-rulesync",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "rulesync": "43.6.2"
+  }
+}

@@ -27,7 +27,10 @@
 | 12 | Done | `cee346f`, `b991f5f` |
 | Batch-2 review (Tasks 6–10) | Done; fixes in | `abbf135` |
 | 13 | Built and checked locally; a live pull request needs Satyam's OK for a test branch | `feat: GitHub Action posting the static context check on PRs` |
-| 14, S1–S4 | Not started | |
+| 14 | Done on four repositories; not pushed until Satyam says so | `03a342f`, `048ce98` |
+| Batch-3 review (Tasks 11–14) | Running | |
+| S2 | Done: [memo](../../spikes/S2-rulesync.md) | `docs: spike S2, rulesync as the compile backend` |
+| S1, S3, S4 | Not started | |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in three places: there is no tinyglobby (D17); jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7); and markdown-it 15 (MIT) finds code blocks the way CommonMark does, after the batch-2 review found two ways past a hand-written fence scanner.
 
@@ -835,20 +838,20 @@ docs/dogfood/           # Task 14 report
 **Files:**
 - Create: `docs/dogfood/2026-11-<dd>-static.md`
 
-- [ ] **Step 1: Pick 3 public repos.** Between them they must have, confirmed with `gh api repos/<r>/contents/<path>`:
+- [x] **Step 1: Pick 3 public repos.** Between them they must have, confirmed with `gh api repos/<r>/contents/<path>`:
   - at least one AGENTS.md;
   - at least one CLAUDE.md;
   - at least one skill directory.
 
   Candidates to check first: `openai/codex`, `vercel-labs/skills`, `anthropics/skills`.
-- [ ] **Step 2: Scan each.** Clone each with `--depth 1` and run `node dist/cli.js scan <dir> --format json` and `lint <dir>`. Record every finding in the dogfood report with a verdict: true positive, false positive, or unsure.
-- [ ] **Step 3: Fix false positives.** Each MUST false positive gets a rule fix plus a regression test, in the owning rule's test file, before you continue. Re-run until zero MUST false positives remain.
-- [ ] **Step 4: Planted-edit check, both directions.** These are the design's Phase 1 exit items (c) and (d). In a temp copy of one repo:
+- [x] **Step 2: Scan each.** Clone each with `--depth 1` and run `node dist/cli.js scan <dir> --format json` and `lint <dir>`. Record every finding in the dogfood report with a verdict: true positive, false positive, or unsure.
+- [x] **Step 3: Fix false positives.** Each MUST false positive gets a rule fix plus a regression test, in the owning rule's test file, before you continue. Re-run until zero MUST false positives remain.
+- [x] **Step 4: Planted-edit check, both directions.** These are the design's Phase 1 exit items (c) and (d). In a temp copy of one repo:
   - (c) append a 300-line directory overview to AGENTS.md. Expect an L4 should, plus budget growth in `diff`.
   - (d) add a U+200B to a rule. Expect a must, and exit 1.
 
   Reverting each edit must clear its flag.
-- [ ] **Step 5: Commit:** `docs: static dogfood report on three public repos`.
+- [x] **Step 5: Commit:** `docs: static dogfood report on three public repos`.
 - [ ] **Step 6: Run `npm run ci` and report the real result.** Then ask Satyam before pushing.
 
 ---
@@ -892,11 +895,11 @@ The spikes are throwaway (code goes in `spikes/`, excluded from the package). Th
 
 ### Task S2: rulesync as the compile backend (time box: 1 day)
 
-- [ ] **Step 1: Import a fixture.** In `spikes/rulesync/`, install rulesync and import a fixture repo with AGENTS.md, `.claude/rules` with `paths`, and `.agents/skills`.
-- [ ] **Step 2: Generate.** Generate for Claude Code, Codex, Copilot and Cursor. Check the current target names in rulesync's docs.
-- [ ] **Step 3: Diff the output** against the Task 4–5 resolver predictions. Does the result fix L13 shadowing, `.agents/skills` visibility and path-scoped rules for Codex?
-- [ ] **Step 4: Check the integration surface.** Does the package export a programmatic API, or only a CLI?
-- [ ] **Step 5: Write the memo `docs/spikes/S2-rulesync.md`.** Cover: library vs CLI, what it emits, gaps we must add (the compact index, budget fitting), its update cadence and license.
+- [x] **Step 1: Import a fixture.** In `spikes/rulesync/`, install rulesync and import a fixture repo with AGENTS.md, `.claude/rules` with `paths`, and `.agents/skills`.
+- [x] **Step 2: Generate.** Generate for Claude Code, Codex, Copilot and Cursor. Check the current target names in rulesync's docs.
+- [x] **Step 3: Diff the output** against the Task 4–5 resolver predictions. Does the result fix L13 shadowing, `.agents/skills` visibility and path-scoped rules for Codex?
+- [x] **Step 4: Check the integration surface.** Does the package export a programmatic API, or only a CLI?
+- [x] **Step 5: Write the memo `docs/spikes/S2-rulesync.md`.** Cover: library vs CLI, what it emits, gaps we must add (the compact index, budget fitting), its update cadence and license.
 
 ### Task S3: Reproduce two published effects (time box: 2 days; within the quota cap)
 
