@@ -2,7 +2,13 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [05 — the first batch: reading repos and predicting what agents load](05-first-batch.md).
+**Latest:** [06 — the second batch: the rules, the commands, and a review that broke two of them](06-second-batch.md).
+- Tasks 6–12: all lint rules (L0–L11, L13), `ctxlock scan`, `lint`, `budget` and `diff`, runnable from source.
+- Vendor source, not the plan, decided what the config inventory covers; VS Code had renamed the plan's key.
+- `diff` judges a pull request with the base branch's settings, so it cannot switch off its own checks.
+- A fresh review found two ways to hide a comment past a hand-written markdown scanner, and the false positives that would make a team switch the tool off. Fixed test-first with a real CommonMark parser; 238 tests.
+
+**Earlier:** [05 — the first batch: reading repos and predicting what agents load](05-first-batch.md).
 - Tasks 1–5: the repository readers, unit discovery, `ctxlock.yaml` and CODEOWNERS, and predictions for Claude Code and Codex.
 - Codex is checked against Codex's own ported loader tests.
 - The first worked example found a silent loss: a sub-team's `AGENTS.md` that Claude Code never loads and Codex cuts short.

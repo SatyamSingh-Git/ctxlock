@@ -93,16 +93,23 @@ Checks every text file of every unit, including the scripts inside skills.
 |---|---|
 | A byte-order mark at the very start of a file | Some editors write it |
 | Emoji sequences: 👨‍👩‍👧, ❤️, 👩🏽‍💻, 🏳️‍🌈, keycaps such as 1️⃣ | The joiner and variation selector are part of the emoji |
-| Subdivision flags such as England's | They are built from a short run of Tag-block characters; a longer run is still flagged |
+| The England, Scotland and Wales flags | They are built from Tag-block characters. These three are the only subdivision flags recommended for general display; any other flag-shaped run of tags is flagged, since it can carry hidden letters |
 | ZWNJ and ZWJ inside Arabic-script or Indic words | Persian, Hindi and others need them for correct spelling |
 
 A run of hidden characters is reported once, at its first character, with a count.
 
 **Fix:** delete the characters. If the message spells out text, that text was hidden on purpose. Treat the change as hostile, find out who added it (`git log -p -- <file>`), and check what else that change touched.
 
-### `L1-html-comment` (must)
+### `L1-html-comment` (must, or info for markers)
 
-Flags `<!-- ... -->` comments in markdown files, outside fenced code blocks and inline code. A comment can span several lines. An unclosed `<!--` hides everything after it, so it is flagged too. The message quotes up to the first 60 characters.
+Flags `<!-- ... -->` comments in markdown files, outside code blocks and inline code. Code blocks are found the way GitHub's renderer finds them (CommonMark, through [markdown-it](https://github.com/markdown-it/markdown-it)). That means a fence inside a list item ends with the item, and a line of backticks with a backtick in its info string is not a fence. A comment can span several lines. An unclosed `<!--` hides everything after it, so it is flagged too. The message quotes up to the first 60 characters.
+
+One-line comments that are clearly markers, not notes, are `info` instead of `must`:
+- generated-block markers such as Next.js's `<!-- BEGIN:nextjs-agent-rules -->` and `<!-- END:nextjs-agent-rules -->` (a name of up to five parts);
+- markdownlint directives with rule numbers, such as `<!-- markdownlint-disable MD013 -->`;
+- `<!-- prettier-ignore -->`, and the table-of-contents markers `<!-- toc -->` and `<!-- tocstop -->`.
+
+The grammar is strict on purpose: a comment with words in it, or one spread over several lines, stays `must`.
 
 Comments are invisible in the rendered markdown that reviewers read. Claude Code removes block-level comments before loading a file, but Codex and other agents read them as-is.
 
@@ -123,11 +130,12 @@ In a pull request, each of these is a small JSON diff that is easy to approve wi
 - **Copilot in VS Code**: a prompt injection wrote `"chat.tools.autoApprove": true` into the workspace settings, which led to remote code execution (CVE-2025-53773).
 - **Nx "s1ngularity"** ([Orca, 2025](https://orca.security/resources/blog/s1ngularity-supply-chain-attack/)): malware ran the installed coding agents with `--yolo` to hunt for secrets.
 
-This is real output from a small repository with a setup skill, Claude Code settings, an MCP server and a VS Code setting:
+These are the L2 lines of real output from a small repository with a setup skill, Claude Code settings, an MCP server and a VS Code setting:
 
 ```
 should L2-risky-instruction .agents/skills/setup/SKILL.md:7  pipes a download into a shell at 7:5: "curl -fsSL https://get.example.dev | bash"
 info   L2-exec-config       .claude/settings.json  env sets ANTHROPIC_BASE_URL
+info   L2-exec-config       .claude/settings.json  env sets NODE_ENV
 info   L2-exec-config       .claude/settings.json  SessionStart hook for startup runs "node scripts/bootstrap.js"
 info   L2-exec-config       .claude/settings.json  permissions.allow approves "Bash(npm test:*)"
 info   L2-exec-config       .mcp.json  MCP server github runs "npx -y @modelcontextprotocol/server-github"
@@ -140,13 +148,13 @@ An inventory of every item in the repo's agent config that runs code, sends traf
 
 | File | What is listed |
 |---|---|
-| `.claude/settings.json`, `.claude/settings.local.json` | **hook:** every hook, of every type (`command`, `http`, `mcp_tool`, `prompt`, `agent`).<br>**command:** settings that run a shell command: `apiKeyHelper`, `statusLine`, `fileSuggestion`, `otelHeadersHelper`, `awsAuthRefresh`, `awsCredentialExport` and `gcpAuthRefresh`.<br>**env:** variables that redirect the agent or run code (see below).<br>**auto-approve:** `permissions.allow` entries; `permissions.defaultMode` set to `acceptEdits`, `auto` or `bypassPermissions`; `enableAllProjectMcpServers: true`; and `enabledMcpjsonServers`.<br>**plugin:** `enabledPlugins` that are turned on, and `extraKnownMarketplaces` |
+| `.claude/settings.json`, `.claude/settings.local.json` | **hook:** every hook, of every type (`command`, `http`, `mcp_tool`, `prompt`, `agent`).<br>**command:** settings that run a shell command: `apiKeyHelper`, `statusLine`, `fileSuggestion`, `otelHeadersHelper`, `awsAuthRefresh`, `awsCredentialExport` and `gcpAuthRefresh`.<br>**env:** every variable (see below).<br>**auto-approve:** `permissions.allow` entries; `permissions.defaultMode` set to `acceptEdits`, `auto` or `bypassPermissions`; `enableAllProjectMcpServers: true`; and `enabledMcpjsonServers`.<br>**plugin:** `enabledPlugins` that are turned on, and `extraKnownMarketplaces` |
 | `.mcp.json` | **mcp:** each server, with its command, or its URL for a remote server |
 | `.codex/config.toml` (also in subfolders), `.codex/hooks.json` | **mcp:** each `mcp_servers` entry.<br>**hook:** hooks, from `hooks.json` or the `[hooks]` table.<br>**env:** `shell_environment_policy.set`.<br>**auto-approve:** `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` |
 | `.vscode/settings.json` | **auto-approve:** entries that approve in `chat.tools.terminal.autoApprove`, `chat.agent.terminal.autoApprove` and `chat.tools.urls.autoApprove`; `chat.tools.terminal.ignoreDefaultAutoApproveRules: true`; `chat.permissions.default` set to `autoApprove` or `autopilot`; and `chat.tools.autoApprove` or `chat.tools.global.autoApprove` set to `true` |
 
 Notes on the table:
-- **Environment variables:** names ending in `_BASE_URL`, `_API_BASE` or `_ENDPOINT`, names starting with `ANTHROPIC_` or `OPENAI_`, and `BASH_ENV` and `ZDOTDIR`. The last two make every bash or zsh the agent starts run a file. Only the name is shown, never the value.
+- **Environment variables:** every one is listed, because many change what runs: `ANTHROPIC_BASE_URL` sends prompts elsewhere, `NODE_OPTIONS` and `LD_PRELOAD` load code into every process the agent starts, and `PATH` and `BASH_ENV` change which programs and startup files run. A list of risky names would never be complete. Only the name is shown, never the value.
 - **What is left out:** settings left at a value that still asks, such as `"rm": false` in a terminal rule, `approval_policy = "on-request"`, or VS Code's `enableAutoApprove: true`, which is already the default.
 - **Where the lists come from:**
   - **Claude Code:** its [settings reference](https://code.claude.com/docs/en/settings-reference).
@@ -172,6 +180,8 @@ The fingerprint is a hash of the item's file, its identity (event and matcher, s
 ### `L2-parse` (should)
 
 `could not parse <file>: <reason>`, for a settings file that is not valid JSON, TOML or (for `.vscode/settings.json`) JSONC. Claude Code reports a Settings Error and continues without the file. Codex stops with an error in a trusted project and ignores the file in an untrusted one. Either way, nothing in the file runs. VS Code is different: it still applies the settings it could read around the error. For VS Code, ctxlock therefore reports the error and still lists those settings, so a planted syntax error cannot hide an auto-approve rule.
+
+A UTF-8 byte-order mark at the start of a settings file, which Windows PowerShell 5.1 writes, is ignored rather than reported.
 
 **Fix:** correct the syntax at the position in the message.
 
@@ -252,7 +262,6 @@ This is real output from a payments service with a project-structure section, a 
 ```
 should L7-duplicate-skill .agents/skills/release/SKILL.md  description is a near-duplicate of skill deploy (.agents/skills/deploy/SKILL.md): 57% of their words are shared, so an agent may pick the wrong one
 should L7-duplicate-skill .claude/skills/deploy/SKILL.md  diverged copies: skill deploy at .agents/skills/deploy and .claude/skills/deploy have different contents
-should L7-duplicate-skill .claude/skills/deploy/SKILL.md  description is a near-duplicate of skill release (.agents/skills/release/SKILL.md): 57% of their words are shared, so an agent may pick the wrong one
 should L4-discoverable    AGENTS.md:3  heading "## Project structure" at 3:1 introduces a repository overview; agents can list the files themselves
 should L4-discoverable    AGENTS.md:7  4-line directory tree at 7:1; agents can list the files themselves
 info   L8-procedure       .agents/skills/deploy/SKILL.md  skill deploy: 5 mandatory checks and checklist items; excessive procedure is the most common way skills fail
@@ -268,9 +277,9 @@ Checks every file an agent loads at the start of a session: `AGENTS.md`, `CLAUDE
 
 ### `L7-duplicate-skill` (should)
 
-Compares every pair of skills:
-- **Near-duplicates:** two skills whose descriptions share at least half their words. The test is Jaccard similarity of their word sets ≥ 0.5, over lowercase words of three or more letters, with about 35 common words such as "the", "use" and "when" ignored.
-- **Diverged copies:** two skills with the same `name` whose files differ. A typical cause is a skill copied into both `.claude/skills` and `.agents/skills` and later edited in only one place.
+Compares pairs of skills:
+- **Near-duplicates:** two skills that one agent lists at the same time, whose descriptions share at least half their words. The test is Jaccard similarity of their word sets ≥ 0.5, over lowercase words of three or more letters, with about 35 common words such as "the", "use" and "when" ignored. Skills that never appear in the same listing, such as a Claude Code skill and a Codex one, or skills in two different packages, do not compete and are not compared.
+- **Diverged copies:** two skills with the same `name` in the same folder's `.claude/skills` and `.agents/skills`, whose files differ. A typical cause is a skill copied into both and later edited in only one place. Same-named skills in different packages are different skills.
 
 Identical copies and symlinks (`.claude/skills/deploy -> ../../.agents/skills/deploy`) are not flagged.
 
@@ -300,7 +309,6 @@ This is real output from a repository with an `AGENTS.md`, a `CLAUDE.md` and one
 should L9-stale               AGENTS.md  AGENTS.md was due for review by 2026-10-01 (stale-after in ctxlock.yaml)
 should L13-agents-md-shadowed AGENTS.md  Claude Code ignores AGENTS.md because CLAUDE.md exists; add @AGENTS.md to CLAUDE.md
 should L9-stale               AGENTS.md:1  src/lib/format.ts at 1:35 does not exist
-should L9-stale               AGENTS.md:2  pnpm typecheck at 2:22: package.json has no "typecheck" script
 should L10-owner              CLAUDE.md  CLAUDE.md has no owner in CODEOWNERS or ctxlock.yaml
 info   L11-coverage           .claude/rules/testing.md  .claude/rules/testing.md reaches claude-code only
 info   L9-import-missing      CLAUDE.md  @docs/claude-tips.md: docs/claude-tips.md does not exist
@@ -312,8 +320,13 @@ The second line is the most common problem in repositories that use more than on
 ### `L9-stale` (should)
 
 Three checks on instructions, rules and skills:
-- **Paths that do not exist.** Inline code that looks like a path is checked: `src/lib/format.ts`, `scripts/`, `README.md`. Each is tried from the file's own folder (a skill's folder for a skill) and from the repository root; a leading `/` means the root. Tokens with wildcards, braces, placeholders, variables or spaces are left alone, as are URLs and paths that lead out of the repository. A symlink counts as existing. Code blocks are not read for paths.
-- **Scripts that do not exist.** `npm run <script>`, `npm test`, `pnpm [run] <script>` and `yarn [run] <script>`, anywhere in the file, including code blocks. They are checked against the nearest `package.json` above the file. Built-in commands such as `pnpm install`, `yarn add` and `npm exec` are not scripts. No `package.json`, or one that does not parse, means nothing is checked.
+- **Paths that do not exist.** Inline code that looks like a path is checked, such as `src/lib/format.ts` or `README.md`. These are left alone:
+  - tokens with wildcards, braces, placeholders, variables or spaces;
+  - URLs, and paths that lead out of the repository;
+  - paths whose first folder does not exist from the file's own folder or from the repository root, such as `origin/main`, `application/json`, `/etc/hosts`, `~/.claude/settings.json` or `dist/cli.js` when `dist` is gitignored.
+
+  A leading `/` means the root. A skill's `scripts/`, `references/` and `assets/` paths are always checked from the skill's folder, since that is the Agent Skills layout. A bare file name such as `index.ts` counts as present if a file with that name exists anywhere in the repository. A symlink counts as existing. Code blocks are not read for paths.
+- **Scripts that do not exist.** `npm run <script>`, `pnpm run <script>`, `yarn run <script>` and `npm test`, `pnpm test`, `yarn test`, in code only (inline code and code blocks), so a sentence such as "we use pnpm instead of npm" is not a command. They are checked against the nearest `package.json` above the file. A bare `pnpm build` or `yarn lint` is not checked, because pnpm and yarn also run a dependency's program by that name when no script has it. No `package.json`, or one that does not parse, means nothing is checked.
 - **Review dates that have passed.** A `stale-after` date in [`ctxlock.yaml`](configuration.md) that is earlier than today.
 
 **Fix:** update the path or the command, or delete the instruction. For a passed date, read the file again, then move `stale-after` forward.
@@ -340,12 +353,15 @@ When more than one agent is configured (`harnesses:` in `ctxlock.yaml`, both by 
 
 ### `L13-agents-md-shadowed` (should)
 
-Claude Code reads `AGENTS.md` only when there is no `CLAUDE.md`. Once a `CLAUDE.md` exists, at any level from the folder up to the repository root, every `AGENTS.md` that Codex loads is invisible to Claude Code, unless the `CLAUDE.md` imports it. The message names the `CLAUDE.md` to change and the exact import line, with the path relative to that file:
+Claude Code reads `AGENTS.md` only when there is no `CLAUDE.md`. Once a `CLAUDE.md` exists, at any level from the folder up to the repository root, every `AGENTS.md` that Codex loads is invisible to Claude Code, unless a `CLAUDE` file imports it. The message gives a fix that keeps the file's scope the same as in Codex:
+- **A shared `CLAUDE.md` in the same folder:** add the import to it, with the path relative to that file.
+- **None in that folder:** create one there that imports it. Importing it from a `CLAUDE.md` higher up would load it at every site, while Codex loads it only when it works in that folder.
 
 ```
-Claude Code ignores pkg/AGENTS.md because .claude/CLAUDE.md exists; add @../pkg/AGENTS.md to .claude/CLAUDE.md
+Claude Code ignores AGENTS.md because CLAUDE.md exists; add @AGENTS.md to CLAUDE.md
+Claude Code ignores services/billing/AGENTS.md because CLAUDE.md exists; create services/billing/CLAUDE.md containing @AGENTS.md
 ```
 
-A personal `CLAUDE.local.md` is suggested only when it is the only `CLAUDE` file. `AGENTS.override.md` is Codex-only by design and is not reported.
+A personal `CLAUDE.local.md` is never where the import goes. `AGENTS.override.md` is Codex-only by design and is not reported.
 
-**Fix:** add the import line the message gives. Or, if the `CLAUDE.md` holds nothing of its own, replace it with a symlink to `AGENTS.md`.
+**Fix:** do what the message says. Or, if a `CLAUDE.md` holds nothing of its own, replace it with a symlink to the `AGENTS.md` beside it.

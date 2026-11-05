@@ -64,7 +64,7 @@ Runs every rule in [rules.md](rules.md) and prints one line per finding, `must` 
 $ ctxlock lint
 should  L9-stale                .agents/skills/deploy/SKILL.md:5  scripts/deploy.sh at 5:6 does not exist
 should  L13-agents-md-shadowed  AGENTS.md                         Claude Code ignores AGENTS.md because CLAUDE.md exists; add @AGENTS.md to CLAUDE.md
-should  L13-agents-md-shadowed  services/billing/AGENTS.md        Claude Code ignores services/billing/AGENTS.md because CLAUDE.md exists; add @services/billing/AGENTS.md to CLAUDE.md
+should  L13-agents-md-shadowed  services/billing/AGENTS.md        Claude Code ignores services/billing/AGENTS.md because CLAUDE.md exists; create services/billing/CLAUDE.md containing @AGENTS.md
 info    L10-owner                                                 No owners: add CODEOWNERS or owners in ctxlock.yaml (5 units)
 info    L11-coverage            .agents/skills/deploy/SKILL.md    .agents/skills/deploy/SKILL.md reaches codex only
 info    L11-coverage            .claude/rules/testing.md          .claude/rules/testing.md reaches claude-code only

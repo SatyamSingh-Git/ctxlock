@@ -141,3 +141,33 @@ Task 4 predicted Claude Code's loading from the research summary written earlier
 *Cost:* one fix pass; the predictions were never released.
 
 *Changed:* before fixing, an agent fetched the docs and quoted each rule with its section, and the fix follows the quotes. Guide claims are checked against code and tests, and its examples are run, not written.
+
+### A hand-written markdown scanner guarding a security rule
+
+L1 flags HTML comments because reviewers can't see them. Whether a comment is visible depends on whether it sits in code, and Task 6 decided that with a small scanner of its own: a fence was three backticks at the start of a line. CommonMark has more rules than that. A fence inside a list item ends when the item does. A line of backticks with a backtick in its info string is not a fence at all. The batch-2 reviewer used both, checked against GitHub's renderer, to hide a comment that ctxlock never reported. The same scanner also called comments inside indented code "hidden", which is wrong in the other direction.
+
+*Cause:* the project's own rule is to reuse rather than invent, and it was skipped for a piece that looked too small to need a library. For a security check, "what GitHub renders" is the specification, and only a real CommonMark parser implements it.
+
+*Cost:* found by the batch-2 review, before any release.
+
+*Changed:* markdown-it (MIT), a CommonMark parser, now finds code blocks for every rule that cares: imports, comments, overviews, instruction counts and stale paths.
+
+### Allowlist exceptions with room in them
+
+The L1 exception for subdivision flags allowed any 1–7 tag letters between the black flag and CANCEL TAG, because that is the shape of the England flag. That shape is a container: seven hidden letters per flag, and flags can be chained into a sentence. Only three such flags are recommended for display.
+
+*Cause:* the exception described the *format* of the legitimate case instead of listing the cases.
+
+*Cost:* found by the batch-2 review; re-graded from minor to important, since it is a way past a `must` rule.
+
+*Changed:* only England, Scotland and Wales pass. The marker-comment exception added in the same fix pass was written the same way: an exact grammar with no room for a sentence.
+
+### Shell edits that silently did nothing
+
+Several edits this batch went through `sed` and heredocs on Windows. Several of them changed nothing: escaped regex characters or `\n` sequences didn't survive the shell. Each time, the next step only worked because a `grep` afterwards showed the edit was missing.
+
+*Cause:* a substitution that matches nothing is not an error in `sed`.
+
+*Cost:* minutes each time, and one mutation run whose pattern was wrong.
+
+*Changed:* multi-line edits go through the Edit tool, or a script that throws when its search text is not found exactly once.

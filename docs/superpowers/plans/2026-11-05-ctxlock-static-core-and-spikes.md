@@ -24,10 +24,11 @@
 | 9 | Done | `9f3a576`, `061d3ac` |
 | 10 | Done | `fa699bd`, `30e35bc` |
 | 11 | Done | `98a1d89`, `07eccd8` |
-| 12 | Done | `feat: ctxlock diff with PR-comment markdown` |
+| 12 | Done | `cee346f`, `b991f5f` |
+| Batch-2 review (Tasks 6–10) | Done; fixes in | `abbf135` |
 | 13–14, S1–S4 | Not started | |
 
-As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in two places: there is no tinyglobby (D17), and jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7).
+As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in three places: there is no tinyglobby (D17); jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7); and markdown-it 15 (MIT) finds code blocks the way CommonMark does, after the batch-2 review found two ways past a hand-written fence scanner.
 
 **Spec:** [docs/superpowers/specs/2026-11-05-ctxlock-design.md](../specs/2026-11-05-ctxlock-design.md). The harness behaviour it relies on is in [research/08-agent-runtime-internals.md](../../../research/08-agent-runtime-internals.md).
 

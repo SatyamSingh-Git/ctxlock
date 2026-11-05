@@ -45,7 +45,7 @@ Quote owners that start with `@`; YAML reserves that character.
 | Field | Required | Meaning |
 |---|---|---|
 | `version` | yes | Always `1` |
-| `harnesses` | no | Any of `claude-code`, `codex`. Defaults to both. Load predictions, budgets (L3, L5), coverage (L11) and the AGENTS.md check (L13) run only for the agents listed. Config that runs code (L2) is listed for every agent, since anyone can run any agent on a checkout. |
+| `harnesses` | no | Any of `claude-code`, `codex`. Defaults to both. Load predictions, and the rules built on them (L3, L4, L5, L7, L11, L13), run only for the agents listed. Config that runs code (L2) is listed for every agent, since anyone can run any agent on a checkout. |
 | `units.<path>.owner` | no | The person or team accountable for this unit. Overrides CODEOWNERS. |
 | `units.<path>.tier` | no | How much to trust it: `certified`, `reviewed`, `imported` (third-party), or `proposal` (suggested, not yet approved) |
 | `units.<path>.verified-at` | no | When someone last checked it, as `YYYY-MM-DD` |
