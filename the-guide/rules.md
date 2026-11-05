@@ -18,7 +18,7 @@ lint:
     - "vendor/**"
 ```
 
-> **Status:** the rules on this page are implemented and tested (L0–L3, L5, L6 so far). The `ctxlock lint` command that runs them arrives with the first CLI release. More rules are being built, and this page grows as each one ships.
+> **Status:** the rules on this page are implemented and tested (L0–L8 so far). The `ctxlock lint` command that runs them arrives with the first CLI release. More rules are being built, and this page grows as each one ships.
 
 ## What the findings look like
 
@@ -237,3 +237,53 @@ Counts the list items (`- `, `* `, `+ `, `1. `, `2) `, indented ones too) in eve
 A `SKILL.md` body, the part after the frontmatter, over `skillBodyLines` (500 lines) or `skillBodyChars` (20,000 characters, about 5,000 tokens). The [Agent Skills specification](https://agentskills.io/specification) recommends staying under both, because the whole body enters context when the skill runs.
 
 **Fix:** keep the steps in `SKILL.md` and move reference material into files beside it that the skill points to; the agent reads those only when it needs them.
+
+---
+
+## L4, L7, L8: context that makes agents worse
+
+More context is not always better. Studies of real agents found three shapes that cost steps or accuracy ([research/03](../research/03-evidence-what-context-works.md)):
+- **Repository overviews** did not reduce the steps agents took (ETH Zurich and LogicStar, "Evaluating AGENTS.md"). Generated context files mostly repeated what the agent could find by itself.
+- **Look-alike skills** leave an agent unsure which one to run.
+- **Excessive procedure**, including excessive verification, was the top cause among 307 skill failures ("Agent Skills Can Be Harmful").
+
+This is real output from a payments service with a project-structure section, a skill copied to two folders that has drifted, and a release skill much like the deploy skill:
+
+```
+should L7-duplicate-skill .agents/skills/release/SKILL.md  description is a near-duplicate of skill deploy (.agents/skills/deploy/SKILL.md): 57% of their words are shared, so an agent may pick the wrong one
+should L7-duplicate-skill .claude/skills/deploy/SKILL.md  diverged copies: skill deploy at .agents/skills/deploy and .claude/skills/deploy have different contents
+should L7-duplicate-skill .claude/skills/deploy/SKILL.md  description is a near-duplicate of skill release (.agents/skills/release/SKILL.md): 57% of their words are shared, so an agent may pick the wrong one
+should L4-discoverable    AGENTS.md:3  heading "## Project structure" at 3:1 introduces a repository overview; agents can list the files themselves
+should L4-discoverable    AGENTS.md:7  4-line directory tree at 7:1; agents can list the files themselves
+info   L8-procedure       .agents/skills/deploy/SKILL.md  skill deploy: 5 mandatory checks and checklist items; excessive procedure is the most common way skills fail
+```
+
+### `L4-discoverable` (should)
+
+Checks every file an agent loads at the start of a session: `AGENTS.md`, `CLAUDE.md`, and rules without `paths:`. Two things are flagged:
+- **A directory tree:** three or more lines drawn with `├──`, `└──` or `│`, inside a code block or not.
+- **An overview heading:** a heading such as `## Project structure`, `### Repo layout` or `## Directory map`. The heading starts with project, directory, repo, repository, folder, codebase or file, followed by structure, layout, overview, map or tree. A `#` comment inside a code block is not a heading.
+
+**Fix:** delete the overview. Keep what the agent cannot find by listing files: why a folder exists, which code is generated, and which folder not to touch.
+
+### `L7-duplicate-skill` (should)
+
+Compares every pair of skills:
+- **Near-duplicates:** two skills whose descriptions share at least half their words. The test is Jaccard similarity of their word sets ≥ 0.5, over lowercase words of three or more letters, with about 35 common words such as "the", "use" and "when" ignored.
+- **Diverged copies:** two skills with the same `name` whose files differ. A typical cause is a skill copied into both `.claude/skills` and `.agents/skills` and later edited in only one place.
+
+Identical copies and symlinks (`.claude/skills/deploy -> ../../.agents/skills/deploy`) are not flagged.
+
+**Fix:**
+- **Near-duplicates:** merge the two skills, or rewrite the descriptions so each says when to use it and when not to.
+- **Diverged copies:** keep one copy and symlink the other to it, so both agents read the same file. See [agents.md](agents.md) for how each agent follows symlinks.
+
+### `L8-procedure` (info)
+
+Counts two things in each skill and rule:
+- **Mandatory checks:** phrases such as "always run", "must verify" or "never skip the check": always, must or never skip, followed within 40 characters by run, rerun, verify, check, test, validate or confirm.
+- **Unchecked checklist items:** `- [ ]` lines.
+
+Five or more gives an `info` finding. It is a heuristic until evals can measure its effect (decision D18), so it never fails a check.
+
+**Fix:** keep the checks that catch real mistakes and drop the rest. Tell the agent what done looks like rather than every step to get there.

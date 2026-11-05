@@ -20,8 +20,9 @@
 | 1–5 | Done; fixes from the batch-1 review are in | `55a0b4f`..`87da695` |
 | 6 | Done | `2822b38` |
 | 7 | Done | `a1d8e08`, `262bb06` |
-| 8 | Done | `feat: lint harness budgets, always-on instruction count and skill length` |
-| 9–14, S1–S4 | Not started | |
+| 8 | Done | `acbf862`, `823324b` |
+| 9 | Done | `feat: lint discoverable content, duplicate skills and excessive procedure` |
+| 10–14, S1–S4 | Not started | |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in two places: there is no tinyglobby (D17), and jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7).
 
@@ -619,7 +620,7 @@ docs/dogfood/           # Task 14 report
   - `- [ ]` checkbox lines.
 
   Cites research/03 ("Agent Skills Can Be Harmful": excessive procedure).
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - L4:
     - `a fenced directory tree is flagged`
     - `## Project structure is flagged`
@@ -633,10 +634,10 @@ docs/dogfood/           # Task 14 report
   - L8:
     - `5 mandatory-verification phrases give info`
     - `4 give nothing`
-- [ ] **Step 2: Run `npx vitest run tests/lint/l4-l7-l8.test.ts`.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run the same command.** Expected: PASS.
-- [ ] **Step 5: Commit:** `feat: lint discoverable content, duplicate skills and excessive procedure`.
+- [x] **Step 2: Run `npx vitest run tests/lint/l4-l7-l8.test.ts`.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run the same command.** Expected: PASS.
+- [x] **Step 5: Commit:** `feat: lint discoverable content, duplicate skills and excessive procedure`.
 
 ### Task 10: L9 stale, L10 owner, L11 coverage, L13 AGENTS.md shadowed
 
