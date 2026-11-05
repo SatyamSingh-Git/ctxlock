@@ -15,7 +15,8 @@ const RISKY: Array<{ what: string; pattern: RegExp }> = [
   { what: 'pipes a download into a shell', pattern: /\b(?:iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b[^\n]*\|\s*(?:iex|Invoke-Expression)\b/i },
   { what: 'pipes decoded base64 into a shell', pattern: new RegExp(String.raw`\bbase64\s+(?:-d|--decode)\b[^\n]*\|\s*${SHELL}`) },
   { what: 'runs an agent with its permission checks turned off', pattern: /--dangerously-skip-permissions\b|--yolo\b|--trust-all-tools\b/ },
-  { what: 'points an agent at another API endpoint', pattern: /\b(?:ANTHROPIC|OPENAI)_BASE_URL\b/ },
+  // Set, or followed by a URL: a list of variables an agent must not read names the variable but points nowhere.
+  { what: 'points an agent at another API endpoint', pattern: /\b(?:ANTHROPIC|OPENAI)_BASE_URL\b(?:`?\s*=|[^\n]*https?:\/\/)/ },
   { what: 'turns on automatic approval of agent tools', pattern: /\bchat\.tools\.autoApprove\b|\benableAllProjectMcpServers\b/ },
 ];
 

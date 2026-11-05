@@ -96,6 +96,15 @@ describe('L9-stale', () => {
     ]);
   });
 
+  it("another skill's scripts/deploy.sh does not stand in for this skill's own", async () => {
+    expect(
+      await run(staleReferences, {
+        '.agents/skills/deploy/SKILL.md': '---\nname: deploy\ndescription: Deploys\n---\nRun `scripts/deploy.sh`.\n',
+        '.agents/skills/release/scripts/deploy.sh': '',
+      }),
+    ).toEqual([['L9-stale', 'should', '.agents/skills/deploy/SKILL.md', 'scripts/deploy.sh at 5:6 does not exist']]);
+  });
+
   it('package managers named in prose are not commands; only code is read for scripts', async () => {
     expect(
       await run(staleReferences, {
@@ -113,6 +122,40 @@ describe('L9-stale', () => {
     ].join('\n');
 
     expect(await run(staleReferences, { 'AGENTS.md': `${text}\n`, 'packages/web/src/index.ts': '' })).toEqual([]);
+  });
+
+  it('a gitignored path is an output, not a stale reference, from the root or a nested .gitignore', async () => {
+    const files = {
+      'AGENTS.md': 'Logs go to `.artifacts/dev.log`, the build writes `web/dist/app.js`, and `docs/gone.md` was removed.\n',
+      '.artifacts/README': '',
+      'web/src/app.ts': '',
+      'docs/index.md': '',
+    };
+    const stale = (path: string, column: number) => ['L9-stale', 'should', 'AGENTS.md', `${path} at 1:${column} does not exist`];
+
+    expect(await run(staleReferences, { ...files, '.gitignore': '/.artifacts\n', 'web/.gitignore': '/dist\n' })).toEqual([stale('docs/gone.md', 75)]);
+    expect(await run(staleReferences, files)).toEqual([stale('.artifacts/dev.log', 13), stale('web/dist/app.js', 52), stale('docs/gone.md', 75)]);
+  });
+
+  it('a path found under another folder is relative to a package there, so it is not stale', async () => {
+    const text = 'In `tools/lint/`, reuse `src/ast/utils.ts` and `src/ast/`; `src/ast/gone.ts` was removed.\n';
+    const files = { 'tools/lint/src/ast/utils.ts': '', 'src/app.ts': '' };
+
+    expect(await run(staleReferences, { ...files, 'AGENTS.md': text })).toEqual([['L9-stale', 'should', 'AGENTS.md', 'src/ast/gone.ts at 1:61 does not exist']]);
+  });
+
+  it('placeholder paths such as src/foo/bar.py and my-rule-name.ts are examples', async () => {
+    const text = 'Tests mirror sources: `src/foo/bar.py` is tested in `tests/foo/test_bar.py`. Name it `my-rule-name.ts`. Edit `src/real.py`.\n';
+
+    expect(await run(staleReferences, { 'AGENTS.md': text, 'src/app.py': '', 'tests/test_app.py': '' })).toEqual([
+      ['L9-stale', 'should', 'AGENTS.md', 'src/real.py at 1:111 does not exist'],
+    ]);
+  });
+
+  it('an extension on its own is not a file name, but a dotfile with an extension is', async () => {
+    expect(await run(staleReferences, { 'AGENTS.md': 'Return `.json` or `.yaml`; servers live in `.mcp.json`.\n' })).toEqual([
+      ['L9-stale', 'should', 'AGENTS.md', '.mcp.json at 1:45 does not exist'],
+    ]);
   });
 
   it('scripts are not checked where no package.json is found, or where it does not parse', async () => {
@@ -197,6 +240,13 @@ describe('L11-coverage', () => {
       ['L11-coverage', 'info', '.claude/rules/style.md', '.claude/rules/style.md reaches claude-code only'],
     ]);
     expect(await run(coverage, { ...files, 'ctxlock.yaml': 'version: 1\nharnesses: [claude-code]\n' })).toEqual([]);
+  });
+
+  it('a CLAUDE.md that only imports AGENTS.md adds nothing of its own, so it is not reported', async () => {
+    expect(await run(coverage, { 'AGENTS.md': 'a', 'CLAUDE.md': '@AGENTS.md\n' })).toEqual([]);
+    expect(await run(coverage, { 'AGENTS.md': 'a', 'CLAUDE.md': '@AGENTS.md\n\nUse tabs.\n' })).toEqual([
+      ['L11-coverage', 'info', 'CLAUDE.md', 'CLAUDE.md reaches claude-code only'],
+    ]);
   });
 
   it('an AGENTS.md that L13 reports is left to L13', async () => {

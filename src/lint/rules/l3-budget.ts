@@ -14,6 +14,7 @@ export const harnessBudget: Rule = {
       findings.push({ rule: 'L3-budget', severity, message, ...(path === undefined ? {} : { path }), ...(unitId === undefined ? {} : { unitId }) });
     const byId = new Map(units.map((u) => [u.id, u]));
     const reported = new Set<string>();
+    const catalogs = new Set<string>();
 
     budgetReport(contexts, limits).forEach((row, i) => {
       const { entries } = contexts[i]!;
@@ -25,7 +26,14 @@ export const harnessBudget: Rule = {
           const lost = first.loadedBytes > 0 ? 'cut' : 'dropped';
           report('should', `AGENTS.md chain at ${where(row.site)} is ${total} bytes; Codex loads the first ${limits.codexChainBytes} (${first.path} ${lost})`, first.path, first.unitId);
         }
-        if (row.catalogLimit !== null && row.catalogChars > row.catalogLimit) {
+        // Nested sites list the root's skills too, so a catalog they all share is reported once.
+        const catalog = entries
+          .filter((e) => e.catalogChars !== undefined)
+          .map((e) => e.unitId)
+          .sort()
+          .join('\n');
+        if (row.catalogLimit !== null && row.catalogChars > row.catalogLimit && !catalogs.has(catalog)) {
+          catalogs.add(catalog);
           report('should', `Codex skill catalog at ${where(row.site)} is ${row.catalogChars} characters, over the ${row.catalogLimit} Codex gives it`);
         }
         return;

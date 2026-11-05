@@ -1,4 +1,5 @@
 import { posix } from 'node:path';
+import ignore, { type Ignore } from 'ignore';
 import { findImports } from '../../harness/imports.js';
 import type { Finding, Unit } from '../../model.js';
 import { codeOnly, inlineCode } from '../../units/markdown.js';
@@ -6,8 +7,10 @@ import { lineAndColumn, readOnce } from '../files.js';
 import type { Rule } from '../types.js';
 
 const PATH_LIKE = /^(\.{0,2}\/)?[\w.-]+(\/[\w.-]+)+\/?$/;
-const FILE_LIKE = /\.(md|ts|js|py|json|yaml|yml|toml|sh|go|rs)$/;
+// A name before the extension is required: `.json` alone names a format.
+const FILE_LIKE = /[^/]\.(md|ts|js|py|json|yaml|yml|toml|sh|go|rs)$/;
 const NOT_A_PATH = /[*?{}<>$\s]|^http/;
+const PLACEHOLDER = /(?:^|\/)(?:foo|bar|baz|qux|(?:my|your)[-_][\w.-]*)(?:\.\w+)?(?:\/|$)/i;
 const SKILL_FOLDERS = new Set(['scripts', 'references', 'assets']);
 // Only forms that always mean a script: bare `pnpm X` and `yarn X` also run a dependency's binary
 // when no script has that name. [ \t] rather than \s, so a script name never comes from the next line.
@@ -31,6 +34,20 @@ export const staleReferences: Rule = {
     const present = (path: string) =>
       path === '.' || path === '' || paths.has(path) || dirs.has(path) || links.some((l) => path.startsWith(`${l}/`));
     const scripts = new Map<string, Set<string> | null>();
+    const gitignores = new Map<string, Ignore>();
+
+    // Build outputs, logs and caches are referenced on purpose and exist only once something runs.
+    async function ignored(path: string): Promise<boolean> {
+      for (let d = posix.dirname(path); ; d = posix.dirname(d)) {
+        const base = d === '.' ? '' : d;
+        const file = base ? `${base}/.gitignore` : '.gitignore';
+        if (paths.has(file)) {
+          if (!gitignores.has(file)) gitignores.set(file, ignore().add((await readOnce(reader, file)).toString('utf8')));
+          if (gitignores.get(file)!.ignores(base ? path.slice(base.length + 1) : path)) return true;
+        }
+        if (base === '') return false;
+      }
+    }
 
     async function nearestScripts(dir: string): Promise<{ file: string; names: Set<string> } | null> {
       for (let d = dir; ; d = posix.dirname(d) === '.' ? '' : posix.dirname(d)) {
@@ -55,21 +72,26 @@ export const staleReferences: Rule = {
     // A path is checked only where its first folder exists, from the unit's folder or the root:
     // `origin/main`, `application/json` and `/etc/hosts` name no folder in the repository. A skill's
     // own scripts/, references/ and assets/ (the Agent Skills layout) are checked even when missing.
-    function missing(token: string, unit: Unit, dir: string): boolean {
+    async function missing(token: string, unit: Unit, dir: string): Promise<boolean> {
       const relative = token.replace(/^\//, '').replace(/\/$/, '');
       // A bare file name, often an example, counts as present if any file in the repository has it.
       if (!relative.includes('/')) return !names.has(relative);
       const first = relative.split('/')[0]!;
+      const own = unit.kind === 'skill' && SKILL_FOLDERS.has(first);
       const bases = token.startsWith('/') ? [''] : [...new Set([dir, ''])];
       const checkable = bases
         .filter((base) => {
-          if (unit.kind === 'skill' && base === dir && SKILL_FOLDERS.has(first)) return true;
+          if (own && base === dir) return true;
           const anchor = posix.normalize(posix.join(base, first));
           return inRepo(anchor) && present(anchor);
         })
         .map((base) => posix.normalize(posix.join(base, relative)))
         .filter(inRepo);
-      return checkable.length > 0 && !checkable.some(present);
+      if (checkable.length === 0 || checkable.some(present)) return false;
+      // In a monorepo `src/ast/utils.ts` often means the one in some package's folder. A skill's own folders are its own.
+      if (!own && [...paths, ...dirs].some((p) => p.endsWith(`/${relative}`))) return false;
+      for (const path of checkable) if (await ignored(path)) return false;
+      return true;
     }
 
     for (const unit of units) {
@@ -80,7 +102,8 @@ export const staleReferences: Rule = {
         findings.push({ rule, severity, message, path, ...at, unitId: unit.id });
 
       for (const { code: token, offset } of inlineCode(unit.text)) {
-        if (NOT_A_PATH.test(token) || !(PATH_LIKE.test(token) || FILE_LIKE.test(token)) || !missing(token, unit, dir)) continue;
+        if (NOT_A_PATH.test(token) || PLACEHOLDER.test(token) || !(PATH_LIKE.test(token) || FILE_LIKE.test(token))) continue;
+        if (!(await missing(token, unit, dir))) continue;
         const at = lineAndColumn(unit.text, offset);
         report('L9-stale', 'should', `${token} at ${at.line}:${at.column} does not exist`, at);
       }

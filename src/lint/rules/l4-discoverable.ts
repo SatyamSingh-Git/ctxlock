@@ -3,7 +3,8 @@ import { maskCode } from '../../units/markdown.js';
 import type { Rule } from '../types.js';
 
 const TREE = /├──|└──|│ /;
-const OVERVIEW = /^#{1,6}\s+(project|directory|repo(sitory)?|folder|codebase|file)\s+(structure|layout|overview|map|tree)\b/i;
+// "Project overview" usually says what the project is, so only its layout words count.
+const OVERVIEW = /^#{1,6}\s+(?:project\s+(?:structure|layout|map|tree)|(?:directory|repo(?:sitory)?|folder|codebase|file)\s+(?:structure|layout|overview|map|tree))\b/i;
 const WHY = 'agents can list the files themselves';
 
 export const discoverable: Rule = {
@@ -25,10 +26,15 @@ export const discoverable: Rule = {
         report(`${tree.length}-line directory tree at ${tree[0]! + 1}:${column}; ${WHY}`, tree[0]! + 1, column);
       }
 
+      // An overview heading inside another overview's section is part of the same overview.
+      let section = 0;
       maskCode(unit.text)
         .split('\n')
         .forEach((text, i) => {
-          if (OVERVIEW.test(text)) report(`heading "${text.trim()}" at ${i + 1}:1 introduces a repository overview; ${WHY}`, i + 1, 1);
+          const level = /^(#{1,6})\s/.exec(text)?.[1]!.length;
+          if (level === undefined || (section > 0 && level > section)) return;
+          section = OVERVIEW.test(text) ? level : 0;
+          if (section > 0) report(`heading "${text.trim()}" at ${i + 1}:1 introduces a repository overview; ${WHY}`, i + 1, 1);
         });
     }
     return findings;

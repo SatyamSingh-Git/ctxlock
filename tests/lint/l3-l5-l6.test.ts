@@ -108,6 +108,21 @@ describe('L3-budget', () => {
     ]);
   });
 
+  it('a catalog that every site shares is reported once, and a site that adds skills is reported too', async () => {
+    const skills = Object.fromEntries(
+      Array.from({ length: 9 }, (_, i) => [`.agents/skills/s${i + 1}/SKILL.md`, skill(`s${i + 1}`, { description: 'd'.repeat(981) })]),
+    );
+    const files = { ...skills, 'AGENTS.md': 'a', 'src/AGENTS.md': 'b', 'tests/AGENTS.md': 'c' };
+
+    expect(await run(harnessBudget, files)).toEqual([
+      ['should', undefined, 'Codex skill catalog at the repository root is 9000 characters, over the 8000 Codex gives it'],
+    ]);
+    const messages = (await run(harnessBudget, { ...files, 'pkg/AGENTS.md': 'd', 'pkg/.agents/skills/extra/SKILL.md': skill('extra', { description: 'Extra' }) })).map(
+      ([, , message]) => String(message).replace(/ is \d+ characters.*/, ''),
+    );
+    expect(messages).toEqual(['Codex skill catalog at the repository root', 'Codex skill catalog at pkg']);
+  });
+
   it('an AGENTS.md of 16384 vs 16385 bytes (info), and an AGENTS.override.md is not checked', async () => {
     expect(await run(harnessBudget, { 'AGENTS.md': 'a'.repeat(16384) })).toEqual([]);
     expect(await run(harnessBudget, { 'AGENTS.md': 'a'.repeat(16385) })).toEqual([

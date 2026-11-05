@@ -21,6 +21,8 @@ export const coverage: Rule = {
     for (const unit of units) {
       const harnesses = reached.get(unit.id);
       if (leftToL13.has(unit.id) || !harnesses || harnesses.size === configured.size) continue;
+      // A CLAUDE.md that is only `@AGENTS.md` has no content of its own for the other agents to miss.
+      if (unit.text.trim().split(/\s+/).every((word) => word.startsWith('@'))) continue;
       const path = unit.kind === 'skill' ? `${unit.path}/SKILL.md` : unit.path;
       const only = registry.harnesses.filter((h) => harnesses.has(h));
       findings.push({ rule: 'L11-coverage', severity: 'info', message: `${path} reaches ${[...new Set(only)].join(', ')} only`, path, unitId: unit.id });

@@ -194,7 +194,7 @@ Lines in instructions, rules, skills and the scripts inside skills that tell an 
 | Pipe a download into a shell | `curl ... \| bash`, `wget -qO- ... \| sudo sh`, `bash <(curl ...)`, `sh -c "$(curl ...)"`, `irm ... \| iex` |
 | Pipe decoded base64 into a shell | `base64 -d ... \| sh` |
 | Turn the agent's permission checks off | `--dangerously-skip-permissions`, `--yolo`, `--trust-all-tools` |
-| Point the agent at another API | `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` |
+| Point the agent at another API | `ANTHROPIC_BASE_URL` or `OPENAI_BASE_URL`, set with `=` or followed by a URL on the same line. A list that only names the variable, such as "never read `OPENAI_BASE_URL`", is not flagged |
 | Turn on automatic approval | `chat.tools.autoApprove`, `enableAllProjectMcpServers` |
 
 Each line is reported once per kind, at the column of the first match, and the message quotes the line. Downloads to a file (`curl -o out.json`) are not flagged. Config files are left to `L2-exec-config`, which lists their items one by one.
@@ -230,7 +230,7 @@ Each limit below can be changed under `limits:` in [`ctxlock.yaml`](configuratio
 | should | The `AGENTS.md` files Codex loads at a site add up to more than its budget. The message names the file that is cut, or dropped if the budget ran out before it | `codexChainBytes` (32,768 bytes) | Codex docs, `project_doc_max_bytes` |
 | should | A file Claude Code loads on demand (a path-scoped rule, a nested `CLAUDE.md`) is longer than it reads. Reported once per file | `claudeLazyFileChars` (40,000 characters) | Claude Code memory docs |
 | should | A skill's `description` plus `when_to_use` is longer than Claude Code's listing keeps. Only skills Claude Code lists are checked, so this never fires when `harnesses:` leaves out `claude-code` | `claudeSkillEntryChars` (1,536 characters) | Claude Code skills docs |
-| should | The skill catalog Codex builds at a site is over its budget. The count is name + description + path per skill | `codexSkillCatalogChars` (8,000 characters) | Codex skills docs |
+| should | The skill catalog Codex builds at a site is over its budget. The count is name + description + path per skill. Nested sites list the root's skills too, so a catalog that several sites share is reported once, at the first of them | `codexSkillCatalogChars` (8,000 characters) | Codex skills docs |
 | info | An `AGENTS.md` is larger than Devin's cloud agent reads | `devinCloudFileBytes` (16,384 bytes) | Devin docs |
 | info | A skill description is within the spec's 1,024 characters but over what some clients keep | `skillDescriptionPortable` (1,000 characters) | Glean's agent spec, the lowest common limit found |
 
@@ -271,7 +271,7 @@ info   L8-procedure       .agents/skills/deploy/SKILL.md  skill deploy: 5 mandat
 
 Checks every file an agent loads at the start of a session: `AGENTS.md`, `CLAUDE.md`, and rules without `paths:`. Two things are flagged:
 - **A directory tree:** three or more lines drawn with `├──`, `└──` or `│`, inside a code block or not.
-- **An overview heading:** a heading such as `## Project structure`, `### Repo layout` or `## Directory map`. The heading starts with project, directory, repo, repository, folder, codebase or file, followed by structure, layout, overview, map or tree. A `#` comment inside a code block is not a heading.
+- **An overview heading:** a heading such as `## Project structure`, `### Repo layout` or `## Codebase overview`. The heading starts with directory, repo, repository, folder, codebase or file, followed by structure, layout, overview, map or tree, or with project followed by any of those except overview. `## Project overview` usually says what the project is rather than where its files are, so it is not flagged. An overview heading inside another overview's section, such as `### Repo layout` under `## Project structure`, is part of the same overview and is not reported again. A `#` comment inside a code block is not a heading.
 
 **Fix:** delete the overview. Keep what the agent cannot find by listing files: why a folder exists, which code is generated, and which folder not to touch.
 
@@ -323,7 +323,11 @@ Three checks on instructions, rules and skills:
 - **Paths that do not exist.** Inline code that looks like a path is checked, such as `src/lib/format.ts` or `README.md`. These are left alone:
   - tokens with wildcards, braces, placeholders, variables or spaces;
   - URLs, and paths that lead out of the repository;
-  - paths whose first folder does not exist from the file's own folder or from the repository root, such as `origin/main`, `application/json`, `/etc/hosts`, `~/.claude/settings.json` or `dist/cli.js` when `dist` is gitignored.
+  - paths whose first folder does not exist from the file's own folder or from the repository root, such as `origin/main`, `application/json`, `/etc/hosts`, `~/.claude/settings.json` or `dist/cli.js` when `dist` is gitignored;
+  - gitignored paths, such as `.artifacts/dev.log`: logs, builds and caches exist only once something runs. The `.gitignore` in each folder above the path is read;
+  - a path that exists under another folder, such as `src/ast/utils.ts` when the file is `tools/lint/src/ast/utils.ts`. In a monorepo a path is often relative to a package named in the sentence before;
+  - placeholder names: a `foo`, `bar`, `baz` or `qux` folder or file, and names starting with `my-` or `your-`, such as `src/foo/bar.py` or `my-rule-name.ts`;
+  - an extension on its own, such as `.json`. A dotfile with an extension, such as `.mcp.json`, is checked.
 
   A leading `/` means the root. A skill's `scripts/`, `references/` and `assets/` paths are always checked from the skill's folder, since that is the Agent Skills layout. A bare file name such as `index.ts` counts as present if a file with that name exists anywhere in the repository. A symlink counts as existing. Code blocks are not read for paths.
 - **Scripts that do not exist.** `npm run <script>`, `pnpm run <script>`, `yarn run <script>` and `npm test`, `pnpm test`, `yarn test`, in code only (inline code and code blocks), so a sentence such as "we use pnpm instead of npm" is not a command. They are checked against the nearest `package.json` above the file. A bare `pnpm build` or `yarn lint` is not checked, because pnpm and yarn also run a dependency's program by that name when no script has it. No `package.json`, or one that does not parse, means nothing is checked.
@@ -347,7 +351,7 @@ Owners come from `owner:` in `ctxlock.yaml`, or from CODEOWNERS (`.github/CODEOW
 
 ### `L11-coverage` (info)
 
-When more than one agent is configured (`harnesses:` in `ctxlock.yaml`, both by default), lists each instructions file, rule or skill that reaches some agents but not others: `reaches claude-code only` or `reaches codex only`. This is often on purpose, such as a `CLAUDE.md` with Claude-only notes. It is listed so that a gap is a choice, not an accident. Files that `L13` reports are left to `L13`.
+When more than one agent is configured (`harnesses:` in `ctxlock.yaml`, both by default), lists each instructions file, rule or skill that reaches some agents but not others: `reaches claude-code only` or `reaches codex only`. This is often on purpose, such as a `CLAUDE.md` with Claude-only notes. It is listed so that a gap is a choice, not an accident. Files that `L13` reports are left to `L13`. A file that is nothing but imports, such as a `CLAUDE.md` containing only `@AGENTS.md`, adds nothing the other agents miss and is not listed.
 
 **Fix:** if every agent should follow it, move it to a file every agent reads, such as `AGENTS.md` or `.agents/skills/`, or symlink it ([agents.md](agents.md)).
 

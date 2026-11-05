@@ -27,10 +27,18 @@ describe('L4-discoverable', () => {
     ]);
   });
 
-  it('## Project structure is flagged', async () => {
-    expect(await run(discoverable, { 'AGENTS.md': '# Guide\n\n## Project structure\n\nThe code is in src.\n\n### Repo layout\n' })).toEqual([
+  it('## Project structure is flagged, and an overview heading inside its section is part of it', async () => {
+    const text = '# Guide\n\n## Project structure\n\nThe code is in src.\n\n### Repo layout\n\n## Testing\n\n### Directory map\n';
+
+    expect(await run(discoverable, { 'AGENTS.md': text })).toEqual([
       ['should', 'AGENTS.md', 'heading "## Project structure" at 3:1 introduces a repository overview; agents can list the files themselves'],
-      ['should', 'AGENTS.md', 'heading "### Repo layout" at 7:1 introduces a repository overview; agents can list the files themselves'],
+      ['should', 'AGENTS.md', 'heading "### Directory map" at 11:1 introduces a repository overview; agents can list the files themselves'],
+    ]);
+  });
+
+  it('## Project overview says what the project is, while ## Codebase overview maps it', async () => {
+    expect(await run(discoverable, { 'AGENTS.md': '## Project Overview\n\n`skills` is the CLI for agent skills.\n\n## Codebase overview\n' })).toEqual([
+      ['should', 'AGENTS.md', 'heading "## Codebase overview" at 5:1 introduces a repository overview; agents can list the files themselves'],
     ]);
   });
 
