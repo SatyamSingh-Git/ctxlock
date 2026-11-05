@@ -56,6 +56,19 @@
   - No OpenAI or Codex access.
   - No Docker.
   - Every runtime experiment uses `claude -p`. Codex behaviour is only ever predicted.
+- **Journey and guide** (Satyam, 2026-11-05):
+  - At each batch end (after Tasks 5, 10 and 14) and after each spike memo, add a chapter to `journey/` and update `journey/decisions.md` and `journey/mistakes.md`.
+  - Each guide page ships with its feature, and describes only what exists:
+
+    | Task | Guide page |
+    |---|---|
+    | 3 | `the-guide/configuration.md` |
+    | 4–5 | `the-guide/agents.md` |
+    | 6–10 | `the-guide/rules.md` (each task adds its own rules) |
+    | 11 | `the-guide/installation.md` and `the-guide/commands.md` |
+    | 12 | `diff` added to `the-guide/commands.md` |
+    | 13 | `the-guide/github-action.md` |
+    | 14 | `the-guide/troubleshooting.md` |
 
 ## Review Focus
 

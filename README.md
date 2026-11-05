@@ -98,6 +98,11 @@ flowchart LR
 - [ ] **Feedback loop:** agent misses routed to the owner, fixed, validated by replay, and tracked for durability.
 - [ ] **Business context:** metrics, knowledge docs and procedures, served over MCP.
 
+## Follow along
+
+- **[The journey](journey/)** is the full record from the very first message: what was tried, what changed, what worked, what broke, and what was learned. It includes a [decision log](journey/decisions.md) and a [mistakes log](journey/mistakes.md).
+- **[The guide](the-guide/)** is the user manual. Each page is written when its feature ships, so it only ever describes things that exist.
+
 ## Design principles
 
 - **No new format.** AGENTS.md, Agent Skills and MCP have won. ctxlock reads them as they are.
