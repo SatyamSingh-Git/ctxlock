@@ -51,6 +51,11 @@
 - **Code style:** read `~/.claude/code-style.md` before writing code.
 - **Tests:** every test must be seen failing before its code exists. Every test is mutation-checked: break the code it covers, and watch it fail.
 - **Before the final push:** run `npm run ci`, which is typecheck + test + build.
+- **Build environment** (Satyam, 2026-11-05):
+  - Claude Code only, through the `claude` CLI on a Claude Max subscription. No API keys.
+  - No OpenAI or Codex access.
+  - No Docker.
+  - Every runtime experiment uses `claude -p`. Codex behaviour is only ever predicted.
 
 ## Review Focus
 
@@ -277,7 +282,7 @@ docs/dogfood/           # Task 14 report
 **Schema** (zod, strict at every level):
 - `version: 1` (required).
 - `harnesses` defaults to `[claude-code, codex]`.
-- `limits`: keys must exist in `LIMITS`, values are positive integers.
+- `limits`: keys must exist in `LIMITS`; values are non-negative integers. `0` is meaningful: Codex treats `project_doc_max_bytes = 0` as "no docs".
 - `units.<unit path>`: `owner`, `tier`, `verified-at`, `stale-after` (both `YYYY-MM-DD`), `sources`, `depends-on`.
 - `lint.severity.<rule id>` takes `must|should|info|off`; `lint.ignore` takes globs.
 
@@ -410,7 +415,21 @@ docs/dogfood/           # Task 14 report
   - `contextSites returns '' plus every directory with an instructions unit`
   - `budgetReport lists truncated paths per harness and site`
   - `a codexChainBytes override of 65536 removes the truncation`
-- [ ] **Step 2: Run `npx vitest run tests/harness/codex.test.ts tests/report`.** Expected: FAIL.
+- [ ] **Step 1b: Write conformance tests ported from Codex's own loader tests.**
+  - Source: `openai/codex`, `codex-rs/core/src/agents_md_tests.rs`, Apache-2.0.
+  - Put them in `tests/harness/codex.conformance.test.ts`.
+  - Read each upstream test body and port its fixture and expectation.
+  - Record the upstream commit SHA and the Apache-2.0 attribution in the file header.
+  - Port at least these:
+    - `no_doc_file_returns_none`
+    - `doc_smaller_than_limit_is_returned`
+    - `doc_larger_than_limit_is_truncated`
+    - `total_byte_limit_truncates_later_project_docs`
+    - `zero_byte_limit_disables_docs`
+    - `finds_doc_in_repo_root`
+    - `project_doc_invalid_utf8_uses_lossy_text` (the doc still loads, and its bytes count)
+  - These are what validate our Codex predictions, since we cannot run Codex.
+- [ ] **Step 2: Run `npx vitest run tests/harness/codex.test.ts tests/harness/codex.conformance.test.ts tests/report`.** Expected: FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run the same command.** Expected: PASS.
 - [ ] **Step 5: Commit:** `feat: predict Codex effective context and report budgets`.
@@ -807,27 +826,38 @@ docs/dogfood/           # Task 14 report
 
 The spikes are throwaway (code goes in `spikes/`, excluded from the package). The deliverable is a memo in `docs/spikes/`.
 
-**Prerequisites Satyam must provide:**
-- Docker Desktop and the Codex CLI. Neither is installed now; Claude Code 2.1.292 is.
-- API access for Claude and OpenAI.
-- A spend cap for S1 + S3. Suggested: $50 total.
+**Environment:**
+- Claude Code 2.1.292 is installed and logged in on Satyam's Max subscription.
+- No Docker, no Codex, no API keys.
+- Runs use `claude -p`. Its flags were checked on 2026-11-05: `--output-format`, `--settings`, `--permission-mode`, `--allowedTools` / `--disallowedTools`, `--no-session-persistence`, `--model`, `--add-dir`.
 
-S1–S3 can start in parallel with Part 1. S4 needs Tasks 4–5.
+**Quota cap:** at most **150 headless runs** across S1 + S3. Keep probe prompts short. Stop and report if a usage window runs out.
+
+**Ordering:** S1–S3 can start in parallel with Part 1. S4 needs Tasks 4–5.
 
 ### Task S1: Eval runner (time box: 3 days)
 
-- [ ] **Step 1: Run one task headless, base vs head.** Pick one small public TypeScript repo task with a test suite. Run it in a Docker container with network limited to the model API, with two AGENTS.md variants (base and head):
-  - `claude -p` (check the current flags for JSON or stream-JSON output and cost fields);
-  - `codex exec` (check its JSON event output).
-- [ ] **Step 2: Capture the results.** For each run: pass/fail from the repo's tests, tokens, cost, wall time, and the transcript.
-- [ ] **Step 3: Wrap both CLIs** as a promptfoo custom provider. Compare that with running the same pair under benchflow/SkillsBench (Apache-2.0).
-- [ ] **Step 4: Write the memo `docs/spikes/S1-eval-runner.md`.** It must cover:
-  - the exact commands;
-  - how isolation was achieved;
-  - cost and time per paired run;
-  - flakiness seen;
-  - which substrate to use, scored against the design's criteria (*must* drive the CLI harnesses headless and isolated; *should* be able to drive a custom agent later);
-  - whether transcripts expose the commands run, tools called and files touched that probes need.
+- [ ] **Step 1: Build a run harness in `spikes/runner/`.**
+  - For each run, copy the fixture repo at the arm's ref (base or head) into a temp directory.
+  - Write a run-scoped settings file **outside** the copy, and run `claude -p "<prompt>" --output-format stream-json --verbose --settings <file> --no-session-persistence` with the copy as cwd.
+  - The settings file sets these hooks:
+    - `InstructionsLoaded` → append the payload to a JSONL file;
+    - `PostToolUse` with matcher `Skill` → append to the JSONL;
+    - **`PreToolUse` with matcher `Bash|Write|Edit` → append the intended command or path, then deny it** ("observe-and-deny"), so nothing executes.
+- [ ] **Step 2: Run 2 adherence probes × 2 arms × 3 runs** on a fixture repo.
+  - Example: "add lodash as a dependency", with an AGENTS.md that says to use pnpm in the head arm only.
+  - Confirm that the denied commands and the loaded files come through in the JSONL, and that nothing ran. The fixture's `node_modules` and lockfile must be unchanged.
+- [ ] **Step 3: Record usage per run.** From the final JSON message: `num_turns`, `duration_ms`, and the usage/cost fields it reports. On a subscription the cost figure is notional. Note how much of the usage window the 12 runs took.
+- [ ] **Step 4: Try promptfoo as the wrapper.** Wrap the same harness as a promptfoo custom provider (MIT), and compare that with the thin harness on its own.
+- [ ] **Step 5: Check the CI auth path.** Verify, from current Anthropic docs, how Claude Code authenticates headless in GitHub Actions on a subscription (for example a token from `claude setup-token`) versus an API key. Do not run anything in CI yet.
+- [ ] **Step 6: Write the memo `docs/spikes/S1-eval-runner.md`.** It must cover:
+  - the exact commands and the settings file;
+  - whether observe-and-deny works reliably, and which tools need it;
+  - usage per paired run;
+  - flakiness;
+  - which substrate to use, scored against the design's criteria;
+  - whether transcripts expose the commands, tools and files that probes need;
+  - the CI auth answer.
 
 ### Task S2: rulesync as the compile backend (time box: 1 day)
 
@@ -837,15 +867,26 @@ S1–S3 can start in parallel with Part 1. S4 needs Tasks 4–5.
 - [ ] **Step 4: Check the integration surface.** Does the package export a programmatic API, or only a CLI?
 - [ ] **Step 5: Write the memo `docs/spikes/S2-rulesync.md`.** Cover: library vs CLI, what it emits, gaps we must add (the compact index, budget fitting), its update cadence and license.
 
-### Task S3: Reproduce a published effect (time box: 3 days; within the spend cap)
+### Task S3: Reproduce two published effects (time box: 2 days; within the quota cap)
 
-- [ ] **Step 1: Choose a benchmark.** With the S1 runner, take a small subset (5–10 tasks) of `vercel/next-evals-oss` (MIT; Base vs AGENTS.md) or of `eth-sri/agentbench` (MIT; NONE vs LLM context file).
-- [ ] **Step 2: Run both arms** with 3 runs each, on Claude Code and Codex.
+Both need neither Docker nor real builds, and both use the S1 harness.
+
+- [ ] **Step 1: Adherence effect** (ETH Zurich, research/03 §1: a tool named in the context file gets used about 1.6 times per task, vs under 0.01 when not named).
+  - Use 5 tasks where a named tool changes the right command, e.g. `uv` vs `pip`, or `pnpm` vs `npm`.
+  - Two arms: an AGENTS.md that names the tool, and one that doesn't. 3 runs each.
+  - Grade the intended commands that observe-and-deny captured.
+- [ ] **Step 2: Index vs skill** (Vercel, research/03 §1: an index in AGENTS.md scored 100%, vs 53% when the docs sat behind a skill).
+  - Use 5 questions whose answers exist only in a docs folder in the repo. Check the answers with a regex.
+  - Three arms:
+    - (i) the docs behind a `.claude/skills/<x>/SKILL.md` that points at them;
+    - (ii) a compact pipe-delimited index in CLAUDE.md that points at the same files;
+    - (iii) no pointer.
+  - 3 runs each. Record the skill-invocation rate and the units loaded.
 - [ ] **Step 3: Write the memo `docs/spikes/S3-reproduction.md`.** Cover:
-  - whether the *direction* of the published result reproduced (an index helps, or an LLM-written file costs more);
-  - the pass-rate and cost deltas, with spread;
-  - total spend;
-  - what that implies for the per-PR $5 and 20-minute default.
+  - whether each *direction* reproduced on current Claude models;
+  - rates with spread;
+  - usage spent;
+  - what that implies for the per-PR default of 24 runs and 20 minutes.
 
 ### Task S4: Telemetry join (time box: 2 days; needs Tasks 4–5)
 
@@ -855,8 +896,13 @@ S1–S3 can start in parallel with Part 1. S4 needs Tasks 4–5.
 
   Run 3 sessions on a fixture repo with nested CLAUDE.md, a path-scoped rule, an `@AGENTS.md` import and skills.
 - [ ] **Step 2: Compare with predictions.** Compare the observed loads with `ctxlock scan --format json`. Record every mismatch, then fix the resolver rule and add a regression test in `tests/harness/`.
-- [ ] **Step 3: Check the Codex side.** Enable Codex `[otel]` or read `~/.codex/sessions/**/rollout-*.jsonl`. Check `skill.injected` and whether the AGENTS.md chain text appears in the rollout.
-- [ ] **Step 4: Write the memo `docs/spikes/S4-telemetry.md`.** Cover: the join keys (path + sha256 → unit id), what each harness exposes, the resolver accuracy before and after fixes, and the gaps.
+- [ ] **Step 3: Write the memo `docs/spikes/S4-telemetry.md`.** Cover:
+  - the join keys (path + sha256 → unit ID);
+  - what Claude Code exposes;
+  - resolver accuracy before and after the fixes;
+  - the gaps.
+
+  Codex is covered statically by the conformance tests in Task 5, Step 1b.
 
 ---
 
@@ -864,7 +910,7 @@ S1–S3 can start in parallel with Part 1. S4 needs Tasks 4–5.
 
 Write **Plan 2: behavioral Context CI** from the S1–S4 memos. It covers:
 - adherence and trigger probes (`evals/probes/`, drafted by an LLM and reviewed once);
-- `ctxlock eval --base --head` with arms, repeats, base-arm caching, and the $5 and 20-minute cap;
+- `ctxlock eval --base --head` with arms, repeats, base-arm caching, and the cap of 24 runs and 20 minutes (Claude Code via `claude -p`, isolated per run without Docker);
 - collectors for Claude Code and Codex inside the sandbox;
 - `ctxlock build` report and `--fill-missing`, with generated files recorded in `.ctxlock/generated.json`;
 - the behavioral section of the Action comment;

@@ -231,9 +231,18 @@ So the **PR check leads with signals that are large and cheap**:
 
 **Full statistical evals** (golden plus replayed tasks, more repeats, confidence intervals) run **on a schedule or when a maintainer adds a label**, not on every PR.
 
+**Isolation without Docker** *(my call, from Satyam's constraints on 2026-11-05)*:
+- Every run happens in a throwaway copy of the repo at the arm's ref.
+- Claude Code gets run-scoped hooks through `claude -p --settings <file>`, so nothing is written into the adopter's repo:
+  - `InstructionsLoaded` and Skill-tool hooks record what loaded;
+  - for probes, a `PreToolUse` hook **records the intended action and denies it** (observe-and-deny), so probes run no commands and touch no network.
+- Golden tasks that must execute run with an allowlist of commands.
+- In CI, the ephemeral GitHub-hosted runner is the sandbox.
+
 **Defaults** (configurable):
-- A per-PR budget of **$5 and 20 minutes**, using the adopter's own API keys.
-- PRs from forks get no secrets, so a maintainer must add a label to run them.
+- **Budget:** a per-PR budget counted in **runs and minutes** (default 24 runs and 20 minutes), not dollars, because runs may use a Claude subscription rather than API billing.
+- **Auth:** an API key or a Claude subscription token. S1 verifies which subscription flow works headless in CI.
+- **Forks:** PRs from forks get no secrets, so a maintainer must add a label to run them.
 - Evals use the pinned models from consumer manifests. A cheaper smoke-test model is allowed only when it is clearly labelled.
 
 **Task sources for phase 1:**
@@ -264,21 +273,29 @@ Rough effort guesses for one builder working with AI; they are guesses, not comm
 
 ### Phase 0: Spikes (about 1–2 weeks). Throwaway; answers the risky questions.
 - **S1. Eval runner.**
-  - Run Claude Code (`claude -p` / Agent SDK) and Codex (`codex exec`) headless in Docker on one public-repo task, with base vs head context.
-  - Capture pass/fail, tokens, cost, and the units loaded (via collector hooks inside the sandbox).
-  - Decide the runner substrate (promptfoo custom provider vs benchflow vs Inspect) and record cost per paired run.
-  - **Must:** drive the CLI harnesses (Claude Code, Codex, then Copilot CLI) headless, in isolation, and capture their transcripts.
+  - Run Claude Code headless (`claude -p` on a Claude subscription) on one public-repo task, with base vs head context.
+  - Run it in a throwaway copy with run-scoped `--settings` hooks; no Docker.
+  - Capture pass/fail, turns, duration, the usage the JSON output reports, and the units loaded.
+  - Decide the runner substrate (promptfoo custom provider vs a thin own runner) and record usage per paired run.
+  - **Must:** drive Claude Code headless, isolated per run, and capture its transcripts. More harnesses join once someone with access contributes them.
   - **Should:** be able to drive a custom agent later (an HTTP endpoint, or an agent that gets its context through MCP) for phase 4. This is a tie-breaker, not a requirement, because the first user is coding-agent teams. *(My call; resolves builder-check question 6.)*
 - **S2. rulesync as backend.** Drive rulesync programmatically (library or CLI) from our unit model for Claude Code, Codex, Copilot and Cursor. Confirm what it emits and where we must add things (index, budgets).
-- **S3. Reproduce a published effect.** Use vercel/next-evals-oss (MIT) or a subset of eth-sri/agentbench to show our harness reproduces the *direction* of a known result. Examples: index beats skill, or LLM-written AGENTS.md costs more. **This makes the tool credible.**
-- **S4. Telemetry join.** Confirm that `InstructionsLoaded` + skill events (Claude), `skill.injected` + rollout (Codex) and `skill.invoked` (Copilot CLI) can be joined to unit IDs and digests.
+- **S3. Reproduce a published effect** with Claude Code only and no Docker. Show that our harness reproduces the *direction* of two known results:
+  - (a) ETH's adherence effect: a tool named in AGENTS.md gets used, and an unnamed one does not;
+  - (b) Vercel's finding: a passive index beats an on-demand skill for facts the agent must look up.
 
-**Exit:** a short decision memo covering runner choice, integration mode and cost per run.
+  **This makes the tool credible.**
+- **S4. Telemetry join.**
+  - Confirm that Claude Code's `InstructionsLoaded` + skill events can be joined to unit IDs and digests.
+  - Codex predictions are checked statically instead, by porting the cases in Codex's open-source loader tests (`codex-rs/core/src/agents_md_tests.rs`, Apache-2.0).
+
+**Exit:** a short decision memo covering runner choice, integration mode, and usage per run (turns, minutes, and how much of the subscription's usage window a probe run takes).
 
 ### Phase 1: Context CI for one repo (MVP, about 4–6 weeks)
 - **Commands.** `ctxlock scan`, `ctxlock lint`, `ctxlock build` (plus a budget report), `ctxlock eval --base <ref> --head <ref>`.
 - **GitHub Action** posting the behavioral diff.
-- **Collectors** for Claude Code and Codex, used inside the eval sandbox.
+- **Collectors** for Claude Code, used inside each eval run.
+- **Codex** gets static prediction, lint and budgets. Its runtime evals wait for a contributor with Codex access.
 - **Exit criteria:**
   - Works on **3 public repos** that already have AGENTS.md or skills, with no migration.
   - **Catches planted edits in both directions** (mutation-check style), using edits whose effects are large enough to detect per PR:
@@ -378,6 +395,10 @@ The full checklist is in [research/07](../../../research/07-security-governance.
 - The **name is ctxlock**:
   - npm package `ctxlock`, CLI `ctxlock`;
   - registry `ctxlock.yaml`, lockfile `ctxlock.lock`, local state `.ctxlock/`.
+- **Build environment:**
+  - Claude Code only, through the `claude` CLI on a Claude Max subscription. No API keys.
+  - No OpenAI or Codex access.
+  - No Docker.
 
 **My calls (please check):**
 1. **TypeScript** for the CLI, Action, collectors and MCP server. It matches rulesync, the MCP TS SDK, vercel skills, just-bash and promptfoo, and your other projects. The eval runner may shell out to Python harnesses if S1 picks one.
@@ -385,13 +406,16 @@ The full checklist is in [research/07](../../../research/07-security-governance.
 3. **Local-first.** No server until the phase-3 org tier.
 4. **Native formats are the source of truth.** Phase 1 needs no migration.
 5. **First harnesses:** Claude Code and Codex, which have the best telemetry and the most use. Then Copilot CLI and Cursor.
+   - **Claude Code** is predicted, observed and evaluated.
+   - **Codex** is predicted only. Its resolver is checked against cases ported from Codex's own Apache-2.0 loader tests. Runtime evals for Codex wait for a contributor with access.
 6. **Build on others' work.** Depend on rulesync, agnix and an existing eval runner. Interoperate with APM, Atlan's AI Registry, Langfuse and Packmind rather than fork them.
 7. **Wedge order:** behavioral CI first (provable value on day one), then the graph, then the loop.
 8. **Settled after the builder check** (details inline, each marked "my call"):
    - Trust metadata lives in a `ctxlock.yaml` registry, not in frontmatter.
    - In phase 1, `ctxlock build` reports and fills missing targets, and never overwrites.
    - PR checks lead with probes, units loaded, and cost; full statistical evals run on a schedule or a label.
-   - The default per-PR budget is $5 and 20 minutes, using the adopter's own keys.
+   - The default per-PR budget is counted in runs and minutes (24 runs, 20 minutes), using an API key or a Claude subscription token.
+   - Evals are isolated without Docker: a throwaway copy per run, run-scoped `--settings` hooks, and observe-and-deny probes.
    - In phase 2, edges travel through lockfiles, CI runs, and an opt-in `ctxlock report`.
    - The eval runner must also be able to drive custom agents.
 
