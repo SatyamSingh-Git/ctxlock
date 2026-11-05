@@ -73,7 +73,7 @@ function resolveFsTarget(root: string, linkPath: string, target: string): string
   return insideRepo(toPosix(rel));
 }
 
-async function gitTopLevel(root: string): Promise<string | null> {
+export async function gitTopLevel(root: string): Promise<string | null> {
   try {
     return (await git(root, ['rev-parse', '--show-toplevel'])).trim();
   } catch (err) {

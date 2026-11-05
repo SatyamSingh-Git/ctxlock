@@ -22,9 +22,19 @@ export interface ScanResult {
 
 const localDate = (d = new Date()) => [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
 
-export async function scanRepo(reader: RepoReader, opts: { agnix?: boolean; runAgnix?: AgnixRunner; today?: string } = {}): Promise<ScanResult> {
+export interface ScanOptions {
+  agnix?: boolean;
+  runAgnix?: AgnixRunner;
+  today?: string;
+  // Settings that decide what is checked, taken from elsewhere: diff scans a pull request with the
+  // base branch's, so the pull request cannot switch off the checks that judge it.
+  settings?: Pick<Registry, 'harnesses' | 'limits' | 'lint'>;
+}
+
+export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Promise<ScanResult> {
   const { units, problems } = await discoverUnits(reader);
-  const registry = await loadRegistry(reader);
+  const loaded = await loadRegistry(reader);
+  const registry = opts.settings ? { ...loaded, harnesses: opts.settings.harnesses, limits: opts.settings.limits, lint: opts.settings.lint } : loaded;
   const codeowners = await loadCodeowners(reader);
   const limits = { ...LIMITS, ...registry.limits };
   const contexts = await resolveAll({ reader, units, limits }, registry.harnesses);

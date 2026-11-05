@@ -3,9 +3,11 @@ import { realpathSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command, CommanderError, Option } from 'commander';
+import { diffScans } from './diff.js';
 import { RegistryError } from './registry/registry.js';
-import { fsReader, RefNotFound } from './repo/reader.js';
-import { renderScan } from './report/render.js';
+import { fsReader, gitReader, gitTopLevel, RefNotFound } from './repo/reader.js';
+import { renderDiffMarkdown } from './report/markdown.js';
+import { renderDiff, renderScan } from './report/render.js';
 import { scanRepo } from './scan.js';
 
 interface Io {
@@ -43,6 +45,31 @@ export async function main(argv: string[], io: Io): Promise<number> {
         if (view === 'lint' && result.findings.some((f) => f.severity === 'must')) code = 1;
       });
   }
+
+  program
+    .command('diff [dir]')
+    .description('compare context between two git refs, or a ref and the working tree; exits 1 on a new must finding')
+    .requiredOption('--base <ref>', 'the ref to compare against, such as origin/main')
+    .option('--head <ref>', 'the ref to check (default: the working tree)')
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json', 'markdown']).default('text'))
+    .action(async (dir: string | undefined, opts: { base: string; head?: string; format: 'text' | 'json' | 'markdown' }) => {
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      if ((await gitTopLevel(root)) === null) throw new UsageError(`ctxlock diff: ${dir ?? '.'} is not inside a git repository`);
+      const at = async (ref: string, which: string, hint = '') => {
+        try {
+          return await gitReader(root, ref);
+        } catch (err) {
+          if (err instanceof RefNotFound) throw new UsageError(`${which} ref ${ref} not found${hint}`);
+          throw err;
+        }
+      };
+      const base = await scanRepo(await at(opts.base, 'base', ' — in GitHub Actions use actions/checkout with fetch-depth: 0'));
+      const head = await scanRepo(opts.head ? await at(opts.head, 'head') : fsReader(root), { settings: base.registry });
+      const result = diffScans(base, head);
+      io.stdout(opts.format === 'markdown' ? renderDiffMarkdown(result) : renderDiff(result, opts.format));
+      if ([...result.newFindings, ...result.execChanges].some((f) => f.severity === 'must')) code = 1;
+    });
 
   try {
     await program.parseAsync(argv, { from: 'user' });

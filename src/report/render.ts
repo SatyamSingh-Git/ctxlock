@@ -1,3 +1,4 @@
+import type { DiffResult } from '../diff.js';
 import type { Finding } from '../model.js';
 import type { ScanResult } from '../scan.js';
 
@@ -6,7 +7,7 @@ const site = (s: string) => s || '.';
 // Columns padded to their widest cell, two spaces apart; the last column is not padded.
 function table(rows: string[][]): string {
   const widths = rows[0]!.map((_, i) => Math.max(...rows.map((r) => r[i]!.length)));
-  return rows.map((r) => r.map((cell, i) => (i === r.length - 1 ? cell : cell.padEnd(widths[i]! + 2))).join('')).join('\n');
+  return rows.map((r) => r.map((cell, i) => (i === r.length - 1 ? cell : cell.padEnd(widths[i]! + 2))).join('').trimEnd()).join('\n');
 }
 
 function counts(findings: Finding[]): string {
@@ -62,6 +63,37 @@ function scanJson(r: ScanResult, view: 'scan' | 'lint' | 'budget'): object {
     budget: r.budget,
     findings: r.findings,
   };
+}
+
+function diffText(d: DiffResult): string {
+  const blocking = [...d.newFindings, ...d.execChanges].filter((f) => f.severity === 'must').length;
+  const head = d.head.ref === null ? 'working tree' : d.head.ref;
+  const budget = d.budget.map((b) => [`  ${b.harness}`, site(b.site), `${b.baseAlwaysBytes} -> ${b.alwaysBytes}`, b.limitBytes === null ? '' : `limit ${b.limitBytes}`]);
+  return [
+    `ctxlock diff ${d.base.ref} -> ${head}`,
+    blocking > 0 ? `${blocking} must-fix` : 'no must-fix issues',
+    ...(d.existingMust > 0 ? [`(${d.existingMust} must already on the base, not counted)`] : []),
+    '',
+    'Changed units:',
+    ...(d.changes.length ? d.changes.map((c) => `  ${c.change.padEnd(9)} ${c.id}`) : ['  none']),
+    '',
+    'Budget:',
+    ...(budget.length ? [table(budget)] : ['  no change']),
+    '',
+    'New findings:',
+    d.newFindings.length ? findingLines(d.newFindings) : '  none',
+    '',
+    'Execution-affecting changes:',
+    ...(d.execChanges.length ? d.execChanges.map((f) => `  ${f.severity} ${f.path ?? ''}  ${f.message}`) : ['  none']),
+    '',
+    `Resolved: ${d.resolvedFindings.length}`,
+  ].join('\n');
+}
+
+export function renderDiff(d: DiffResult, format: 'text' | 'json'): string {
+  if (format === 'text') return `${diffText(d)}\n`;
+  const { base, head, ...rest } = d;
+  return `${JSON.stringify({ version: 1, base: { root: base.root, ref: base.ref }, head: { root: head.root, ref: head.ref }, ...rest }, null, 2)}\n`;
 }
 
 export function renderScan(r: ScanResult, view: 'scan' | 'lint' | 'budget', format: 'text' | 'json'): string {
