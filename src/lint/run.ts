@@ -9,6 +9,10 @@ import { instructionCount } from './rules/l5-instructions.js';
 import { skillLength } from './rules/l6-skill-length.js';
 import { duplicateSkills } from './rules/l7-duplicates.js';
 import { procedure } from './rules/l8-procedure.js';
+import { staleReferences } from './rules/l9-stale.js';
+import { owners } from './rules/l10-owner.js';
+import { coverage } from './rules/l11-coverage.js';
+import { shadowedAgentsMd } from './rules/l13-shadowed.js';
 import type { LintContext, Rule } from './types.js';
 
 export const RULES: Rule[] = [
@@ -23,6 +27,10 @@ export const RULES: Rule[] = [
   skillLength,
   duplicateSkills,
   procedure,
+  staleReferences,
+  owners,
+  coverage,
+  shadowedAgentsMd,
 ];
 
 const RANK = { must: 0, should: 1, info: 2 };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { maskCode } from '../../src/units/markdown.js';
+import { inlineCode, maskCode } from '../../src/units/markdown.js';
 
 describe('maskCode', () => {
   it('blanks fenced blocks and inline code to spaces of the same length, keeping lines', () => {
@@ -16,5 +16,17 @@ describe('maskCode', () => {
 
   it('masks a double-backtick span that contains a backtick', () => {
     expect(maskCode('x ``a ` b`` y')).toBe(`x ${' '.repeat(9)} y`);
+  });
+});
+
+describe('inlineCode', () => {
+  it('returns the spans outside fenced blocks, with the offset of each one\'s content', () => {
+    const md = 'Run `npm test` or ``a `b` c``.\n```\n`fenced`\n```\nThen `x`.';
+
+    expect(inlineCode(md)).toEqual([
+      { code: 'npm test', offset: 5 },
+      { code: 'a `b` c', offset: 20 },
+      { code: 'x', offset: 54 },
+    ]);
   });
 });
