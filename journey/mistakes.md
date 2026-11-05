@@ -86,4 +86,16 @@ Before the first commit, a scan for hidden Unicode reported "none". It had not a
 - Scans check the exit code explicitly (1 = no match, 2 = error).
 - Every scan gets a **positive control**: a planted U+200B the scan must catch.
 
+### The tool that wrote invisible characters into our own source
+
+While mutation-checking Task 2, one planned mutation would not apply: its find-and-replace string, a unicode escape for U+FEFF, did not match the source. The file actually contained a **raw BOM character**, not the six-character escape that was written. The file-writing tool turns `\uXXXX` escapes for invisible characters into the characters themselves. A first attempt at a guard test, written with escaped ranges in a regex, became a file full of raw zero-width and bidi characters too.
+
+*Cause:* a tool behaviour nobody knew about. It matters more for ctxlock than for most projects, because L1, the lint rule that catches invisible characters, needs many of them in its tests.
+
+*Cost:* a hidden character sat in `src/units/frontmatter.ts` for about ten minutes. It was caught only because a mutation refused to apply.
+
+*Changed:*
+- Invisible characters are now always built from numeric code points (`String.fromCodePoint(0x200b)`, `charCodeAt(0) === 0xfeff`).
+- `tests/hygiene.test.ts` fails the build if any file under `src/` or `tests/` contains one. It was checked both ways: planted U+200B and U+E0001 both fail it.
+
 The same thinking later caught the scan flagging the plan's own emoji examples. The plan quotes 👨‍👩‍👧 to show legitimate ZWJ sequences, and a naive scan flags those characters. That is why lint rule L1 has an emoji exception.
