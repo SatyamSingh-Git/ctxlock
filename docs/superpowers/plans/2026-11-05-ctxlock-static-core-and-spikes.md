@@ -22,8 +22,9 @@
 | 7 | Done | `a1d8e08`, `262bb06` |
 | 8 | Done | `acbf862`, `823324b` |
 | 9 | Done | `9f3a576`, `061d3ac` |
-| 10 | Done | `feat: lint stale references, ownership, harness coverage and shadowed AGENTS.md` |
-| 11–14, S1–S4 | Not started | |
+| 10 | Done | `fa699bd`, `30e35bc` |
+| 11 | Done | `feat: ctxlock scan, lint and budget commands` |
+| 12–14, S1–S4 | Not started | |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in two places: there is no tinyglobby (D17), and jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7).
 
@@ -732,16 +733,16 @@ docs/dogfood/           # Task 14 report
 - Also `contexts`, `budget`, `findings`.
 - **Never** unit text.
 
-- [ ] **Step 1: Write the failing tests:**
+- [x] **Step 1: Write the failing tests:**
   - `lint exits 1 on a repo containing U+200B and 0 after it is removed`
   - `lint exits 2 and prints the RegistryError message for an invalid ctxlock.yaml`
   - `--format json never contains unit text` (assert a sentinel sentence from AGENTS.md is absent)
   - `budget prints one row per site and harness`
   - `agnix error maps to should and warning to info, and a failing runner gives agnix:unavailable` (injected runner; no network)
-- [ ] **Step 2: Run `npx vitest run tests/scan.test.ts tests/lint/agnix.test.ts tests/cli.test.ts`.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run `npm run ci`, then `node dist/cli.js scan .` on this repo.** Expected: PASS, and a scan listing no units, since this repo has no agent context yet.
-- [ ] **Step 5: Commit:** `feat: ctxlock scan, lint and budget commands`.
+- [x] **Step 2: Run `npx vitest run tests/scan.test.ts tests/lint/agnix.test.ts tests/cli.test.ts`.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run `npm run ci`, then `node dist/cli.js scan .` on this repo.** Expected: PASS, and a scan listing no units, since this repo has no agent context yet.
+- [x] **Step 5: Commit:** `feat: ctxlock scan, lint and budget commands`.
 
 ### Task 12: `ctxlock diff` (base vs head) and the PR comment
 
