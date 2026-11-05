@@ -23,8 +23,9 @@
 | 8 | Done | `acbf862`, `823324b` |
 | 9 | Done | `9f3a576`, `061d3ac` |
 | 10 | Done | `fa699bd`, `30e35bc` |
-| 11 | Done | `feat: ctxlock scan, lint and budget commands` |
-| 12–14, S1–S4 | Not started | |
+| 11 | Done | `98a1d89`, `07eccd8` |
+| 12 | Done | `feat: ctxlock diff with PR-comment markdown` |
+| 13–14, S1–S4 | Not started | |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in two places: there is no tinyglobby (D17), and jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7).
 
@@ -784,7 +785,7 @@ docs/dogfood/           # Task 14 report
 - the resolved count;
 - the footer `Static checks only. Behavioral evals come in a later release.`
 
-- [ ] **Step 1: Write the failing tests** (using temp git repos):
+- [x] **Step 1: Write the failing tests** (using temp git repos):
   - `adding a rule with U+200B is a new must and exits 1, and diffing the revert exits 0`
   - `a must finding present in both base and head does not fail the diff`
   - `adding a SessionStart hook is an execution-affecting change and exits 1`
@@ -792,10 +793,10 @@ docs/dogfood/           # Task 14 report
   - `budget rows show before and after bytes for changed sites only`
   - `a base sha missing from a depth-1 clone exits 2 with the fetch-depth hint`
   - `markdown contains the status line, changed units, and execution-affecting section`
-- [ ] **Step 2: Run `npx vitest run tests/diff.test.ts`.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run `npm run ci`.** Expected: PASS.
-- [ ] **Step 5: Commit:** `feat: ctxlock diff with PR-comment markdown`.
+- [x] **Step 2: Run `npx vitest run tests/diff.test.ts`.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run `npm run ci`.** Expected: PASS.
+- [x] **Step 5: Commit:** `feat: ctxlock diff with PR-comment markdown`.
 
 ### Task 13: GitHub Action
 
