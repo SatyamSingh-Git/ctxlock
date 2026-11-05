@@ -22,7 +22,8 @@ export async function loadCodeowners(reader: RepoReader): Promise<Codeowners> {
       .map((line) => {
         const [pattern, ...owners] = line.split(/\s+/);
         // One matcher per line, because CODEOWNERS is "last match wins" rather than gitignore's union.
-        const matcher = ignore().add(pattern!);
+        // GitHub matches case-sensitively, and a trailing /* stops at one level where gitignore recurses.
+        const matcher = ignore({ ignorecase: false }).add(pattern!.endsWith('/*') ? [pattern!, `!${pattern}/`] : pattern!);
         return { matches: (path: string) => matcher.ignores(path), owners };
       });
 

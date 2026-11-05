@@ -26,6 +26,15 @@ describe('loadCodeowners', () => {
     expect(owners.ownersOf('docs/drafts/x.md')).toEqual([]);
   });
 
+  it('matches as GitHub does: docs/* covers one level only, and paths are case-sensitive', async () => {
+    const owners = await loadCodeowners(memReader({ CODEOWNERS: ['* @everyone', 'docs/* @docs', '/Apps/ @apps'].join('\n') }));
+
+    expect(owners.ownersOf('docs/getting-started.md')).toEqual(['@docs']);
+    expect(owners.ownersOf('docs/build-app/troubleshooting.md')).toEqual(['@everyone']);
+    expect(owners.ownersOf('Apps/x.md')).toEqual(['@apps']);
+    expect(owners.ownersOf('apps/x.md')).toEqual(['@everyone']);
+  });
+
   it('CODEOWNERS is read from .github/ before root before docs/', async () => {
     const all = { '.github/CODEOWNERS': '* @github', CODEOWNERS: '* @root', 'docs/CODEOWNERS': '* @docs' };
 
