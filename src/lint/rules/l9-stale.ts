@@ -1,21 +1,17 @@
 import { posix } from 'node:path';
 import { findImports } from '../../harness/imports.js';
 import type { Finding, Unit } from '../../model.js';
-import { inlineCode } from '../../units/markdown.js';
-import { lineAndColumn } from '../files.js';
+import { codeOnly, inlineCode } from '../../units/markdown.js';
+import { lineAndColumn, readOnce } from '../files.js';
 import type { Rule } from '../types.js';
 
 const PATH_LIKE = /^(\.{0,2}\/)?[\w.-]+(\/[\w.-]+)+\/?$/;
 const FILE_LIKE = /\.(md|ts|js|py|json|yaml|yml|toml|sh|go|rs)$/;
 const NOT_A_PATH = /[*?{}<>$\s]|^http/;
-// [ \t] rather than \s, so a command at the end of a line never takes its script name from the next line.
-const SCRIPT = /\b(?:npm[ \t]+run[ \t]+([\w:.-]+)|npm[ \t]+(test)\b|(?:pnpm|yarn)[ \t]+(?:run[ \t]+)?([\w:.-]+))/g;
-// npm, pnpm and yarn commands that are not package.json scripts.
-const BUILTINS = new Set(
-  'install i add remove exec dlx create init why up update outdated publish link audit run workspace workspaces list ls info config cache store env prune rebuild dedupe unlink pack login logout version set help upgrade import patch node'.split(
-    ' ',
-  ),
-);
+const SKILL_FOLDERS = new Set(['scripts', 'references', 'assets']);
+// Only forms that always mean a script: bare `pnpm X` and `yarn X` also run a dependency's binary
+// when no script has that name. [ \t] rather than \s, so a script name never comes from the next line.
+const SCRIPT = /\b(?:(?:npm|pnpm|yarn)[ \t]+run[ \t]+([\w:.-]+)|(?:npm|pnpm|yarn)[ \t]+(test)\b)/g;
 
 const folder = (unit: Unit) => {
   const dir = unit.kind === 'skill' ? unit.path : posix.dirname(unit.path);
@@ -28,27 +24,52 @@ export const staleReferences: Rule = {
   async check({ reader, units, registry, today }) {
     const findings: Finding[] = [];
     const links = [...(await reader.listSymlinks()).keys()];
-    const present = async (path: string) => (await reader.exists(path)) || links.some((l) => path === l || path.startsWith(`${l}/`));
+    const paths = new Set([...(await reader.listFiles()), ...links]);
+    const dirs = new Set<string>();
+    for (const p of paths) for (let d = posix.dirname(p); d !== '.'; d = posix.dirname(d)) dirs.add(d);
+    const names = new Set([...paths, ...dirs].map((p) => posix.basename(p)));
+    const present = (path: string) =>
+      path === '.' || path === '' || paths.has(path) || dirs.has(path) || links.some((l) => path.startsWith(`${l}/`));
     const scripts = new Map<string, Set<string> | null>();
 
     async function nearestScripts(dir: string): Promise<{ file: string; names: Set<string> } | null> {
       for (let d = dir; ; d = posix.dirname(d) === '.' ? '' : posix.dirname(d)) {
         const file = d ? `${d}/package.json` : 'package.json';
-        if (await present(file)) {
+        if (present(file)) {
           if (!scripts.has(file)) {
+            const text = (await readOnce(reader, file)).toString('utf8');
             // A package.json that does not parse says nothing about its scripts, so they are not checked.
-            let names: Set<string> | null = null;
+            let json: { scripts?: Record<string, unknown> } | null = null;
             try {
-              const json = JSON.parse((await reader.readFile(file)).toString('utf8')) as { scripts?: Record<string, unknown> };
-              names = new Set(Object.keys(json.scripts ?? {}));
+              json = JSON.parse(text) as { scripts?: Record<string, unknown> };
             } catch {}
-            scripts.set(file, names);
+            scripts.set(file, json ? new Set(Object.keys(json.scripts ?? {})) : null);
           }
-          const names = scripts.get(file);
-          return names ? { file, names } : null;
+          const found = scripts.get(file);
+          return found ? { file, names: found } : null;
         }
         if (d === '') return null;
       }
+    }
+
+    // A path is checked only where its first folder exists, from the unit's folder or the root:
+    // `origin/main`, `application/json` and `/etc/hosts` name no folder in the repository. A skill's
+    // own scripts/, references/ and assets/ (the Agent Skills layout) are checked even when missing.
+    function missing(token: string, unit: Unit, dir: string): boolean {
+      const relative = token.replace(/^\//, '').replace(/\/$/, '');
+      // A bare file name, often an example, counts as present if any file in the repository has it.
+      if (!relative.includes('/')) return !names.has(relative);
+      const first = relative.split('/')[0]!;
+      const bases = token.startsWith('/') ? [''] : [...new Set([dir, ''])];
+      const checkable = bases
+        .filter((base) => {
+          if (unit.kind === 'skill' && base === dir && SKILL_FOLDERS.has(first)) return true;
+          const anchor = posix.normalize(posix.join(base, first));
+          return inRepo(anchor) && present(anchor);
+        })
+        .map((base) => posix.normalize(posix.join(base, relative)))
+        .filter(inRepo);
+      return checkable.length > 0 && !checkable.some(present);
     }
 
     for (const unit of units) {
@@ -59,21 +80,15 @@ export const staleReferences: Rule = {
         findings.push({ rule, severity, message, path, ...at, unitId: unit.id });
 
       for (const { code: token, offset } of inlineCode(unit.text)) {
-        if (NOT_A_PATH.test(token) || !(PATH_LIKE.test(token) || FILE_LIKE.test(token))) continue;
-        const candidates = (token.startsWith('/') ? [token.slice(1)] : [posix.join(dir, token), token]).map((p) => posix.normalize(p).replace(/\/$/, ''));
-        // A path that leads out of the repository cannot be checked.
-        const checkable = candidates.filter(inRepo);
-        if (checkable.length === 0) continue;
-        let found = false;
-        for (const candidate of checkable) found ||= await present(candidate);
-        if (found) continue;
+        if (NOT_A_PATH.test(token) || !(PATH_LIKE.test(token) || FILE_LIKE.test(token)) || !missing(token, unit, dir)) continue;
         const at = lineAndColumn(unit.text, offset);
         report('L9-stale', 'should', `${token} at ${at.line}:${at.column} does not exist`, at);
       }
 
-      for (const match of unit.text.matchAll(SCRIPT)) {
-        const name = match[1] ?? match[2] ?? match[3]!;
-        if (name.startsWith('-') || BUILTINS.has(name)) continue;
+      // Commands are read from code only: "we use pnpm instead of npm" is not one.
+      for (const match of codeOnly(unit.text).matchAll(SCRIPT)) {
+        const name = match[1] ?? match[2]!;
+        if (name.startsWith('-')) continue;
         const pkg = await nearestScripts(dir);
         if (!pkg || pkg.names.has(name)) continue;
         const at = lineAndColumn(unit.text, match.index);
@@ -88,7 +103,7 @@ export const staleReferences: Rule = {
       for (const target of findImports(unit.text)) {
         if (!target.endsWith('.md') || target.startsWith('~/') || posix.isAbsolute(target)) continue;
         const resolved = posix.normalize(posix.join(posix.dirname(unit.path), target));
-        if (inRepo(resolved) && !(await present(resolved))) report('L9-import-missing', 'info', `@${target}: ${resolved} does not exist`);
+        if (inRepo(resolved) && !present(resolved)) report('L9-import-missing', 'info', `@${target}: ${resolved} does not exist`);
       }
     }
     return findings;

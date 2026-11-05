@@ -50,11 +50,27 @@ describe('L9-stale', () => {
   });
 
   it('`npm run build` is flagged when the script is missing, and `pnpm install` never is', async () => {
-    const commands = ['npm run build', 'npm test', 'pnpm lint', 'pnpm run typecheck', 'yarn dev', 'pnpm install', 'yarn add left-pad', 'pnpm --filter web build', 'pnpm run', 'deploy-notes'];
+    // Bare `pnpm X` and `yarn X` also run a dependency's binary when no script has that name, so only
+    // the `run` forms and `test` are checked.
+    const commands = [
+      'npm run build',
+      'npm test',
+      'pnpm lint',
+      'pnpm run typecheck',
+      'yarn run dev',
+      'pnpm install',
+      'yarn add left-pad',
+      'pnpm --filter web build',
+      'pnpm run',
+      'deploy-notes',
+      'pnpm vitest run',
+      'yarn eslint .',
+      'npm run -s lint',
+    ];
     const files = {
       'AGENTS.md': `\`\`\`sh\n${commands.join('\n')}\n\`\`\`\n`,
       'package.json': JSON.stringify({ scripts: { test: 'vitest', lint: 'eslint .' } }),
-      'pkg/AGENTS.md': 'Run `npm run build` and `npm test`.\n',
+      'pkg/AGENTS.md': 'Run `npm run build`, `npm test` and `pnpm test`.\n',
       'pkg/package.json': JSON.stringify({ scripts: { build: 'tsc' } }),
       // Config is not instructions: its hook commands are L2's concern.
       '.claude/settings.json': JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'npm run nope' }] }] } }),
@@ -63,9 +79,40 @@ describe('L9-stale', () => {
     expect(await run(staleReferences, files)).toEqual([
       ['L9-stale', 'should', 'AGENTS.md', 'npm run build at 2:1: package.json has no "build" script'],
       ['L9-stale', 'should', 'AGENTS.md', 'pnpm run typecheck at 5:1: package.json has no "typecheck" script'],
-      ['L9-stale', 'should', 'AGENTS.md', 'yarn dev at 6:1: package.json has no "dev" script'],
-      ['L9-stale', 'should', 'pkg/AGENTS.md', 'npm test at 1:26: pkg/package.json has no "test" script'],
+      ['L9-stale', 'should', 'AGENTS.md', 'yarn run dev at 6:1: package.json has no "dev" script'],
+      ['L9-stale', 'should', 'pkg/AGENTS.md', 'npm test at 1:23: pkg/package.json has no "test" script'],
+      ['L9-stale', 'should', 'pkg/AGENTS.md', 'pnpm test at 1:38: pkg/package.json has no "test" script'],
     ]);
+  });
+
+  it("a skill's own scripts/, references/ and assets/ paths are checked even when that folder is missing", async () => {
+    expect(
+      await run(staleReferences, {
+        '.agents/skills/deploy/SKILL.md': '---\nname: deploy\ndescription: Deploys\n---\nRun `scripts/deploy.sh`, read `references/api.md`, but not `origin/main`.\n',
+      }),
+    ).toEqual([
+      ['L9-stale', 'should', '.agents/skills/deploy/SKILL.md', 'scripts/deploy.sh at 5:6 does not exist'],
+      ['L9-stale', 'should', '.agents/skills/deploy/SKILL.md', 'references/api.md at 5:32 does not exist'],
+    ]);
+  });
+
+  it('package managers named in prose are not commands; only code is read for scripts', async () => {
+    expect(
+      await run(staleReferences, {
+        'AGENTS.md': 'We use pnpm instead of npm, with yarn as a fallback, and npm run nothing here.\n',
+        'package.json': JSON.stringify({ scripts: { test: 'vitest' } }),
+      }),
+    ).toEqual([]);
+  });
+
+  it('tokens that are not repository paths are not flagged, and a bare file name may live anywhere', async () => {
+    const text = [
+      'Push to `origin/main`, send `application/json`, see `anthropics/claude-code` and `github.com/foo/bar`.',
+      'Edit `~/.claude/settings.json` or `/etc/hosts`, call `/engagement/stats`.',
+      'Read `node_modules/next/dist/docs/` and `dist/cli.js`, and name the entry point `index.ts`.',
+    ].join('\n');
+
+    expect(await run(staleReferences, { 'AGENTS.md': `${text}\n`, 'packages/web/src/index.ts': '' })).toEqual([]);
   });
 
   it('scripts are not checked where no package.json is found, or where it does not parse', async () => {
@@ -173,12 +220,18 @@ describe('L13-agents-md-shadowed', () => {
     expect(await run(shadowedAgentsMd, { 'AGENTS.md': 'a'.repeat(4 * 1024 * 1024 + 1) })).toEqual([]);
   });
 
-  it('CLAUDE.local.md is suggested only when it is the only CLAUDE file', async () => {
+  it('a personal CLAUDE.local.md is never the place for the import: a shared CLAUDE.md is suggested instead', async () => {
     expect(await run(shadowedAgentsMd, { 'CLAUDE.md': 'c', 'pkg/CLAUDE.local.md': 'mine', 'pkg/AGENTS.md': 'p' })).toEqual([
-      ['L13-agents-md-shadowed', 'should', 'pkg/AGENTS.md', 'Claude Code ignores pkg/AGENTS.md because CLAUDE.md exists; add @pkg/AGENTS.md to CLAUDE.md'],
+      ['L13-agents-md-shadowed', 'should', 'pkg/AGENTS.md', 'Claude Code ignores pkg/AGENTS.md because CLAUDE.md exists; create pkg/CLAUDE.md containing @AGENTS.md'],
     ]);
     expect(await run(shadowedAgentsMd, { 'CLAUDE.local.md': 'mine', 'AGENTS.md': 'a' })).toEqual([
-      ['L13-agents-md-shadowed', 'should', 'AGENTS.md', 'Claude Code ignores AGENTS.md because CLAUDE.local.md exists; add @AGENTS.md to CLAUDE.local.md'],
+      ['L13-agents-md-shadowed', 'should', 'AGENTS.md', 'Claude Code ignores AGENTS.md because CLAUDE.local.md exists; create CLAUDE.md containing @AGENTS.md'],
+    ]);
+  });
+
+  it('a .claude/CLAUDE.md speaks for the folder above it', async () => {
+    expect(await run(shadowedAgentsMd, { '.claude/CLAUDE.md': 'c', 'AGENTS.md': 'a' })).toEqual([
+      ['L13-agents-md-shadowed', 'should', 'AGENTS.md', 'Claude Code ignores AGENTS.md because .claude/CLAUDE.md exists; add @../AGENTS.md to .claude/CLAUDE.md'],
     ]);
   });
 
@@ -186,11 +239,11 @@ describe('L13-agents-md-shadowed', () => {
     expect(await run(shadowedAgentsMd, { 'AGENTS.md': 'a', 'CLAUDE.md': 'c', 'ctxlock.yaml': 'version: 1\nharnesses: [codex]\n' })).toEqual([]);
   });
 
-  it('a nested AGENTS.md is reported once, with the import path from the CLAUDE file that shadows it', async () => {
+  it('a nested AGENTS.md is reported once; the fix keeps it scoped to its folder, as Codex loads it', async () => {
     expect(
       await run(shadowedAgentsMd, { '.claude/CLAUDE.md': 'c', 'pkg/AGENTS.md': 'p', 'pkg/api/AGENTS.md': 'q', 'pkg/api/CLAUDE.md': 'r' }),
     ).toEqual([
-      ['L13-agents-md-shadowed', 'should', 'pkg/AGENTS.md', 'Claude Code ignores pkg/AGENTS.md because .claude/CLAUDE.md exists; add @../pkg/AGENTS.md to .claude/CLAUDE.md'],
+      ['L13-agents-md-shadowed', 'should', 'pkg/AGENTS.md', 'Claude Code ignores pkg/AGENTS.md because .claude/CLAUDE.md exists; create pkg/CLAUDE.md containing @AGENTS.md'],
       ['L13-agents-md-shadowed', 'should', 'pkg/api/AGENTS.md', 'Claude Code ignores pkg/api/AGENTS.md because pkg/api/CLAUDE.md exists; add @AGENTS.md to pkg/api/CLAUDE.md'],
     ]);
   });

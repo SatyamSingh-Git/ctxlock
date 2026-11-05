@@ -60,18 +60,17 @@ const joiningScript = has(
 );
 const keycapBase = (cp: number | undefined) => cp !== undefined && ((cp >= 0x30 && cp <= 0x39) || cp === 0x23 || cp === 0x2a);
 const isTag = (cp: number | undefined) => cp !== undefined && cp >= 0xe0020 && cp <= 0xe007f;
-const flagTag = (cp: number | undefined) => cp !== undefined && ((cp >= 0xe0030 && cp <= 0xe0039) || (cp >= 0xe0061 && cp <= 0xe007a));
+// Subdivision flags are U+1F3F4, a tag-letter code, then CANCEL TAG. Only England, Scotland and Wales
+// are recommended for general display (RGI); any other code could carry hidden text, a few letters
+// per flag, so only those three are allowed.
+const RGI_FLAGS = ['gbeng', 'gbsct', 'gbwls'].map((code) => [...code].map((c) => 0xe0000 + c.charCodeAt(0)));
 
-// Subdivision flags such as England's are U+1F3F4, a short lowercase tag code, then CANCEL TAG.
-// Anything longer is treated as hidden text, which is what Tag-block smuggling looks like.
 function flagTagIndexes(cps: number[]): Set<number> {
   const allowed = new Set<number>();
   for (let i = 0; i < cps.length; i++) {
     if (cps[i] !== 0x1f3f4) continue;
-    let end = i + 1;
-    while (flagTag(cps[end])) end++;
-    const length = end - (i + 1);
-    if (length >= 1 && length <= 7 && cps[end] === 0xe007f) for (let j = i + 1; j <= end; j++) allowed.add(j);
+    const code = RGI_FLAGS.find((tags) => tags.every((tag, j) => cps[i + 1 + j] === tag) && cps[i + 1 + tags.length] === 0xe007f);
+    if (code) for (let j = i + 1; j <= i + 1 + code.length; j++) allowed.add(j);
   }
   return allowed;
 }
@@ -130,6 +129,12 @@ export const hiddenUnicode: Rule = {
   },
 };
 
+// One-line generated-block markers and lint directives, which carry no instructions: BEGIN:/END: pairs
+// such as Next.js's nextjs-agent-rules block, markdownlint and prettier directives, and TOC markers.
+// The grammar is tight on purpose, so no sentence fits inside one.
+const MARKER =
+  /^<!--\s*(?:(?:BEGIN|END)[: ][a-z0-9]+(?:[-_.][a-z0-9]+){0,4}|markdownlint-(?:disable|enable|capture|restore|disable-line|disable-next-line|disable-file|enable-file)(?: +MD\d{3})*|prettier-ignore(?:-start|-end)?|toc|tocstop)\s*-->$/i;
+
 export const htmlComment: Rule = {
   id: 'L1-html-comment',
   async check(ctx) {
@@ -142,7 +147,7 @@ export const htmlComment: Rule = {
         const comment = text.slice(match.index, match.index + match[0].length);
         findings.push({
           rule: 'L1-html-comment',
-          severity: 'must',
+          severity: MARKER.test(comment) ? 'info' : 'must',
           message: `HTML comment at ${line}:${column} is hidden when the markdown is rendered: "${quote(comment)}"`,
           path,
           line,

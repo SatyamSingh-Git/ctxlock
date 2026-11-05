@@ -46,6 +46,17 @@ describe('L3-budget', () => {
     ]);
   });
 
+  it('a small on-demand file with a byte-order mark, or not in UTF-8, is not reported as capped', async () => {
+    const ctx = await lintContext({
+      'CLAUDE.md': 'root',
+      'pkg/CLAUDE.md': `${String.fromCodePoint(0xfeff)}# pkg\nsmall\n`,
+      '.claude/rules/latin1.md': Buffer.concat([Buffer.from('---\npaths: ["src/**"]\n---\ncaf'), Buffer.from([0xe9])]),
+    });
+
+    expect(await harnessBudget.check(ctx)).toEqual([]);
+    expect(ctx.contexts[0]!.entries.filter((e) => e.loadedBytes < e.bytes && e.catalogChars === undefined)).toEqual([]);
+  });
+
   it('entries of 1536 vs 1537 chars', async () => {
     const files = (whenToUse: number, dir = '.claude/skills') => ({
       [`${dir}/deploy/SKILL.md`]: skill('deploy', { description: 'd'.repeat(1000), when_to_use: 'w'.repeat(whenToUse) }),

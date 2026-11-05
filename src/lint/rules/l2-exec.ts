@@ -23,9 +23,8 @@ export const riskyInstruction: Rule = {
   id: 'L2-risky-instruction',
   async check(ctx) {
     const findings: Finding[] = [];
-    for await (const { unit, path, text } of textFiles(ctx)) {
-      // Config files are inventoried item by item by L2-exec-config instead.
-      if (unit.kind === 'config') continue;
+    // Config files are inventoried item by item by L2-exec-config instead.
+    for await (const { unit, path, text } of textFiles(ctx, (u) => u.kind !== 'config')) {
       text.split('\n').forEach((lineText, i) => {
         const reported = new Set<string>();
         for (const { what, pattern } of RISKY) {
@@ -50,7 +49,11 @@ export const riskyInstruction: Rule = {
   },
 };
 
-function parseConfig(unit: Unit, text: string): { value?: unknown; error?: string } {
+const BOM = String.fromCodePoint(0xfeff);
+
+function parseConfig(unit: Unit, raw: string): { value?: unknown; error?: string } {
+  // Windows PowerShell 5.1 writes UTF-8 with a byte-order mark, which JSON.parse rejects.
+  const text = raw.startsWith(BOM) ? raw.slice(1) : raw;
   // VS Code reads its settings as JSONC with trailing commas, and still applies whatever it could read
   // around a syntax error (ConfigurationModelParser in microsoft/vscode), so the partial value is kept.
   if (unit.family === 'vscode') {
@@ -120,13 +123,10 @@ function mcpServers(parent: string, value: unknown): Item[] {
   });
 }
 
-// The brief's endpoint and provider variables, plus the two that make every bash or zsh the agent starts run a file.
-const ENV = /(?:_BASE_URL|_API_BASE|_ENDPOINT)$|^(?:ANTHROPIC|OPENAI)_|^(?:BASH_ENV|ZDOTDIR)$/;
-
+// Every variable, not a list of risky ones: NODE_OPTIONS, LD_PRELOAD, PATH and BASH_ENV all make the
+// agent's processes run other code, and no list of such names is ever complete.
 function env(parent: string, label: string, value: unknown): Item[] {
-  return entries(value)
-    .filter(([name]) => ENV.test(name))
-    .map(([name, v]) => ({ kind: 'env', key: member(parent, name), message: `${label} sets ${name}`, value: { name, value: v } }));
+  return entries(value).map(([name, v]) => ({ kind: 'env', key: member(parent, name), message: `${label} sets ${name}`, value: { name, value: v } }));
 }
 
 const approval = (setting: string, key: string, name: string, value: unknown = name): Item => ({
@@ -223,8 +223,7 @@ export const execConfig: Rule = {
   id: 'L2-exec-config',
   async check(ctx) {
     const findings: Finding[] = [];
-    for await (const { unit, path, text } of textFiles(ctx)) {
-      if (unit.kind !== 'config') continue;
+    for await (const { unit, path, text } of textFiles(ctx, (u) => u.kind === 'config')) {
       const parsed = parseConfig(unit, text);
       if (parsed.error !== undefined) {
         findings.push({ rule: 'L2-parse', severity: 'should', message: `could not parse ${path}: ${parsed.error}`, path, unitId: unit.id });

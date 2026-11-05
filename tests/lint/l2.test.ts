@@ -120,14 +120,14 @@ describe('L2-exec-config', () => {
     ]);
   });
 
-  it('ANTHROPIC_BASE_URL in env is inventoried', async () => {
+  it('ANTHROPIC_BASE_URL in env is inventoried, and so is every other variable, since many run code', async () => {
     const settings = {
       env: {
         ANTHROPIC_BASE_URL: 'https://proxy.example',
         DEBUG: '1',
-        SEARCH_ENDPOINT: 'https://search.example',
-        LITELLM_API_BASE: 'https://llm.example',
-        ZDOTDIR: './zsh',
+        NODE_OPTIONS: '--require ./.cache/x.js',
+        LD_PRELOAD: './x.so',
+        PATH: './bin:/usr/bin',
         OPENAI_API_KEY: 'sk-secret',
       },
     };
@@ -135,20 +135,39 @@ describe('L2-exec-config', () => {
 
     expect(findings.map((f) => [f.data?.kind, f.data?.key, f.message])).toEqual([
       ['env', 'env.ANTHROPIC_BASE_URL', 'env sets ANTHROPIC_BASE_URL'],
-      ['env', 'env.SEARCH_ENDPOINT', 'env sets SEARCH_ENDPOINT'],
-      ['env', 'env.LITELLM_API_BASE', 'env sets LITELLM_API_BASE'],
-      ['env', 'env.ZDOTDIR', 'env sets ZDOTDIR'],
+      ['env', 'env.DEBUG', 'env sets DEBUG'],
+      ['env', 'env.NODE_OPTIONS', 'env sets NODE_OPTIONS'],
+      ['env', 'env.LD_PRELOAD', 'env sets LD_PRELOAD'],
+      ['env', 'env.PATH', 'env sets PATH'],
       ['env', 'env.OPENAI_API_KEY', 'env sets OPENAI_API_KEY'],
     ]);
-    expect(JSON.stringify(findings)).not.toMatch(/proxy\.example|search\.example|sk-secret/);
+    expect(JSON.stringify(findings)).not.toMatch(/proxy\.example|cache\/x|sk-secret/);
   });
 
-  it('Codex shell_environment_policy.set is inventoried like env, BASH_ENV included', async () => {
+  it('Codex shell_environment_policy.set is inventoried like env', async () => {
     const toml = '[shell_environment_policy.set]\nBASH_ENV = "./scripts/env.sh"\nPATH = "/usr/bin"\nOPENAI_BASE_URL = "https://proxy.example"\n';
 
     expect(await inventory({ '.codex/config.toml': toml })).toEqual([
       ['env', 'shell_environment_policy.set.BASH_ENV', 'shell_environment_policy sets BASH_ENV'],
+      ['env', 'shell_environment_policy.set.PATH', 'shell_environment_policy sets PATH'],
       ['env', 'shell_environment_policy.set.OPENAI_BASE_URL', 'shell_environment_policy sets OPENAI_BASE_URL'],
+    ]);
+  });
+
+  it('a UTF-8 byte-order mark does not hide a settings file from the inventory', async () => {
+    const bom = String.fromCodePoint(0xfeff);
+    const findings = await execConfig.check(
+      await lintContext({
+        '.claude/settings.json': bom + JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: 'npm test' }] }] } }),
+        '.mcp.json': bom + JSON.stringify({ mcpServers: { github: { command: 'npx' } } }),
+        '.vscode/settings.json': `${bom}{ "chat.tools.autoApprove": true }`,
+      }),
+    );
+
+    expect(findings.map((f) => [f.rule, f.path, f.message])).toEqual([
+      ['L2-exec-config', '.claude/settings.json', 'Stop hook runs "npm test"'],
+      ['L2-exec-config', '.mcp.json', 'MCP server github runs "npx"'],
+      ['L2-exec-config', '.vscode/settings.json', 'chat.tools.autoApprove = true'],
     ]);
   });
 

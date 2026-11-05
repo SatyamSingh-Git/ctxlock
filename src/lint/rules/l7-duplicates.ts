@@ -21,25 +21,36 @@ function contents(unit: Unit): string {
     .join('\n');
 }
 
+// The folder a skill belongs to: X for X/.claude/skills/s and X/.agents/skills/s. Same-named skills
+// in different packages are different skills, not copies.
+const owner = (unit: Unit) => posix.dirname(posix.dirname(posix.dirname(unit.path)));
+
 export const duplicateSkills: Rule = {
   id: 'L7-duplicate-skill',
-  check({ units }) {
+  check({ units, contexts }) {
     const findings: Finding[] = [];
-    const skills = units.filter((u) => u.kind === 'skill');
+    const skills = units
+      .filter((u) => u.kind === 'skill')
+      .map((unit) => ({ unit, contents: contents(unit), words: words(description(unit)), owner: owner(unit) }));
+    // Two skills compete only where one agent lists both at once.
+    const listings = contexts.map((c) => new Set(c.entries.filter((e) => e.mode === 'listed').map((e) => e.unitId)));
+    const listedTogether = (a: Unit, b: Unit) => listings.some((ids) => ids.has(a.id) && ids.has(b.id));
+
     for (const [i, a] of skills.entries()) {
       for (const b of skills.slice(i + 1)) {
-        const report = (message: string) => findings.push({ rule: 'L7-duplicate-skill', severity: 'should', message, path: `${b.path}/SKILL.md`, unitId: b.id });
-        if (contents(a) === contents(b)) continue;
-        if (a.name === b.name) {
-          report(`diverged copies: skill ${a.name} at ${a.path} and ${b.path} have different contents`);
+        const report = (message: string) =>
+          findings.push({ rule: 'L7-duplicate-skill', severity: 'should', message, path: `${b.unit.path}/SKILL.md`, unitId: b.unit.id });
+        if (a.contents === b.contents) continue;
+        if (a.unit.name === b.unit.name) {
+          if (a.owner === b.owner) report(`diverged copies: skill ${a.unit.name} at ${a.unit.path} and ${b.unit.path} have different contents`);
           continue;
         }
-        const [wa, wb] = [words(description(a)), words(description(b))];
-        const shared = [...wa].filter((w) => wb.has(w)).length;
-        const union = wa.size + wb.size - shared;
+        if (!listedTogether(a.unit, b.unit)) continue;
+        const shared = [...a.words].filter((w) => b.words.has(w)).length;
+        const union = a.words.size + b.words.size - shared;
         if (shared / union >= 0.5) {
           report(
-            `description is a near-duplicate of skill ${a.name} (${a.path}/SKILL.md): ${Math.round((100 * shared) / union)}% of their words are shared, so an agent may pick the wrong one`,
+            `description is a near-duplicate of skill ${a.unit.name} (${a.unit.path}/SKILL.md): ${Math.round((100 * shared) / union)}% of their words are shared, so an agent may pick the wrong one`,
           );
         }
       }

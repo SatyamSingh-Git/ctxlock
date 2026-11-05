@@ -70,8 +70,10 @@ export async function resolveClaudeCode({ reader, units, limits }: ResolveInput,
 
   const dirs = ancestry(site);
   const below = (dir: string) => dir !== site && (site === '' || dir.startsWith(`${site}/`));
-  // Files Claude Code reads on demand are cut to their first claudeLazyFileChars characters.
-  const lazyBytes = (unit: Unit) => Buffer.byteLength(unit.text.slice(0, limits.claudeLazyFileChars));
+  // Files Claude Code reads on demand are cut to their first claudeLazyFileChars characters. The cut
+  // is decided on characters: the decoded text has no BOM, and a file that is not UTF-8 has no text.
+  const lazyBytes = (unit: Unit) =>
+    unit.text.length <= limits.claudeLazyFileChars ? unit.files[0]!.bytes : Buffer.byteLength(unit.text.slice(0, limits.claudeLazyFileChars));
 
   const claudeFiles = dirs.flatMap((d) => CLAUDE_FILES.map((name) => at(d, name))).filter((p) => byPath.has(p));
   const agentsFiles = dirs.flatMap((d) => FALLBACK_FILES.map((name) => at(d, name))).filter((p) => byPath.has(p));

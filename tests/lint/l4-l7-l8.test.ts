@@ -123,6 +123,25 @@ describe('L7-duplicate-skill', () => {
     ).toEqual([['should', '.claude/skills/deploy/SKILL.md', 'diverged copies: skill deploy at .agents/skills/deploy and .claude/skills/deploy have different contents']]);
   });
 
+  it('same-named skills in different packages are not copies of each other', async () => {
+    const files = Object.fromEntries(
+      [0, 1, 2].map((i) => [`packages/p${i}/.claude/skills/test/SKILL.md`, skill('test', 'Runs the package tests with vitest', `Run step ${i}.\n`)]),
+    );
+
+    expect(await run(duplicateSkills, files)).toEqual([]);
+  });
+
+  it('look-alike skills that no agent lists together are not near-duplicates', async () => {
+    expect(
+      await run(duplicateSkills, {
+        '.claude/skills/deploy/SKILL.md': skill('deploy', 'Deploys the web app to staging and production'),
+        '.agents/skills/ship/SKILL.md': skill('ship', 'Deploys the web app to staging and preview'),
+        'packages/a/.claude/skills/build/SKILL.md': skill('build', 'Builds the web app for staging and production'),
+        'packages/b/.claude/skills/bundle/SKILL.md': skill('bundle', 'Builds the web app for staging and preview'),
+      }),
+    ).toEqual([]);
+  });
+
   it('a symlink alias is not flagged', async () => {
     expect(await run(duplicateSkills, { '.agents/skills/deploy/SKILL.md': skill('deploy', 'Deploys the app') }, { '.claude/skills/deploy': '.agents/skills/deploy' })).toEqual(
       [],

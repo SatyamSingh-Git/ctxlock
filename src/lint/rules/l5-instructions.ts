@@ -1,5 +1,6 @@
 import type { Finding, HarnessId } from '../../model.js';
 import { maskCode } from '../../units/markdown.js';
+import { readOnce } from '../files.js';
 import type { Rule } from '../types.js';
 
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+\S/;
@@ -22,7 +23,7 @@ export const instructionCount: Rule = {
         const key = `${file}\0${loadedBytes}`;
         let count = counts.get(key);
         if (count === undefined) {
-          const text = (await reader.readFile(file)).subarray(0, loadedBytes).toString('utf8');
+          const text = (await readOnce(reader, file)).subarray(0, loadedBytes).toString('utf8');
           count = maskCode(text)
             .split('\n')
             .filter((line) => LIST_ITEM.test(line)).length;
