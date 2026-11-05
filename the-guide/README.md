@@ -14,7 +14,7 @@ If something here is wrong, out of date, or simply does not work, open an issue 
 |---|---|---|
 | installation.md | Requirements, install, and how to check it works | Arrives with the first CLI release |
 | commands.md | `ctxlock scan`, `lint`, `budget`, `diff`: every flag, and what the output means | Arrives with the first CLI release |
-| configuration.md | `ctxlock.yaml`: harnesses, owners, trust tiers, limit overrides, rule severities | Arrives with the registry |
+| [configuration.md](configuration.md) | `ctxlock.yaml`: harnesses, owners, trust tiers, limit overrides, rule severities | Written; format and validation implemented |
 | rules.md | Every lint rule: what it checks, why (with the research behind it), and how to fix a finding | Arrives with the lint rules |
 | agents.md | What ctxlock predicts each agent loads, and how that prediction is checked | Arrives with the resolvers |
 | github-action.md | Adding the PR check to a repository: permissions, `fetch-depth: 0`, fork PRs | Arrives with the Action |
