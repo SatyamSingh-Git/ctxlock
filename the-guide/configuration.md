@@ -76,6 +76,7 @@ For each unit, ctxlock uses the first owner it finds:
 2. Otherwise, CODEOWNERS:
    - The first file found among `.github/CODEOWNERS`, `CODEOWNERS` and `docs/CODEOWNERS` is used.
    - As on GitHub, the **last** matching line wins, and a pattern with no owners after it leaves the path unowned.
+   - Also as on GitHub, matching is case-sensitive, and `docs/*` covers files directly in `docs/` but not `docs/a/b.md`.
    - A skill is matched through its `SKILL.md`, so a directory pattern such as `.agents/skills/x/ @team` owns it.
 
 ## Limits you can override
@@ -87,7 +88,7 @@ Defaults were checked against each vendor's documentation on 2026-11-05.
 | `codexChainBytes` | 32768 | Codex's combined budget for the AGENTS.md chain (`project_doc_max_bytes`) |
 | `codexSkillCatalogChars` | 8000 | Codex's skill catalog budget when the context window is unknown |
 | `claudeSkillEntryChars` | 1536 | Claude Code's cap on one skill's `description` + `when_to_use` in its listing |
-| `claudeLazyFileChars` | 40000 | Claude Code's per-file cap for lazily loaded CLAUDE.md and rules (200K window) |
+| `claudeLazyFileChars` | 40000 | Claude Code's per-file cap for lazily loaded CLAUDE.md, CLAUDE.local.md, AGENTS.md and rules (200K window; 1M-context models allow 150,000–200,000) |
 | `claudeLaunchFileBytes` | 4194304 | Claude Code skips launch files larger than 4 MiB |
 | `claudeImportHops` | 4 | How deep Claude Code follows `@path` imports |
 | `devinCloudFileBytes` | 16384 | Devin cloud reads the first 16 KiB of each AGENTS.md |

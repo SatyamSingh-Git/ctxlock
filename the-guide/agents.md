@@ -23,17 +23,21 @@ An agent's context depends on where it starts. ctxlock predicts it at every **si
 | What | Loaded as | Details |
 |---|---|---|
 | `CLAUDE.md`, `.claude/CLAUDE.md`, `CLAUDE.local.md` in the site and every parent directory | always | |
-| `AGENTS.md` in the site and every parent directory | always, **only if none of the files above exist** | If any of them is in that chain, every `AGENTS.md` in it is ignored, and ctxlock says so. |
+| `AGENTS.md`, `.claude/AGENTS.md` in the site and every parent directory | always, **only if none of the files above exist** | If any of them is in that chain, every `AGENTS.md` in it is ignored, and ctxlock says so. Needs Claude Code 2.1.277 or later. `AGENTS.override.md` is never read. |
+| `AGENTS.md` in directories below the site | lazy, **only if no `CLAUDE.md` is in the chain** | And only where that directory has no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` of its own. |
 | Files imported with `@path` from an always-on file | always | Followed up to 4 hops deep. `@` inside fenced or inline code is not an import. `@~/...` points outside the repository and is reported as unresolvable. |
-| `.claude/rules/*.md` without `paths:` | always | |
-| `.claude/rules/*.md` with `paths:` | lazy | |
-| `CLAUDE.md` in directories below the site | lazy | Only the first 40,000 characters count. |
-| Skills in `.claude/skills/` | listed | Name, plus description and `when_to_use`, capped at 1,536 characters per skill. A skill with `disable-model-invocation: true` is left out of the listing. |
-| Skills in a nested `.claude/skills/` (e.g. `pkg/.claude/skills/`) | lazy | Listed once the agent works in that directory. |
+| `.claude/rules/*.md` without `paths:`, in the site and every parent directory | always | |
+| `.claude/rules/*.md` with `paths:`, in the site and every parent directory | lazy | Loaded when the agent touches a matching file. |
+| `.claude/rules/` in directories below the site | lazy | |
+| `CLAUDE.md` and `CLAUDE.local.md` in directories below the site | lazy | |
+| Skills in `.claude/skills/` of the site and every parent directory | listed | Name, plus description and `when_to_use`, capped at 1,536 characters per skill. A skill with `disable-model-invocation: true` is left out of the listing. |
+| Skills in `.claude/skills/` below the site (e.g. `pkg/.claude/skills/` when started at the root) | lazy | Listed once the agent works in that directory. |
 | Skills in `.agents/skills/` | **not loaded** | Claude Code does not scan this directory ([anthropics/claude-code#31005](https://github.com/anthropics/claude-code/issues/31005)). |
-| Any file over 4 MiB | **skipped** | |
+| A file over 4 MiB that would load at launch | **skipped** | |
 
-Claude Code documents no total cap on always-on instructions or on the skill listing, so ctxlock reports their size without a limit.
+Every lazy file counts only its first 40,000 characters: that is Claude Code's per-file cap for on-demand files on 200K-context models. 1M-context models allow 150,000–200,000; set `claudeLazyFileChars` in [`ctxlock.yaml`](configuration.md) if your team uses one.
+
+Claude Code documents no total cap on always-on instructions. It warns when they add up past a combined limit, but does not say how large that is. The skill listing gets 1% of the context window; when it overflows, the descriptions of the least-used skills are dropped first. ctxlock reports both sizes without a limit.
 
 ## Codex
 
@@ -43,19 +47,24 @@ Claude Code documents no total cap on always-on instructions or on the skill lis
 | The combined chain | 32,768 bytes total | The file that crosses the limit is truncated to the bytes left. Every file after it is dropped. |
 | `AGENTS.md` in directories below the site | **not loaded** | Codex builds its instructions once, when it starts. |
 | `CLAUDE.md` | **not loaded** | If a site has `CLAUDE.md` files but no `AGENTS.md` in its chain, ctxlock says so. |
-| Skills in `.agents/skills/`, from the site up to the root | listed | Codex gives its whole skill catalog 8,000 characters (or 2% of the context window). |
+| Skills in `.agents/skills/`, from the site up to the root | listed | Codex gives its whole skill catalog 8,000 characters (or 2% of the context window). ctxlock counts each entry with its repository-relative path; Codex lists the full path, so ctxlock's estimate runs slightly low. |
 | Skills in `.claude/skills/` | **not loaded** | Unless the skill is also reachable from `.agents/skills/` (see symlinks below). |
 
 Codex also reads files from your home directory (`~/.codex/AGENTS.md`, `~/.agents/skills`), can be configured with other file names and project-root markers, and loads nothing for untrusted projects. ctxlock looks only at the repository, assumes the defaults, and treats the repository root as the project root.
 
 ## Symlinks: one file, both agents
 
-ctxlock follows symlinks inside the repository. A symlinked file or skill directory counts as the file it points to, at the symlink's path. The two common patterns:
+ctxlock follows symlinks inside the repository, to files and to directories. An agent sees the target's content at the symlink's path:
+- If the target is already a unit of the same kind, the link becomes another path to that one unit, not a copy.
+- Otherwise the link is a unit of its own, read through the link: for example, a rule linked into `.claude/rules/` from a shared folder.
+
+The common patterns:
 
 - `CLAUDE.md -> AGENTS.md`: both agents load the same instructions.
 - `.agents/skills/deploy -> ../../.claude/skills/deploy`: both agents see the same skill.
+- `.claude/skills -> ../.agents/skills`: every skill in `.agents/skills/` is visible to Claude Code too.
 
-A symlink that points outside the repository is not followed, and ctxlock reports it.
+A symlink that points outside the repository is not followed, and ctxlock reports it. A symlink to another symlink is not followed either.
 
 ## An example
 
