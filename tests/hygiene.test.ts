@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest';
 const cp = (n: number) => String.fromCodePoint(n);
 const range = (from: number, to: number) => `${cp(from)}-${cp(to)}`;
 const HIDDEN = new RegExp(
-  `[${range(0x200b, 0x200f)}${range(0x202a, 0x202e)}${range(0x2060, 0x2064)}${range(0x2066, 0x2069)}${cp(0xfeff)}${range(0xe0000, 0xe007f)}]`,
+  `[${cp(0xad)}${cp(0x61c)}${cp(0x180e)}${range(0x200b, 0x200f)}${range(0x202a, 0x202e)}${range(0x2060, 0x2064)}` +
+    `${range(0x2066, 0x2069)}${range(0xfe00, 0xfe0f)}${cp(0xfeff)}${range(0xe0000, 0xe007f)}${range(0xe0100, 0xe01ef)}]`,
   'u',
 );
 
