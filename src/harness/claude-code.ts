@@ -3,9 +3,9 @@ import type { Unit } from '../model.js';
 import { findImports } from './imports.js';
 import type { EffectiveContext, LoadEntry, ResolveInput } from './types.js';
 
-const CLAUDE_FILES = ['CLAUDE.md', '.claude/CLAUDE.md', 'CLAUDE.local.md'];
+export const CLAUDE_FILES = ['CLAUDE.md', '.claude/CLAUDE.md', 'CLAUDE.local.md'];
 
-const at = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
+export const at = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 
 export function ancestry(site: string): string[] {
   const dirs = [''];
