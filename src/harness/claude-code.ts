@@ -4,6 +4,7 @@ import { findImports } from './imports.js';
 import type { EffectiveContext, LoadEntry, ResolveInput } from './types.js';
 
 export const CLAUDE_FILES = ['CLAUDE.md', '.claude/CLAUDE.md', 'CLAUDE.local.md'];
+const FALLBACK_FILES = ['AGENTS.md', '.claude/AGENTS.md'];
 
 export const at = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
 
@@ -14,9 +15,13 @@ export function ancestry(site: string): string[] {
   return dirs;
 }
 
-function isBelow(path: string, site: string): boolean {
-  const dir = posix.dirname(path) === '.' ? '' : posix.dirname(path);
-  return dir !== site && (site === '' || dir.startsWith(`${site}/`));
+const dirOf = (path: string) => (posix.dirname(path) === '.' ? '' : posix.dirname(path));
+
+// The directory a .claude/rules or .claude/skills path belongs to, or null if it is not under one.
+function ownerDir(path: string, folder: string): string | null {
+  if (path.startsWith(`${folder}/`)) return '';
+  const i = path.indexOf(`/${folder}/`);
+  return i === -1 ? null : path.slice(0, i);
 }
 
 function stringField(fm: Record<string, unknown> | null, key: string): string {
@@ -24,8 +29,9 @@ function stringField(fm: Record<string, unknown> | null, key: string): string {
   return typeof value === 'string' ? value : '';
 }
 
-// Predictions from Claude Code's documented loading rules (research/08 §1). Spike S4 checks
-// them against real InstructionsLoaded events.
+// Predictions from Claude Code's documented loading rules (research/08 §1, re-checked against
+// code.claude.com/docs/en/memory and /skills on 2026-11-05). Spike S4 checks them against real
+// InstructionsLoaded events.
 export async function resolveClaudeCode({ reader, units, limits }: ResolveInput, site: string): Promise<EffectiveContext> {
   const byPath = new Map<string, Unit>();
   for (const unit of units) {
@@ -63,14 +69,23 @@ export async function resolveClaudeCode({ reader, units, limits }: ResolveInput,
   }
 
   const dirs = ancestry(site);
+  const below = (dir: string) => dir !== site && (site === '' || dir.startsWith(`${site}/`));
+  // Files Claude Code reads on demand are cut to their first claudeLazyFileChars characters.
+  const lazyBytes = (unit: Unit) => Buffer.byteLength(unit.text.slice(0, limits.claudeLazyFileChars));
+
   const claudeFiles = dirs.flatMap((d) => CLAUDE_FILES.map((name) => at(d, name))).filter((p) => byPath.has(p));
-  const agentsFiles = dirs.map((d) => at(d, 'AGENTS.md')).filter((p) => byPath.has(p));
+  const agentsFiles = dirs.flatMap((d) => FALLBACK_FILES.map((name) => at(d, name))).filter((p) => byPath.has(p));
+  const fallback = claudeFiles.length === 0;
 
   for (const path of claudeFiles) await loadAlways(path, 'ancestor', 0);
-  if (claudeFiles.length === 0) for (const path of agentsFiles) await loadAlways(path, 'agents-md-fallback', 0);
+  if (fallback) for (const path of agentsFiles) await loadAlways(path, 'agents-md-fallback', 0);
 
-  const rules = units.filter((u) => u.kind === 'rule' && u.path.startsWith('.claude/rules/'));
-  for (const rule of rules) if (rule.frontmatter?.paths === undefined) await loadAlways(rule.path, 'rule', 0);
+  const rules = units.filter((u) => u.kind === 'rule');
+  for (const rule of rules) {
+    if (dirs.includes(ownerDir(rule.path, '.claude/rules')!) && rule.frontmatter?.paths === undefined) {
+      await loadAlways(rule.path, 'rule', 0);
+    }
+  }
 
   while (queue.length > 0) {
     const { path, text, hop } = queue.shift()!;
@@ -95,40 +110,48 @@ export async function resolveClaudeCode({ reader, units, limits }: ResolveInput,
   }
 
   for (const rule of rules) {
-    if (rule.frontmatter?.paths === undefined) continue;
-    const bytes = rule.files[0]!.bytes;
-    entries.push({ unitId: rule.id, path: rule.path, mode: 'lazy', reason: 'paths-glob', bytes, loadedBytes: bytes });
+    const dir = ownerDir(rule.path, '.claude/rules')!;
+    const reason = dirs.includes(dir) ? (rule.frontmatter?.paths === undefined ? null : 'paths-glob') : below(dir) ? 'nested-rules' : null;
+    if (!reason) continue;
+    entries.push({ unitId: rule.id, path: rule.path, mode: 'lazy', reason, bytes: rule.files[0]!.bytes, loadedBytes: lazyBytes(rule) });
   }
 
   for (const unit of units) {
-    if (unit.kind !== 'instructions' || unit.family !== 'claude') continue;
+    if (unit.kind !== 'instructions' || loadedUnits.has(unit.id) || !below(dirOf(unit.path))) continue;
     const name = posix.basename(unit.path);
-    const nested = name === 'CLAUDE.md' && isBelow(unit.path, site) && !loadedUnits.has(unit.id);
-    if (!nested) continue;
-    const bytes = unit.files[0]!.bytes;
-    const loadedBytes = Buffer.byteLength(unit.text.slice(0, limits.claudeLazyFileChars));
-    entries.push({ unitId: unit.id, path: unit.path, mode: 'lazy', reason: 'nested', bytes, loadedBytes });
+    const dir = dirOf(unit.path);
+    let reason: string | null = null;
+    if (name === 'CLAUDE.md' || name === 'CLAUDE.local.md') reason = 'nested';
+    // Read only in fallback mode, and only where the directory has no CLAUDE.md of its own.
+    else if (name === 'AGENTS.md' && fallback && posix.basename(dir) !== '.claude' && !CLAUDE_FILES.some((f) => byPath.has(at(dir, f)))) {
+      reason = 'nested-agents-md';
+    }
+    if (!reason) continue;
+    entries.push({ unitId: unit.id, path: unit.path, mode: 'lazy', reason, bytes: unit.files[0]!.bytes, loadedBytes: lazyBytes(unit) });
   }
 
   for (const unit of units) {
     if (unit.kind !== 'skill') continue;
-    const claudePath = [unit.path, ...unit.aliases].find((p) => p.startsWith('.claude/skills/') || p.includes('/.claude/skills/'));
-    if (!claudePath) {
+    const claudePaths = [unit.path, ...unit.aliases].filter((p) => ownerDir(p, '.claude/skills') !== null);
+    if (claudePaths.length === 0) {
       notes.push(`skill ${unit.name} not visible to Claude Code: .agents/skills is not scanned (anthropics/claude-code#31005)`);
       continue;
     }
+    // Listed at launch from the site and every parent; below the site, once Claude works there.
+    const listedPath = claudePaths.find((p) => dirs.includes(ownerDir(p, '.claude/skills')!));
+    const claudePath = listedPath ?? claudePaths.find((p) => below(ownerDir(p, '.claude/skills')!));
+    if (!claudePath) continue;
     if (unit.frontmatter?.['disable-model-invocation'] === true) {
       notes.push(`skill ${unit.name} omitted from Claude Code's listing: disable-model-invocation is set`);
       continue;
     }
     const listing = stringField(unit.frontmatter, 'description').length + stringField(unit.frontmatter, 'when_to_use').length;
     const catalogChars = unit.name.length + Math.min(listing, limits.claudeSkillEntryChars);
-    const nestedSkill = !claudePath.startsWith('.claude/skills/');
     entries.push({
       unitId: unit.id,
       path: claudePath,
-      mode: nestedSkill ? 'lazy' : 'listed',
-      reason: nestedSkill ? 'nested-skills' : 'skill-catalog',
+      mode: listedPath ? 'listed' : 'lazy',
+      reason: listedPath ? 'skill-catalog' : 'nested-skills',
       bytes: unit.files.find((f) => f.path.endsWith('/SKILL.md'))?.bytes ?? 0,
       loadedBytes: 0,
       catalogChars,

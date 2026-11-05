@@ -128,6 +128,79 @@ describe('resolveClaudeCode', () => {
     ]);
   });
 
+  it('a nested CLAUDE.local.md is lazy and capped like a nested CLAUDE.md', async () => {
+    const ctx = await resolve({ 'CLAUDE.md': 'root', 'pkg/CLAUDE.local.md': 'x'.repeat(50_000) });
+
+    expect(ctx.entries.find((e) => e.path === 'pkg/CLAUDE.local.md')).toMatchObject({
+      mode: 'lazy',
+      reason: 'nested',
+      loadedBytes: 40_000,
+    });
+  });
+
+  it('with no CLAUDE.md, .claude/AGENTS.md loads too, and a nested AGENTS.md is lazy unless its directory has a CLAUDE.md', async () => {
+    const ctx = await resolve({
+      'AGENTS.md': 'root',
+      '.claude/AGENTS.md': 'claude dir',
+      'pkg/AGENTS.md': 'p'.repeat(50_000),
+      'pkg/.claude/AGENTS.md': 'only read when the session starts in pkg',
+      'web/AGENTS.md': 'web',
+      'web/CLAUDE.md': 'web claude',
+    });
+
+    expect(ctx.entries.map((e) => [e.path, e.mode, e.reason, e.loadedBytes])).toEqual([
+      ['AGENTS.md', 'always', 'agents-md-fallback', 4],
+      ['.claude/AGENTS.md', 'always', 'agents-md-fallback', 10],
+      ['pkg/AGENTS.md', 'lazy', 'nested-agents-md', 40_000],
+      ['web/CLAUDE.md', 'lazy', 'nested', 10],
+    ]);
+  });
+
+  it('a nested AGENTS.md is not loaded once a CLAUDE.md is in the chain', async () => {
+    const ctx = await resolve({ 'CLAUDE.md': 'root', 'pkg/AGENTS.md': 'pkg' });
+
+    expect(ctx.entries.map((e) => e.path)).toEqual(['CLAUDE.md']);
+  });
+
+  it('rules load from .claude/rules of the site and its parents; below the site they are lazy and capped', async () => {
+    const ctx = await resolve(
+      {
+        '.claude/rules/style.md': 'Use tabs.',
+        '.claude/rules/tests.md': `---\npaths: ["**/*.test.ts"]\n---\n${'v'.repeat(50_000)}`,
+        'pkg/.claude/rules/api.md': 'Use REST.',
+        'pkg/sub/.claude/rules/deep.md': 'd'.repeat(50_000),
+        'other/.claude/rules/x.md': 'elsewhere',
+      },
+      'pkg',
+    );
+
+    expect(ctx.entries.map((e) => [e.path, e.mode, e.reason, e.loadedBytes])).toEqual([
+      ['.claude/rules/style.md', 'always', 'rule', 9],
+      ['pkg/.claude/rules/api.md', 'always', 'rule', 9],
+      ['.claude/rules/tests.md', 'lazy', 'paths-glob', 40_000],
+      ['pkg/sub/.claude/rules/deep.md', 'lazy', 'nested-rules', 40_000],
+    ]);
+  });
+
+  it('skills in .claude/skills of the site and every parent are listed, below the site lazy, elsewhere not loaded', async () => {
+    const ctx = await resolve(
+      {
+        '.claude/skills/root/SKILL.md': skill({ name: 'root', description: 'r' }),
+        'other/.claude/skills/other/SKILL.md': skill({ name: 'other', description: 'o' }),
+        'pkg/.claude/skills/pkg/SKILL.md': skill({ name: 'pkg', description: 'p' }),
+        'pkg/sub/.claude/skills/sub/SKILL.md': skill({ name: 'sub', description: 's' }),
+      },
+      'pkg',
+    );
+
+    expect(ctx.entries.map((e) => [e.path, e.mode, e.reason])).toEqual([
+      ['.claude/skills/root', 'listed', 'skill-catalog'],
+      ['pkg/.claude/skills/pkg', 'listed', 'skill-catalog'],
+      ['pkg/sub/.claude/skills/sub', 'lazy', 'nested-skills'],
+    ]);
+    expect(ctx.notes).toEqual([]);
+  });
+
   it('a root skill is listed with catalogChars capped at 1536 plus its name length', async () => {
     const ctx = await resolve({
       '.claude/skills/review/SKILL.md': skill({ name: 'review', description: 'd'.repeat(2000) }),
