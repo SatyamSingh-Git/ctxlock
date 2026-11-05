@@ -19,8 +19,9 @@
 |---|---|---|
 | 1–5 | Done; fixes from the batch-1 review are in | `55a0b4f`..`87da695` |
 | 6 | Done | `2822b38` |
-| 7 | Done | `feat: inventory execution-affecting config and flag risky instructions` |
-| 8–14, S1–S4 | Not started | |
+| 7 | Done | `a1d8e08`, `262bb06` |
+| 8 | Done | `feat: lint harness budgets, always-on instruction count and skill length` |
+| 9–14, S1–S4 | Not started | |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in two places: there is no tinyglobby (D17), and jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7).
 
@@ -583,7 +584,7 @@ docs/dogfood/           # Task 14 report
 **Other rules:**
 - **`L5-instruction-count`** (should): for each site and harness, count list-item lines matching `/^\s*(?:[-*+]|\d+[.)])\s+\S/` outside fences, across the text of every `always` entry. Flag when the count exceeds `alwaysOnInstructionItems`.
 - **`L6-skill-length`** (should): a SKILL.md body longer than `skillBodyLines` lines or `skillBodyChars` characters.
-- [ ] **Step 1: Write the failing tests.** These are boundary tests, checked on both sides of each limit:
+- [x] **Step 1: Write the failing tests.** These are boundary tests, checked on both sides of each limit:
   - `chain totals of 32768 vs 32769 bytes`
   - `entries of 1536 vs 1537 chars`
   - `descriptions of 1000 vs 1001 chars (info)`
@@ -592,10 +593,10 @@ docs/dogfood/           # Task 14 report
   - `list items inside a fence are not counted`
   - `skill bodies of 500 vs 501 lines and 20000 vs 20001 chars`
   - `a claude-only skill-entry finding is suppressed when ctxlock.yaml lists harnesses [codex]`
-- [ ] **Step 2: Run `npx vitest run tests/lint/l3-l5-l6.test.ts`.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run the same command.** Expected: PASS.
-- [ ] **Step 5: Commit:** `feat: lint harness budgets, always-on instruction count and skill length`.
+- [x] **Step 2: Run `npx vitest run tests/lint/l3-l5-l6.test.ts`.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run the same command.** Expected: PASS.
+- [x] **Step 5: Commit:** `feat: lint harness budgets, always-on instruction count and skill length`.
 
 ### Task 9: L4 discoverable content, L7 duplicates and mirrors, L8 procedure
 

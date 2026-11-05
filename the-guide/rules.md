@@ -18,7 +18,7 @@ lint:
     - "vendor/**"
 ```
 
-> **Status:** the rules on this page are implemented and tested. The `ctxlock lint` command that runs them arrives with the first CLI release. More rules are being built, and this page grows as each one ships.
+> **Status:** the rules on this page are implemented and tested (L0–L3, L5, L6 so far). The `ctxlock lint` command that runs them arrives with the first CLI release. More rules are being built, and this page grows as each one ships.
 
 ## What the findings look like
 
@@ -190,3 +190,50 @@ Lines in instructions, rules, skills and the scripts inside skills that tell an 
 Each line is reported once per kind, at the column of the first match, and the message quotes the line. Downloads to a file (`curl -o out.json`) are not flagged. Config files are left to `L2-exec-config`, which lists their items one by one.
 
 **Fix:** if the step is needed, pin it: download a specific version, check its checksum, then run it. Otherwise tell the agent to stop and ask a person.
+
+---
+
+## L3, L5, L6: context that is too big for the agent to use
+
+Every agent cuts context somewhere, and each cuts in a different place. Whatever falls past the cut is silently gone: the file is still in the repository, but the agent never reads it. These rules use the load predictions described in [agents.md](agents.md), so they know what each agent loads at each site in the repository.
+
+This is real output from a repository with a long root `AGENTS.md`, a billing team's `AGENTS.md` below it, and a release skill:
+
+```
+should L5-instruction-count   160 list items are always in Claude Code's context at services/billing; models start dropping instructions past 150
+should L5-instruction-count   160 list items are always in Codex's context at services/billing; models start dropping instructions past 150
+should L3-budget            .claude/skills/release/SKILL.md  skill release: description and when_to_use are 1558 characters; Claude Code cuts each skill listing entry at 1536
+should L6-skill-length      .claude/skills/release/SKILL.md  skill release: SKILL.md body is 620 lines (limit 500)
+should L3-budget            services/billing/AGENTS.md  AGENTS.md chain at services/billing is 36669 bytes; Codex loads the first 32768 (services/billing/AGENTS.md cut)
+info   L3-budget            AGENTS.md  AGENTS.md is 19947 bytes; Devin's cloud agent reads only the first 16384
+info   L3-budget            services/billing/AGENTS.md  services/billing/AGENTS.md is 16722 bytes; Devin's cloud agent reads only the first 16384
+```
+
+The fifth line is the one a billing engineer would never guess. Their `AGENTS.md` is under 17 KB, yet Codex reads only part of it, because the root file uses most of the 32 KiB budget first.
+
+Each limit below can be changed under `limits:` in [`ctxlock.yaml`](configuration.md).
+
+### `L3-budget`
+
+| Severity | When | Limit (default) | Source |
+|---|---|---|---|
+| should | The `AGENTS.md` files Codex loads at a site add up to more than its budget. The message names the file that is cut, or dropped if the budget ran out before it | `codexChainBytes` (32,768 bytes) | Codex docs, `project_doc_max_bytes` |
+| should | A file Claude Code loads on demand (a path-scoped rule, a nested `CLAUDE.md`) is longer than it reads. Reported once per file | `claudeLazyFileChars` (40,000 characters) | Claude Code memory docs |
+| should | A skill's `description` plus `when_to_use` is longer than Claude Code's listing keeps. Only skills Claude Code lists are checked, so this never fires when `harnesses:` leaves out `claude-code` | `claudeSkillEntryChars` (1,536 characters) | Claude Code skills docs |
+| should | The skill catalog Codex builds at a site is over its budget. The count is name + description + path per skill | `codexSkillCatalogChars` (8,000 characters) | Codex skills docs |
+| info | An `AGENTS.md` is larger than Devin's cloud agent reads | `devinCloudFileBytes` (16,384 bytes) | Devin docs |
+| info | A skill description is within the spec's 1,024 characters but over what some clients keep | `skillDescriptionPortable` (1,000 characters) | Glean's agent spec, the lowest common limit found |
+
+**Fix:** move detail out of always-loaded files into skills or files the agent reads on demand, keep each nested `AGENTS.md` to what is specific to that folder, and front-load what matters: when something is cut, it is the end that goes.
+
+### `L5-instruction-count` (should)
+
+Counts the list items (`- `, `* `, `+ `, `1. `, `2) `, indented ones too) in everything an agent has in context from the start of a session at each site. That includes imported files, and for Codex only the part of each file it loads. List items inside code blocks are not counted. The rule fires over `alwaysOnInstructionItems` (150). In the IFScale benchmark, reasoning models kept up only to about 150–250 instructions; past that they mostly dropped instructions, and favoured the ones that came first ([research/03](../research/03-evidence-what-context-works.md)).
+
+**Fix:** move rules that apply only to some files into path-scoped rules or nested files, and procedures into skills. Cut the items an agent would follow anyway.
+
+### `L6-skill-length` (should)
+
+A `SKILL.md` body, the part after the frontmatter, over `skillBodyLines` (500 lines) or `skillBodyChars` (20,000 characters, about 5,000 tokens). The [Agent Skills specification](https://agentskills.io/specification) recommends staying under both, because the whole body enters context when the skill runs.
+
+**Fix:** keep the steps in `SKILL.md` and move reference material into files beside it that the skill points to; the agent reads those only when it needs them.
