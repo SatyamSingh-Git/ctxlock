@@ -21,8 +21,9 @@
 | 6 | Done | `2822b38` |
 | 7 | Done | `a1d8e08`, `262bb06` |
 | 8 | Done | `acbf862`, `823324b` |
-| 9 | Done | `feat: lint discoverable content, duplicate skills and excessive procedure` |
-| 10–14, S1–S4 | Not started | |
+| 9 | Done | `9f3a576`, `061d3ac` |
+| 10 | Done | `feat: lint stale references, ownership, harness coverage and shadowed AGENTS.md` |
+| 11–14, S1–S4 | Not started | |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in two places: there is no tinyglobby (D17), and jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7).
 
@@ -663,7 +664,7 @@ docs/dogfood/           # Task 14 report
 
 **`L13-agents-md-shadowed`** (should): only when claude-code is configured. It fires for an AGENTS.md that Codex loads at a site while Claude Code does not, because a CLAUDE.md-family file exists without importing it. Message: `Claude Code ignores <path> because <claude file> exists; add @AGENTS.md to <claude file>`.
 
-- [ ] **Step 1: Write the failing tests.** Each is checked in both directions, and every test passes `today` explicitly.
+- [x] **Step 1: Write the failing tests.** Each is checked in both directions, and every test passes `today` explicitly.
   - L9:
     - `` `src/missing.ts` is flagged and `src/present.ts` is not ``
     - `` `https://x/y.md` and `src/**/*.ts` are not flagged ``
@@ -679,10 +680,10 @@ docs/dogfood/           # Task 14 report
     - `CLAUDE.md without @AGENTS.md plus an AGENTS.md is flagged`
     - `with the import it is not`
     - `with harnesses [codex] it is not`
-- [ ] **Step 2: Run `npx vitest run tests/lint/l9-l13.test.ts`.** Expected: FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run the same command.** Expected: PASS.
-- [ ] **Step 5: Commit:** `feat: lint stale references, ownership, harness coverage and shadowed AGENTS.md`.
+- [x] **Step 2: Run `npx vitest run tests/lint/l9-l13.test.ts`.** Expected: FAIL.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run the same command.** Expected: PASS.
+- [x] **Step 5: Commit:** `feat: lint stale references, ownership, harness coverage and shadowed AGENTS.md`.
 
 ### Task 11: scanRepo, agnix adapter, CLI `scan | lint | budget`
 

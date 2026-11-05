@@ -18,7 +18,7 @@ lint:
     - "vendor/**"
 ```
 
-> **Status:** the rules on this page are implemented and tested (L0–L8 so far). The `ctxlock lint` command that runs them arrives with the first CLI release. More rules are being built, and this page grows as each one ships.
+> **Status:** the rules on this page are implemented and tested: L0–L11 and L13. L12, a model-based contradiction check, is planned for later. The `ctxlock lint` command that runs them arrives with the first CLI release.
 
 ## What the findings look like
 
@@ -287,3 +287,65 @@ Counts two things in each skill and rule:
 Five or more gives an `info` finding. It is a heuristic until evals can measure its effect (decision D18), so it never fails a check.
 
 **Fix:** keep the checks that catch real mistakes and drop the rest. Tell the agent what done looks like rather than every step to get there.
+
+---
+
+## L9, L10, L11, L13: context that drifts from the repository and the team
+
+Context is code that nobody runs. When a file is renamed or a script removed, the instruction that names it keeps telling agents to use it. When nobody owns a file, nobody notices. When two agents read different files, they work to different rules.
+
+This is real output from a repository with an `AGENTS.md`, a `CLAUDE.md` and one rule, checked on 2026-11-06:
+
+```
+should L9-stale               AGENTS.md  AGENTS.md was due for review by 2026-10-01 (stale-after in ctxlock.yaml)
+should L13-agents-md-shadowed AGENTS.md  Claude Code ignores AGENTS.md because CLAUDE.md exists; add @AGENTS.md to CLAUDE.md
+should L9-stale               AGENTS.md:1  src/lib/format.ts at 1:35 does not exist
+should L9-stale               AGENTS.md:2  pnpm typecheck at 2:22: package.json has no "typecheck" script
+should L10-owner              CLAUDE.md  CLAUDE.md has no owner in CODEOWNERS or ctxlock.yaml
+info   L11-coverage           .claude/rules/testing.md  .claude/rules/testing.md reaches claude-code only
+info   L9-import-missing      CLAUDE.md  @docs/claude-tips.md: docs/claude-tips.md does not exist
+info   L11-coverage           CLAUDE.md  CLAUDE.md reaches claude-code only
+```
+
+The second line is the most common problem in repositories that use more than one agent. The team's shared conventions are in `AGENTS.md`, and Claude Code never reads them.
+
+### `L9-stale` (should)
+
+Three checks on instructions, rules and skills:
+- **Paths that do not exist.** Inline code that looks like a path is checked: `src/lib/format.ts`, `scripts/`, `README.md`. Each is tried from the file's own folder (a skill's folder for a skill) and from the repository root; a leading `/` means the root. Tokens with wildcards, braces, placeholders, variables or spaces are left alone, as are URLs and paths that lead out of the repository. A symlink counts as existing. Code blocks are not read for paths.
+- **Scripts that do not exist.** `npm run <script>`, `npm test`, `pnpm [run] <script>` and `yarn [run] <script>`, anywhere in the file, including code blocks. They are checked against the nearest `package.json` above the file. Built-in commands such as `pnpm install`, `yarn add` and `npm exec` are not scripts. No `package.json`, or one that does not parse, means nothing is checked.
+- **Review dates that have passed.** A `stale-after` date in [`ctxlock.yaml`](configuration.md) that is earlier than today.
+
+**Fix:** update the path or the command, or delete the instruction. For a passed date, read the file again, then move `stale-after` forward.
+
+### `L9-import-missing` (info)
+
+An `@path/to/file.md` import in an instructions file or rule whose target does not exist. Claude Code resolves imports from the importing file's folder and skips a missing one without a warning. Imports from your home folder (`@~/...`) cannot be checked and are left alone.
+
+**Fix:** correct the path, or remove the import.
+
+### `L10-owner`
+
+Owners come from `owner:` in `ctxlock.yaml`, or from CODEOWNERS (`.github/CODEOWNERS`, `CODEOWNERS` or `docs/CODEOWNERS`). See [configuration.md](configuration.md) for how CODEOWNERS patterns are matched.
+- With neither set up, one **info** finding: `No owners: add CODEOWNERS or owners in ctxlock.yaml (<n> units)`.
+- Otherwise, each context file with no owner is a **should**.
+
+**Fix:** add the file to CODEOWNERS, for example `.claude/ @acme/platform`, or give it an `owner:` in `ctxlock.yaml`.
+
+### `L11-coverage` (info)
+
+When more than one agent is configured (`harnesses:` in `ctxlock.yaml`, both by default), lists each instructions file, rule or skill that reaches some agents but not others: `reaches claude-code only` or `reaches codex only`. This is often on purpose, such as a `CLAUDE.md` with Claude-only notes. It is listed so that a gap is a choice, not an accident. Files that `L13` reports are left to `L13`.
+
+**Fix:** if every agent should follow it, move it to a file every agent reads, such as `AGENTS.md` or `.agents/skills/`, or symlink it ([agents.md](agents.md)).
+
+### `L13-agents-md-shadowed` (should)
+
+Claude Code reads `AGENTS.md` only when there is no `CLAUDE.md`. Once a `CLAUDE.md` exists, at any level from the folder up to the repository root, every `AGENTS.md` that Codex loads is invisible to Claude Code, unless the `CLAUDE.md` imports it. The message names the `CLAUDE.md` to change and the exact import line, with the path relative to that file:
+
+```
+Claude Code ignores pkg/AGENTS.md because .claude/CLAUDE.md exists; add @../pkg/AGENTS.md to .claude/CLAUDE.md
+```
+
+A personal `CLAUDE.local.md` is suggested only when it is the only `CLAUDE` file. `AGENTS.override.md` is Codex-only by design and is not reported.
+
+**Fix:** add the import line the message gives. Or, if the `CLAUDE.md` holds nothing of its own, replace it with a symlink to `AGENTS.md`.

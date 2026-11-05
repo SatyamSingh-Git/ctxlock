@@ -11,7 +11,7 @@ Agents never read this file. It is for ctxlock and for the people reviewing cont
 ```yaml
 version: 1
 
-# Which coding agents your team uses. Rules about a harness are skipped if it isn't listed.
+# Which coding agents your team uses. Load and limit checks for an agent that isn't listed are skipped.
 harnesses: [claude-code, codex]
 
 # Per-unit ownership and trust. Keys are unit paths: a file, or a skill's directory.
@@ -45,7 +45,7 @@ Quote owners that start with `@`; YAML reserves that character.
 | Field | Required | Meaning |
 |---|---|---|
 | `version` | yes | Always `1` |
-| `harnesses` | no | Any of `claude-code`, `codex`. Defaults to both. |
+| `harnesses` | no | Any of `claude-code`, `codex`. Defaults to both. Load predictions, budgets (L3, L5), coverage (L11) and the AGENTS.md check (L13) run only for the agents listed. Config that runs code (L2) is listed for every agent, since anyone can run any agent on a checkout. |
 | `units.<path>.owner` | no | The person or team accountable for this unit. Overrides CODEOWNERS. |
 | `units.<path>.tier` | no | How much to trust it: `certified`, `reviewed`, `imported` (third-party), or `proposal` (suggested, not yet approved) |
 | `units.<path>.verified-at` | no | When someone last checked it, as `YYYY-MM-DD` |
