@@ -24,7 +24,7 @@ function ownerDir(path: string, folder: string): string | null {
   return i === -1 ? null : path.slice(0, i);
 }
 
-function stringField(fm: Record<string, unknown> | null, key: string): string {
+export function stringField(fm: Record<string, unknown> | null, key: string): string {
   const value = fm?.[key];
   return typeof value === 'string' ? value : '';
 }

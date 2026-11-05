@@ -3,9 +3,12 @@ import type { Finding } from '../model.js';
 import { skillSpec } from './rules/l0-skill-spec.js';
 import { hiddenUnicode, htmlComment } from './rules/l1-hidden.js';
 import { execConfig, riskyInstruction } from './rules/l2-exec.js';
+import { harnessBudget } from './rules/l3-budget.js';
+import { instructionCount } from './rules/l5-instructions.js';
+import { skillLength } from './rules/l6-skill-length.js';
 import type { LintContext, Rule } from './types.js';
 
-export const RULES: Rule[] = [skillSpec, hiddenUnicode, htmlComment, riskyInstruction, execConfig];
+export const RULES: Rule[] = [skillSpec, hiddenUnicode, htmlComment, riskyInstruction, execConfig, harnessBudget, instructionCount, skillLength];
 
 const RANK = { must: 0, should: 1, info: 2 };
 const byCodeUnit = (a = '', b = '') => (a < b ? -1 : a > b ? 1 : 0);
