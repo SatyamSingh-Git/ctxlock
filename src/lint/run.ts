@@ -2,9 +2,10 @@ import picomatch from 'picomatch';
 import type { Finding } from '../model.js';
 import { skillSpec } from './rules/l0-skill-spec.js';
 import { hiddenUnicode, htmlComment } from './rules/l1-hidden.js';
+import { execConfig, riskyInstruction } from './rules/l2-exec.js';
 import type { LintContext, Rule } from './types.js';
 
-export const RULES: Rule[] = [skillSpec, hiddenUnicode, htmlComment];
+export const RULES: Rule[] = [skillSpec, hiddenUnicode, htmlComment, riskyInstruction, execConfig];
 
 const RANK = { must: 0, should: 1, info: 2 };
 const byCodeUnit = (a = '', b = '') => (a < b ? -1 : a > b ? 1 : 0);

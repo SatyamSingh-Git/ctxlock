@@ -21,7 +21,7 @@ const PATTERNS: Pattern[] = [
   { match: glob('**/.claude/skills/*/SKILL.md'), kind: 'skill', family: 'claude' },
   { match: glob('**/.agents/skills/*/SKILL.md'), kind: 'skill', family: 'agents' },
   { match: glob('.claude/settings.json', '.claude/settings.local.json', '.mcp.json'), kind: 'config', family: 'claude' },
-  { match: glob('.codex/config.toml', '.codex/hooks.json'), kind: 'config', family: 'codex' },
+  { match: glob('**/.codex/config.toml', '**/.codex/hooks.json'), kind: 'config', family: 'codex' },
   { match: glob('.vscode/settings.json'), kind: 'config', family: 'vscode' },
 ];
 

@@ -53,6 +53,15 @@ describe('discoverUnits', () => {
     expect(units.find((u) => u.id === 'skill/.agents/skills/release-notes')?.name).toBe('release-notes');
   });
 
+  it('a nested .codex folder holds config units, since Codex reads each one from the project root down to its working directory', async () => {
+    const reader = memReader({ 'pkg/api/.codex/config.toml': '', 'pkg/api/.codex/hooks.json': '{}', 'pkg/api/codex/config.toml': '' });
+
+    expect((await discoverUnits(reader)).units.map((u) => [u.id, u.family])).toEqual([
+      ['config/pkg/api/.codex/config.toml', 'codex'],
+      ['config/pkg/api/.codex/hooks.json', 'codex'],
+    ]);
+  });
+
   it('skill digest changes when a script inside the skill changes, and not when a file outside it changes', async () => {
     const base = { '.agents/skills/s/SKILL.md': skill('s'), '.agents/skills/s/scripts/run.sh': 'echo 1', 'README.md': 'a' };
     const digestOf = async (files: Record<string, string>) =>

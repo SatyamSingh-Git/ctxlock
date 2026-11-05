@@ -26,6 +26,13 @@ describe('fsReader', () => {
     ]);
   });
 
+  it('includes the root .claude/settings.local.json even when .gitignore excludes it', async () => {
+    const { dir } = await gitRepo([{ '.gitignore': 'settings.local.json\n', 'AGENTS.md': 'a' }]);
+    writeTree(dir, { '.claude/settings.local.json': '{}', 'sub/.claude/settings.local.json': '{}' });
+
+    expect(await fsReader(dir).listFiles()).toEqual(['.claude/settings.local.json', '.gitignore', 'AGENTS.md']);
+  });
+
   it('works in a directory that is not a git repo', async () => {
     const dir = tempDir();
     writeTree(dir, { 'AGENTS.md': 'a', 'x/y.md': 'y', 'node_modules/p/AGENTS.md': 'n', '.git/config': 'not a repo' });

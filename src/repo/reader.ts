@@ -92,8 +92,8 @@ async function listGitWorkTree(root: string): Promise<Listing> {
     git(root, ['ls-files', '-z', '-s', '-t']),
     git(root, ['ls-files', '-z', '--others', '--exclude-standard']),
     git(root, ['ls-files', '-z', '--deleted']),
-    // CLAUDE.local.md is usually gitignored, yet Claude Code still loads it on this machine.
-    git(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', ':(glob)**/CLAUDE.local.md']),
+    // CLAUDE.local.md and .claude/settings.local.json are usually gitignored, yet Claude Code still uses them on this machine.
+    git(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', ':(glob)**/CLAUDE.local.md', '.claude/settings.local.json']),
   ]);
   const deleted = new Set(nulSplit(deletedOut));
   const files = new Set<string>();
