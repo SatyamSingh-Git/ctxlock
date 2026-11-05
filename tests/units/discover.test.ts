@@ -1,6 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
+import { fsReader, gitReader } from '../../src/repo/reader.js';
 import { discoverUnits } from '../../src/units/discover.js';
 import { memReader } from '../helpers/mem-reader.js';
+import { cleanup, git, gitRepo } from '../helpers/repo.js';
+
+afterAll(cleanup);
 
 const skill = (name: string, description = 'Does a thing') =>
   `---\nname: ${name}\ndescription: ${description}\n---\n# ${name}\n`;
@@ -109,6 +113,74 @@ describe('discoverUnits', () => {
     const { units } = await discoverUnits(memReader({ 'AGENTS.md': 'shared' }, { 'CLAUDE.md': 'AGENTS.md' }));
 
     expect(units.map((u) => [u.id, u.aliases])).toEqual([['instructions/AGENTS.md', ['CLAUDE.md']]]);
+  });
+
+  it('a CRLF copy of a file has the digest of its LF original, and keeps its own byte count', async () => {
+    const lf = (await discoverUnits(memReader({ 'AGENTS.md': 'a\nb\n' }))).units[0]!;
+    const crlf = (await discoverUnits(memReader({ 'AGENTS.md': 'a\r\nb\r\n' }))).units[0]!;
+
+    expect(crlf.digest).toBe(lf.digest);
+    expect([lf.files[0]!.bytes, crlf.files[0]!.bytes]).toEqual([4, 6]);
+  });
+
+  it('a core.autocrlf working tree and its git ref give a unit the same digest', async () => {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'a\nb\n' }]);
+    git(dir, 'config', 'core.autocrlf', 'true');
+    git(dir, 'rm', '-q', '--cached', '-r', '.');
+    git(dir, 'reset', '-q', '--hard');
+
+    const tree = (await discoverUnits(fsReader(dir))).units[0]!;
+    const head = (await discoverUnits(await gitReader(dir, 'HEAD'))).units[0]!;
+
+    expect([tree.files[0]!.bytes, head.files[0]!.bytes]).toEqual([6, 4]);
+    expect(tree.digest).toBe(head.digest);
+  });
+
+  it('a CLAUDE.md symlinked to a file that is not itself a unit is a unit read through the link', async () => {
+    const { units } = await discoverUnits(
+      memReader({ 'AGENTS.md': 'agents', 'docs/ai.md': 'shared rules' }, { 'CLAUDE.md': 'docs/ai.md' }),
+    );
+
+    expect(units.map((u) => [u.id, u.text, u.files.map((f) => f.path)])).toEqual([
+      ['instructions/AGENTS.md', 'agents', ['AGENTS.md']],
+      ['instructions/CLAUDE.md', 'shared rules', ['docs/ai.md']],
+    ]);
+  });
+
+  it('a file symlinked into .claude/rules is a rule', async () => {
+    const { units } = await discoverUnits(memReader({ 'shared/style.md': 'Use tabs.' }, { '.claude/rules/style.md': 'shared/style.md' }));
+
+    expect(units.map((u) => [u.id, u.name, u.text])).toEqual([['rule/.claude/rules/style.md', 'style', 'Use tabs.']]);
+  });
+
+  it('a rule symlinked to AGENTS.md is a rule of its own, not an alias of the instructions', async () => {
+    const { units } = await discoverUnits(memReader({ 'AGENTS.md': 'shared' }, { '.claude/rules/shared.md': 'AGENTS.md' }));
+
+    expect(units.map((u) => [u.id, u.aliases, u.text])).toEqual([
+      ['rule/.claude/rules/shared.md', [], 'shared'],
+      ['instructions/AGENTS.md', [], 'shared'],
+    ]);
+  });
+
+  it('a symlinked skills directory aliases the skills under its target, or makes new ones at the link', async () => {
+    const { units } = await discoverUnits(
+      memReader(
+        { '.agents/skills/x/SKILL.md': skill('x'), '.agents/skills/y/SKILL.md': skill('y'), 'shared/z/SKILL.md': skill('z') },
+        { '.claude/skills': '.agents/skills', 'pkg/.agents/skills/z': 'shared/z' },
+      ),
+    );
+
+    expect(units.map((u) => [u.id, u.aliases, u.files.map((f) => f.path)])).toEqual([
+      ['skill/.agents/skills/x', ['.claude/skills/x'], ['.agents/skills/x/SKILL.md']],
+      ['skill/.agents/skills/y', ['.claude/skills/y'], ['.agents/skills/y/SKILL.md']],
+      ['skill/pkg/.agents/skills/z', [], ['shared/z/SKILL.md']],
+    ]);
+  });
+
+  it('a .claude/rules file in a subdirectory is a rule', async () => {
+    const { units } = await discoverUnits(memReader({ 'pkg/.claude/rules/api/style.md': 'Use REST.' }));
+
+    expect(units.map((u) => [u.id, u.name])).toEqual([['rule/pkg/.claude/rules/api/style.md', 'style']]);
   });
 
   it('a symlink leaving the repo is not followed and becomes an L0-symlink-outside info problem', async () => {

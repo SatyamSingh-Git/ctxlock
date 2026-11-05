@@ -17,7 +17,7 @@ const glob = (...globs: string[]) => picomatch(globs, { dot: true });
 const PATTERNS: Pattern[] = [
   { match: glob('**/AGENTS.md', '**/AGENTS.override.md'), kind: 'instructions', family: 'agents-md' },
   { match: glob('**/CLAUDE.md', '**/.claude/CLAUDE.md', '**/CLAUDE.local.md'), kind: 'instructions', family: 'claude' },
-  { match: glob('.claude/rules/**/*.md'), kind: 'rule', family: 'claude' },
+  { match: glob('**/.claude/rules/**/*.md'), kind: 'rule', family: 'claude' },
   { match: glob('**/.claude/skills/*/SKILL.md'), kind: 'skill', family: 'claude' },
   { match: glob('**/.agents/skills/*/SKILL.md'), kind: 'skill', family: 'agents' },
   { match: glob('.claude/settings.json', '.claude/settings.local.json', '.mcp.json'), kind: 'config', family: 'claude' },
@@ -27,25 +27,55 @@ const PATTERNS: Pattern[] = [
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 
+// Hashed with CRLF read as LF, so a core.autocrlf checkout and its git ref agree on a unit's identity.
+// bytes stays raw, because that is what an agent reads from disk.
+const lfDigest = (buf: Buffer) => sha256Hex(buf.includes(0x0d) ? Buffer.from(buf.toString('latin1').replaceAll('\r\n', '\n'), 'latin1') : buf);
+
+// Every path an agent can open, mapped to the listed file behind it. A link to a file adds the
+// link's own path; a link to a directory adds the link path of every listed file under it.
+// Links to links are not followed.
+function reachablePaths(paths: string[], links: Map<string, string | null>): Map<string, string> {
+  const listed = new Set(paths);
+  const reachable = new Map(paths.map((p) => [p, p]));
+  for (const [link, target] of links) {
+    if (target === null) continue;
+    if (listed.has(target)) reachable.set(link, target);
+    else for (const p of paths) if (p.startsWith(`${target}/`)) reachable.set(link + p.slice(target.length), p);
+  }
+  return reachable;
+}
+
 export async function discoverUnits(reader: RepoReader): Promise<{ units: Unit[]; problems: Finding[] }> {
-  const paths = await reader.listFiles();
+  const links = await reader.listSymlinks();
+  const reachable = reachablePaths(await reader.listFiles(), links);
   const units: Unit[] = [];
+  const byPath = new Map<string, Unit>();
   const problems: Finding[] = [];
 
-  for (const path of paths) {
+  // Listed files come first in `reachable`, so a link to an existing unit finds it and becomes its alias.
+  for (const [path, real] of reachable) {
     const pattern = PATTERNS.find((p) => p.match(path));
     if (!pattern) continue;
 
     const unitPath = pattern.kind === 'skill' ? posix.dirname(path) : path;
+    if (path !== real) {
+      const target = byPath.get(pattern.kind === 'skill' ? posix.dirname(real) : real);
+      if (target?.kind === pattern.kind) {
+        target.aliases.push(unitPath);
+        continue;
+      }
+    }
+
     const id = `${pattern.kind}/${unitPath}`;
-    const memberPaths = pattern.kind === 'skill' ? paths.filter((p) => p.startsWith(`${unitPath}/`)) : [path];
+    const members: Array<[string, string]> =
+      pattern.kind === 'skill' ? [...reachable].filter(([p]) => p.startsWith(`${unitPath}/`)) : [[path, real]];
 
     const files: UnitFile[] = [];
     let main: Buffer | undefined;
-    for (const member of memberPaths) {
-      const buf = await reader.readFile(member);
+    for (const [member, source] of members) {
+      const buf = await reader.readFile(source);
       if (member === path) main = buf;
-      files.push({ path: member, bytes: buf.length, sha256: sha256Hex(buf) });
+      files.push({ path: source, bytes: buf.length, sha256: lfDigest(buf) });
     }
 
     let text = '';
@@ -76,7 +106,7 @@ export async function discoverUnits(reader: RepoReader): Promise<{ units: Unit[]
     if (pattern.kind === 'rule') name = posix.basename(path, '.md');
     if (pattern.kind === 'skill') name = typeof frontmatter?.name === 'string' ? frontmatter.name : posix.basename(unitPath);
 
-    units.push({
+    const unit: Unit = {
       id,
       kind: pattern.kind,
       family: pattern.family,
@@ -88,11 +118,12 @@ export async function discoverUnits(reader: RepoReader): Promise<{ units: Unit[]
       text,
       frontmatter,
       body,
-    });
+    };
+    units.push(unit);
+    byPath.set(unitPath, unit);
   }
 
-  const byPath = new Map(units.map((u) => [u.path, u]));
-  for (const [link, target] of await reader.listSymlinks()) {
+  for (const [link, target] of links) {
     if (target === null) {
       problems.push({
         rule: 'L0-symlink-outside',
@@ -102,7 +133,9 @@ export async function discoverUnits(reader: RepoReader): Promise<{ units: Unit[]
       });
       continue;
     }
-    byPath.get(target)?.aliases.push(link);
+    // A link that is not itself a context path, such as docs/guide.md -> AGENTS.md, still names the unit for imports.
+    const unit = byPath.get(target);
+    if (unit && !byPath.has(link) && !unit.aliases.includes(link)) unit.aliases.push(link);
   }
 
   units.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
