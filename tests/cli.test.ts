@@ -202,6 +202,26 @@ describe('ctxlock probe draft', { timeout: 120_000 }, () => {
     expect(stdout).toContain('Runs: 5');
   });
 
+  it('prints the model-written ids and reasons with control characters replaced, so they cannot drive the terminal', async () => {
+    // YAML's \e is ESC and \a is BEL: two in a kept id, one in an invalid candidate's regular expression.
+    const reply = '```yaml\nprobes:\n  - id: "deps\\e[2J\\a"\n    prompt: Add zod as a dependency.\n    expect:\n      command: \'pnpm add\'\n  - id: broken\n    prompt: Add zod.\n    expect:\n      command: "((\\e[31m"\n```\n';
+    const file = join(tempDir(), 'scenario.json');
+    writeFileSync(file, JSON.stringify({ behaviours: [
+      { when: { promptContains: 'Draft' }, calls: [], text: reply },
+      { when: { file: 'AGENTS.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+      { calls: [{ tool: 'Bash', input: { command: 'npm install zod' } }] },
+    ] }));
+    process.env.FAKE_CLAUDE_SCENARIO = file;
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'Use pnpm.\n' }]);
+
+    const { stdout } = await cli('probe', 'draft', dir, '--unit', 'instructions/AGENTS.md', '--claude', 'tests/helpers/fake-claude.mjs', '--workdir', join(tempDir(), 'w'));
+
+    const cp = String.fromCodePoint;
+    expect(stdout).toMatch(/kept\s+deps\?\[2J\?/);
+    expect(stdout).toMatch(/discarded\s+broken: invalid: .*\?\[31m/);
+    expect(new RegExp(`[${cp(0)}-${cp(9)}${cp(11)}-${cp(31)}${cp(127)}-${cp(159)}]`).test(stdout)).toBe(false);
+  });
+
   it('exits 2 rather than write over an existing probe file', async () => {
     const { dir } = await gitRepo([{ 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/agents-md.yaml': 'mine\n' }]);
 

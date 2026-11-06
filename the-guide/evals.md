@@ -53,6 +53,8 @@ ctxlock sends the unit's text to Claude with every tool switched off and asks fo
 - **An adherence probe** runs in a copy of the working tree and in the same copy with the unit deleted. It is kept only if every run with the unit passes and no run without it does. A probe that passes without the unit tests nothing, like the `ruff` example above, and is discarded with `passes without the unit too (D36)`.
 - **A trigger probe** runs in the copy with the unit. It is kept only if every run did what it expects.
 
+A candidate whose id another probe already uses is discarded before it runs, since two probes with one id stop every `eval`. The list of kept and discarded candidates is printed with control characters replaced by `?`, because the ids and reasons are the model's text.
+
 The kept probes are written to `evals/probes/<unit>.yaml`, or `--out`, under a comment that names the unit and its digest. ctxlock never writes over an existing file, and writes nothing when no probe was kept. **Review the file before you commit it:** probes are tests, so a drafted one is checked once by a person, like any test.
 
 | Option | Default | Meaning |

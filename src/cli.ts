@@ -35,6 +35,10 @@ const workdirOf = (flag: string | undefined) => resolve(flag ?? process.env.RUNN
 // A path is resolved here, since Claude Code runs with the copy as its working directory.
 const claudeOf = (flag: string | undefined) => (flag === undefined ? ['claude'] : [/[\\/]/.test(flag) ? resolve(flag) : flag]);
 
+// C0 and C1 control characters, built from code points so no raw one sits in the source.
+const cp = String.fromCodePoint;
+const CONTROLS = new RegExp(`[${cp(0)}-${cp(31)}${cp(127)}-${cp(159)}]`, 'g');
+
 interface EvalFlags {
   base: string;
   head?: string;
@@ -187,8 +191,10 @@ export async function main(argv: string[], io: Io): Promise<number> {
       });
       const lines = [`ctxlock probe draft · ${opts.unit}`];
       lines.push(r.kept.length > 0 ? `Wrote ${r.path}: ${r.kept.length} kept. Review it before committing.` : 'No probe told the two copies apart, so nothing was written.');
-      for (const id of r.kept) lines.push(`  kept       ${id}`);
-      for (const d of r.discarded) lines.push(`  discarded  ${d.id}: ${d.reason}`);
+      // Ids and reasons carry the model's text, and a control character in it could drive the terminal.
+      const printable = (s: string) => s.replace(CONTROLS, '?');
+      for (const id of r.kept) lines.push(`  kept       ${printable(id)}`);
+      for (const d of r.discarded) lines.push(`  discarded  ${printable(d.id)}: ${printable(d.reason)}`);
       lines.push(`Runs: ${r.runs}`);
       io.stdout(`${lines.join('\n')}\n`);
     });

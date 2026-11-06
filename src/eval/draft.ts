@@ -5,7 +5,7 @@ import type { Unit } from '../model.js';
 import { fsReader } from '../repo/reader.js';
 import { scanRepo } from '../scan.js';
 import { runClaude } from './claude.js';
-import { type Probe, ProbeError, grade, parseProbeFile } from './probes.js';
+import { type Probe, ProbeError, grade, loadProbes, parseProbeFile } from './probes.js';
 import { ancestorContext, changedSince, materialize, snapshot } from './workspace.js';
 
 export interface DraftOptions {
@@ -99,6 +99,8 @@ export async function draftProbes(opts: DraftOptions): Promise<DraftResult> {
   if (!unit) throw new DraftError(`no unit ${opts.unit} in ${opts.root}; ctxlock scan lists the units`);
   const path = opts.out ?? `evals/probes/${slug(unit)}.yaml`;
   if (existsSync(join(opts.root, path))) throw new DraftError(`${path} already exists; pass --out to write somewhere else`);
+  // A probe id used twice stops every eval, so a candidate may not take one already in use.
+  const taken = new Map((await loadProbes(reader)).map((p) => [p.id, p.file]));
 
   mkdirSync(opts.workdir, { recursive: true });
   const runRoot = mkdtempSync(join(opts.workdir, 'ctxlock-draft-'));
@@ -131,6 +133,14 @@ export async function draftProbes(opts: DraftOptions): Promise<DraftResult> {
         continue;
       }
       const probe = c.probe;
+      if (taken.has(probe.id)) {
+        discarded.push({ id: c.id, reason: `id already used in ${taken.get(probe.id)}` });
+        continue;
+      }
+      if (kept.some((p) => p.id === probe.id)) {
+        discarded.push({ id: c.id, reason: 'id already used by another candidate' });
+        continue;
+      }
       const armNames = probe.kind === 'adherence' ? (['with', 'without'] as const) : (['with'] as const);
       if (runs + armNames.length * opts.runs > opts.maxRuns) {
         discarded.push({ id: c.id, reason: 'run budget' });

@@ -103,6 +103,32 @@ describe('draftProbes', { timeout: 120_000 }, () => {
     expect(existsSync(join(root, 'evals/probes/agents-md.yaml'))).toBe(false);
   });
 
+  it('discards a candidate whose id another probe already has, since a duplicate id stops every eval', async () => {
+    scenario(reply(`probes:
+  - id: deps-use-pnpm
+    prompt: Add zod as a dependency.
+    expect:
+      command: '\\bpnpm\\s+add\\b'
+  - id: deps-use-pnpm
+    prompt: Add lodash as a dependency.
+    expect:
+      command: '\\bpnpm\\s+add\\b'
+  - id: taken
+    prompt: Add zod as a dependency.
+    expect:
+      command: '\\bpnpm\\s+add\\b'
+`));
+    const root = await repo({ 'AGENTS.md': 'Use pnpm for every package command.\n', 'evals/probes/mine.yaml': 'version: 1\nprobes:\n  - id: taken\n    unit: instructions/AGENTS.md\n    prompt: x\n    expect:\n      command: x\n' });
+
+    const r = await draftProbes(options(root));
+
+    expect(r.kept).toEqual(['deps-use-pnpm']);
+    expect(r.discarded).toEqual([
+      { id: 'deps-use-pnpm', reason: 'id already used by another candidate' },
+      { id: 'taken', reason: 'id already used in evals/probes/mine.yaml' },
+    ]);
+  });
+
   it('drafts without the gitignored CLAUDE.local.md, which CI never has', async () => {
     scenario(CANDIDATES, {}, [
       { when: { file: 'AGENTS.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
