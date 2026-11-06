@@ -1,0 +1,3 @@
+# Notes
+
+- Keep functions small.

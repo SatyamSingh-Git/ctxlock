@@ -30,7 +30,7 @@
 | 14 | Done on four repositories; not pushed until Satyam says so | `03a342f`, `048ce98` |
 | Batch-3 review (Tasks 11–14) | Done; fixes in, not pushed | `293499d` |
 | S2 | Done: [memo](../../spikes/S2-rulesync.md) | `docs: spike S2, rulesync as the compile backend` |
-| S1 | Started: harness and one smoke run (1 of 150) | not committed yet |
+| S1 | Done: [memo](../../spikes/S1-eval-runner.md); 21 of 150 runs used | `docs: spike S1, the eval runner` |
 | S3, S4 | Not started | |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in three places: there is no tinyglobby (D17); jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7); and markdown-it 15 (MIT) finds code blocks the way CommonMark does, after the batch-2 review found two ways past a hand-written fence scanner.
@@ -872,20 +872,20 @@ The spikes are throwaway (code goes in `spikes/`, excluded from the package). Th
 
 ### Task S1: Eval runner (time box: 3 days)
 
-- [ ] **Step 1: Build a run harness in `spikes/runner/`.**
+- [x] **Step 1: Build a run harness in `spikes/runner/`.**
   - For each run, copy the fixture repo at the arm's ref (base or head) into a temp directory.
   - Write a run-scoped settings file **outside** the copy, and run `claude -p "<prompt>" --output-format stream-json --verbose --settings <file> --no-session-persistence` with the copy as cwd.
   - The settings file sets these hooks:
     - `InstructionsLoaded` → append the payload to a JSONL file;
     - `PostToolUse` with matcher `Skill` → append to the JSONL;
     - **`PreToolUse` with matcher `Bash|Write|Edit` → append the intended command or path, then deny it** ("observe-and-deny"), so nothing executes.
-- [ ] **Step 2: Run 2 adherence probes × 2 arms × 3 runs** on a fixture repo.
+- [x] **Step 2: Run 2 adherence probes × 2 arms × 3 runs** on a fixture repo.
   - Example: "add lodash as a dependency", with an AGENTS.md that says to use pnpm in the head arm only.
   - Confirm that the denied commands and the loaded files come through in the JSONL, and that nothing ran. The fixture's `node_modules` and lockfile must be unchanged.
-- [ ] **Step 3: Record usage per run.** From the final JSON message: `num_turns`, `duration_ms`, and the usage/cost fields it reports. On a subscription the cost figure is notional. Note how much of the usage window the 12 runs took.
-- [ ] **Step 4: Try promptfoo as the wrapper.** Wrap the same harness as a promptfoo custom provider (MIT), and compare that with the thin harness on its own.
-- [ ] **Step 5: Check the CI auth path.** Verify, from current Anthropic docs, how Claude Code authenticates headless in GitHub Actions on a subscription (for example a token from `claude setup-token`) versus an API key. Do not run anything in CI yet.
-- [ ] **Step 6: Write the memo `docs/spikes/S1-eval-runner.md`.** It must cover:
+- [x] **Step 3: Record usage per run.** From the final JSON message: `num_turns`, `duration_ms`, and the usage/cost fields it reports. On a subscription the cost figure is notional. Note how much of the usage window the 12 runs took.
+- [x] **Step 4: Try promptfoo as the wrapper.** Wrap the same harness as a promptfoo custom provider (MIT), and compare that with the thin harness on its own.
+- [x] **Step 5: Check the CI auth path.** Verify, from current Anthropic docs, how Claude Code authenticates headless in GitHub Actions on a subscription (for example a token from `claude setup-token`) versus an API key. Do not run anything in CI yet.
+- [x] **Step 6: Write the memo `docs/spikes/S1-eval-runner.md`.** It must cover:
   - the exact commands and the settings file;
   - whether observe-and-deny works reliably, and which tools need it;
   - usage per paired run;

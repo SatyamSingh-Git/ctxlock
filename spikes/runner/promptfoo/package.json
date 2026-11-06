@@ -1,0 +1,8 @@
+{
+  "name": "ctxlock-spike-promptfoo",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "promptfoo": "0.120.0"
+  }
+}

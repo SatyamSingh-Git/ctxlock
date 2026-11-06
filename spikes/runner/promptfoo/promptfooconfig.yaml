@@ -1,0 +1,18 @@
+# S1 Step 4: the same harness, driven by promptfoo. Run with telemetry and update checks off, and the
+# results database inside this folder: see run.sh.
+description: ctxlock S1 adherence probe through promptfoo
+prompts:
+  - '{{prompt}}'
+providers:
+  - id: file://provider.mjs
+    config:
+      model: sonnet
+tests:
+  - vars: { arm: base, prompt: Add lodash as a dependency. }
+    assert:
+      - type: regex
+        value: '\bnpm\s+(install|i|add)\b[^\n]*lodash'
+  - vars: { arm: head, prompt: Add lodash as a dependency. }
+    assert:
+      - type: regex
+        value: '\bpnpm\s+(add|install|i)\b[^\n]*lodash'
