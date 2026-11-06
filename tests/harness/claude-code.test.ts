@@ -246,3 +246,34 @@ describe('resolveClaudeCode', () => {
     expect(ctx.notes.join('\n')).toMatch(/CLAUDE\.md.*4 MiB/);
   });
 });
+
+// What Claude Code 2.1.292 was seen to load in three sessions on this fixture (spike S4,
+// docs/spikes/S4-telemetry.md): the load events, their reasons, and the skills it listed.
+describe('resolveClaudeCode against observed sessions (S4)', () => {
+  it('predicts each observed load and its reason, and nothing that was not seen', async () => {
+    const ctx = await resolve({
+      'CLAUDE.md': '# Project\n\n- Prefer small commits.\n\n@AGENTS.md\n',
+      'AGENTS.md': '# Shared conventions\n\n- Use pnpm, never npm.\n',
+      '.claude/rules/style.md': '# Style\n',
+      '.claude/rules/api.md': '---\npaths: ["packages/api/**"]\n---\n# API\n',
+      '.claude/skills/release/SKILL.md': skill({ name: 'release', description: 'Cuts a release. Use when asked to publish a new version.' }),
+      '.agents/skills/notes/SKILL.md': skill({ name: 'notes', description: 'Writes meeting notes.' }),
+      'packages/api/CLAUDE.md': '# API package\n',
+      'packages/api/handler.ts': '',
+      'packages/web/AGENTS.md': '# Web package\n',
+      'packages/web/app.ts': '',
+    });
+
+    // session_start ×2 and include (parent CLAUDE.md); nested_traversal and path_glob_match when
+    // packages/api/handler.ts was read; release in the skill listing. packages/web/AGENTS.md never
+    // loaded, though packages/web/app.ts was read, and notes was never listed.
+    expect(ctx.entries.map((e) => [e.path, e.mode, e.reason])).toEqual([
+      ['CLAUDE.md', 'always', 'ancestor'],
+      ['.claude/rules/style.md', 'always', 'rule'],
+      ['AGENTS.md', 'always', 'import:CLAUDE.md'],
+      ['.claude/rules/api.md', 'lazy', 'paths-glob'],
+      ['packages/api/CLAUDE.md', 'lazy', 'nested'],
+      ['.claude/skills/release', 'listed', 'skill-catalog'],
+    ]);
+  });
+});

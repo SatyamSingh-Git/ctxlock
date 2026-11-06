@@ -32,7 +32,7 @@
 | S2 | Done: [memo](../../spikes/S2-rulesync.md) | `docs: spike S2, rulesync as the compile backend` |
 | S1 | Done: [memo](../../spikes/S1-eval-runner.md); 21 of 150 runs used | `docs: spike S1, the eval runner` |
 | S3 | Done: [memo](../../spikes/S3-reproduction.md); 96 of 150 runs used in all | `docs: spike S3, reproducing two published effects` |
-| S4 | Not started | |
+| S4 | Done: [memo](../../spikes/S4-telemetry.md); 8 of 8 predictions matched, no resolver fix needed | `docs: spike S4, joining load events to units` |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in three places: there is no tinyglobby (D17); jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7); and markdown-it 15 (MIT) finds code blocks the way CommonMark does, after the batch-2 review found two ways past a hand-written fence scanner.
 
@@ -926,13 +926,13 @@ Both need neither Docker nor real builds, and both use the S1 harness.
 
 ### Task S4: Telemetry join (time box: 2 days; needs Tasks 4–5)
 
-- [ ] **Step 1: Capture Claude Code load events.** Install a local Claude Code hook config in `spikes/telemetry/` that writes these payloads to JSONL:
+- [x] **Step 1: Capture Claude Code load events.** Install a local Claude Code hook config in `spikes/telemetry/` that writes these payloads to JSONL:
   - every `InstructionsLoaded` payload (`file_path`, `load_reason`, `trigger_file_path`, `parent_file_path`);
   - `PostToolUse` for the Skill tool.
 
   Run 3 sessions on a fixture repo with nested CLAUDE.md, a path-scoped rule, an `@AGENTS.md` import and skills.
-- [ ] **Step 2: Compare with predictions.** Compare the observed loads with `ctxlock scan --format json`. Record every mismatch, then fix the resolver rule and add a regression test in `tests/harness/`.
-- [ ] **Step 3: Write the memo `docs/spikes/S4-telemetry.md`.** Cover:
+- [x] **Step 2: Compare with predictions.** Compare the observed loads with `ctxlock scan --format json`. Record every mismatch, then fix the resolver rule and add a regression test in `tests/harness/`.
+- [x] **Step 3: Write the memo `docs/spikes/S4-telemetry.md`.** Cover:
   - the join keys (path + sha256 → unit ID);
   - what Claude Code exposes;
   - resolver accuracy before and after the fixes;
