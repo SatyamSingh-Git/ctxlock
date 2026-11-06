@@ -193,3 +193,5 @@ The first draft of the dogfood report said 132 findings before the fixes, 96 aft
 *Cost:* none; caught before the commit.
 
 *Changed:* every number in a report is read from the saved output (`grep -c`) and checked before the commit, and each claim about a file is checked against the file list.
+
+*Since:* the same check caught three more before their commits: a test count (266 for 265) in chapter 7, a package count that was npm's change since the last install rather than a total in the S1 memo, and "9 of 9" predictions where there were 8 in the S4 memo. Each was written before being counted.
