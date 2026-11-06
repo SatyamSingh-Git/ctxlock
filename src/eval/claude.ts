@@ -56,9 +56,11 @@ type StreamFacts = Omit<Transcript, 'loads' | 'denied' | 'outsideReads' | 'wallM
 
 export class ClaudeNotFound extends Error {}
 
-export function claudeArgs(opts: { prompt: string; model: string; tools: string[] }, settingsPath: string): string[] {
+// The prompt goes on stdin, not here: a drafting prompt carries a whole unit, and Windows caps a
+// command line at 32,767 characters.
+export function claudeArgs(opts: { model: string; tools: string[] }, settingsPath: string): string[] {
   return [
-    '-p', opts.prompt,
+    '-p',
     '--output-format', 'stream-json', '--verbose',
     '--settings', settingsPath,
     '--setting-sources', 'project',
@@ -167,10 +169,10 @@ interface Exit {
   failure: string | null;
 }
 
-function spawnClaude(claude: string[], args: string[], cwd: string | undefined, timeoutMs: number): Promise<Exit> {
+function spawnClaude(claude: string[], args: string[], cwd: string | undefined, timeoutMs: number, input = ''): Promise<Exit> {
   const [file, ...pre] = command(claude);
   return new Promise((resolve, reject) => {
-    execFile(
+    const child = execFile(
       file!,
       [...pre, ...args],
       { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: 'utf8', windowsHide: true, env: { ...process.env, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' } },
@@ -185,6 +187,9 @@ function spawnClaude(claude: string[], args: string[], cwd: string | undefined, 
         resolve({ code: err === null ? 0 : typeof errCode === 'number' ? errCode : null, stdout, stderr, timedOut, failure });
       },
     );
+    // A process that exits without reading its input would make the write fail; its exit says why.
+    child.stdin?.on('error', () => {});
+    child.stdin?.end(input);
   });
 }
 
@@ -208,7 +213,7 @@ export async function runClaude(run: ClaudeRun): Promise<Transcript> {
   writeFileSync(settingsFile, JSON.stringify(claudeSettings(hook, ancestorExcludes(run.dir)), null, 2));
 
   const started = Date.now();
-  const exit = await spawnClaude(run.claude, claudeArgs({ prompt: run.prompt, model: run.model, tools: run.tools ?? PROBE_TOOLS }, settingsFile), run.dir, timeoutMs);
+  const exit = await spawnClaude(run.claude, claudeArgs({ model: run.model, tools: run.tools ?? PROBE_TOOLS }, settingsFile), run.dir, timeoutMs, run.prompt);
   const wallMs = Date.now() - started;
   writeFileSync(join(run.scratch, 'stream.jsonl'), exit.stdout);
   if (exit.stderr) writeFileSync(join(run.scratch, 'stderr.txt'), exit.stderr);

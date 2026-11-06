@@ -72,9 +72,9 @@ describe('draftProbes', { timeout: 120_000 }, () => {
     scenario(CANDIDATES);
     await draftProbes(options(await repo()));
 
-    const [first] = readFileSync(argvLog, 'utf8').split('\n').filter((l) => l.includes('"-p"')).map((l) => JSON.parse(l).argv as string[]);
-    expect(first![first!.indexOf('--tools') + 1]).toBe('');
-    expect(first![first!.indexOf('-p') + 1]).toContain('Use pnpm for every package command.');
+    const [first] = readFileSync(argvLog, 'utf8').split('\n').filter((l) => l.includes('"-p"')).map((l) => JSON.parse(l) as { argv: string[]; prompt: string });
+    expect(first!.argv[first!.argv.indexOf('--tools') + 1]).toBe('');
+    expect(first!.prompt).toContain('Use pnpm for every package command.');
   });
 
   it('sets each probe unit itself, whatever the model wrote', async () => {

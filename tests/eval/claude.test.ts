@@ -32,12 +32,12 @@ const run = (dir: string, extra: { timeoutMs?: number; claude?: string[] } = {})
 
 describe('claudeArgs and claudeSettings', () => {
   it('pass the isolation flags from spike S1, exactly', () => {
-    expect(claudeArgs({ prompt: 'p', model: 'sonnet', tools: PROBE_TOOLS }, '/s/settings.json')).toEqual([
-      '-p', 'p', '--output-format', 'stream-json', '--verbose', '--settings', '/s/settings.json',
+    expect(claudeArgs({ model: 'sonnet', tools: PROBE_TOOLS }, '/s/settings.json')).toEqual([
+      '-p', '--output-format', 'stream-json', '--verbose', '--settings', '/s/settings.json',
       '--setting-sources', 'project', '--strict-mcp-config', '--tools', 'Read,Glob,Grep,Bash,PowerShell,Edit,Write,Skill',
       '--no-session-persistence', '--model', 'sonnet',
     ]);
-    expect(claudeArgs({ prompt: 'p', model: 'sonnet', tools: [] }, 's').slice(10, 12)).toEqual(['--tools', '']);
+    expect(claudeArgs({ model: 'sonnet', tools: [] }, 's').slice(9, 11)).toEqual(['--tools', '']);
   });
 
   it('hook loads, skills, and every tool that acts or reads, and exclude what is above the run folder', () => {
@@ -92,6 +92,19 @@ describe('runClaude', () => {
       { path: 'CLAUDE.md', reason: 'session_start' },
     ]);
     expect(existsSync(join(dir, 'x.txt'))).toBe(false);
+  });
+
+  it('sends the prompt on stdin, so a long one fits where a command line stops at 32,767 characters (Windows)', async () => {
+    const long = 'x'.repeat(40_000);
+    useScenario({ behaviours: [{ when: { promptContains: long }, calls: [{ tool: 'Bash', input: { command: 'saw the whole prompt' } }] }] });
+
+    const t = await runClaude({ dir: arm(), scratch: join(tempDir(), 'scratch'), prompt: `Draft probes. ${long}`, model: 'sonnet', claude: [FAKE] });
+
+    expect(t.error).toBeNull();
+    expect(t.commands).toEqual(['saw the whole prompt']);
+    const seen = JSON.parse(readFileSync(argvLog, 'utf8').trim()) as { argv: string[]; prompt: string };
+    expect(seen.argv.join(' ')).not.toContain('xxxx');
+    expect(seen.prompt).toBe(`Draft probes. ${long}`);
   });
 
   it('counts a read outside the copy', async () => {

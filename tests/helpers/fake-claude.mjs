@@ -7,9 +7,12 @@ import { join, resolve } from 'node:path';
 
 const argv = process.argv.slice(2);
 const cwd = process.cwd();
+const arg = (flag) => argv[argv.indexOf(flag) + 1];
+// Like Claude Code, -p without a prompt after it reads the prompt from stdin.
+const prompt = !argv.includes('-p') ? null : arg('-p') && !arg('-p').startsWith('--') ? arg('-p') : readFileSync(0, 'utf8');
 if (process.env.FAKE_CLAUDE_ARGV_LOG) {
   const defined = (name) => process.env[name] !== undefined;
-  const line = { argv, cwd, nonessential: defined('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'), apiKey: defined('ANTHROPIC_API_KEY'), oauthToken: defined('CLAUDE_CODE_OAUTH_TOKEN') };
+  const line = { argv, prompt, cwd, nonessential: defined('CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'), apiKey: defined('ANTHROPIC_API_KEY'), oauthToken: defined('CLAUDE_CODE_OAUTH_TOKEN') };
   appendFileSync(process.env.FAKE_CLAUDE_ARGV_LOG, `${JSON.stringify(line)}\n`);
 }
 
@@ -18,8 +21,6 @@ if (argv[0] === '--version') {
   process.stdout.write(`${scenario.version ?? '2.1.292'} (Claude Code)\n`);
   process.exit(0);
 }
-const arg = (flag) => argv[argv.indexOf(flag) + 1];
-const prompt = arg('-p');
 // Counts this scenario's runs, so a behaviour can apply to odd runs only and results can vary.
 let run = 0;
 if (scenario.counterFile) {
