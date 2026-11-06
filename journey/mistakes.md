@@ -237,3 +237,13 @@ Two lines in the Plan 2 docs described other tools from memory, and both were wr
 *Cost:* none; both were checked and corrected before the docs were pushed.
 
 *Changed:* nothing new; the rule already existed. Both slips were caught by applying it before pushing, not after.
+
+### A mutation run that ran no tests
+
+Checking the new no-agent-text test for the CLI, the mutation script reported the mutant as surviving. The test was fine. The script passed `-t 'no agent text'` to vitest through `cmd.exe`, which does not treat single quotes as quotes, so the name filter matched no test. vitest ran nothing, exited 0, and the "green baseline" and the "survivor" both meant nothing.
+
+*Cause:* treating exit 0 as "the tests passed", when it can also mean "no test ran".
+
+*Cost:* one debugging round. The earlier mutation runs passed only file paths, so their results stand.
+
+*Changed:* the mutation script now reads how many tests the baseline ran, and refuses to go on when it is 0.

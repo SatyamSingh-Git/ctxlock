@@ -44,7 +44,7 @@ The decisions they led to are D35–D37 in [journey/decisions.md](../../../journ
 - `M7` (re-graded important, not fixed): on macOS the temp folder is behind a `/var` → `/private/var` symlink, so the hook may deny every read and loads may not join. It fails closed; the fix needs a Mac to check it on.
 - `M8` (fixed): an `InstructionsLoaded` event without `file_path`, or a torn log line, threw; `readAll` left `git cat-file` blocked, and ctxlock unable to exit, if its callback threw; a `claudeVersion` time-out did not say so.
 - `M9` (fixed): with 4 or more runs, a probe the time budget cut short could be inconclusive yet gated, and fully cached probes after a time cut were reported as not run.
-- `M10`: the test that no agent text reaches the output covers `renderEval` only, not the CLI's stdout and stderr.
+- `M10` (fixed): the test that no agent text reaches the output covered `renderEval` only. A CLI test now checks stdout and stderr in every format, with `--keep-runs`, and when a run stops the check.
 
 As built, Task 2 sends the prompt on stdin, not as an argument (D45, found live in Task 9). The cache lasts for one pull request in the Action, not across pull requests (Task 8). Windows users with an npm install pass the package's `bin/claude.exe` to `--claude`; there is no `cli.js` (Task 8).
 

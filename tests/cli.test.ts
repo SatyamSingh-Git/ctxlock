@@ -167,6 +167,29 @@ describe('ctxlock eval', { timeout: 120_000 }, () => {
     expect(stdout).toMatch(/could not run: `Claude Code not found/);
   });
 
+  it('prints no agent text on stdout or stderr, in any format, even when a run stops the check', async () => {
+    const useScenario = (s: Record<string, unknown>) => {
+      const file = join(tempDir(), 'scenario.json');
+      writeFileSync(file, JSON.stringify(s));
+      process.env.FAKE_CLAUDE_SCENARIO = file;
+    };
+    useScenario({ behaviours: [{ calls: [{ tool: 'Bash', input: { command: 'echo CANARY-command' } }, { tool: 'Write', input: { file_path: 'CANARY-edit.txt', content: 'x' } }] }], text: 'CANARY-reply' });
+    const dir = await repo('Use npm.\n', 'Use pnpm.\n');
+
+    for (const format of ['text', 'json', 'markdown']) {
+      const r = await evalCli(dir, '--format', format, '--keep-runs', '--fail-on-regression');
+      expect(r.code, format).toBe(0);
+      expect(r.stdout + r.stderr, format).not.toMatch(/CANARY/);
+    }
+
+    useScenario({ touch: 'CANARY-touched.txt' });
+    for (const format of ['text', 'markdown']) {
+      const stopped = await evalCli(dir, '--format', format);
+      expect(stopped.code, format).toBe(2);
+      expect(stopped.stdout + stopped.stderr, format).not.toMatch(/CANARY/);
+    }
+  });
+
   it("caches in the user's own cache folder by default, not in the work folder, which may be a shared temp folder", async () => {
     const dir = await repo('Use npm.\n', 'Use pnpm.\n');
     const workdir = join(tempDir(), 'w');
