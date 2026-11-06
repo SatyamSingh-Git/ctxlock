@@ -1,7 +1,32 @@
 {
   "name": "ctxlock",
   "version": "0.0.0",
-  "description": "CI, a dependency graph and a feedback loop for AI agent context",
+  "description": "CI for AI agent context. Lints AGENTS.md, CLAUDE.md, skills and rules against what each agent actually loads, flags unsafe changes in pull requests, and checks Claude Code's behavior, base vs head.",
+  "keywords": [
+    "ai-agents",
+    "coding-agents",
+    "context-engineering",
+    "agents-md",
+    "claude-md",
+    "claude-code",
+    "codex",
+    "agent-skills",
+    "mcp",
+    "github-actions",
+    "continuous-integration",
+    "linter",
+    "llm-evaluation",
+    "ai-security"
+  ],
+  "author": "Satyam Singh",
+  "homepage": "https://github.com/SatyamSingh-Git/ctxlock#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SatyamSingh-Git/ctxlock.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SatyamSingh-Git/ctxlock/issues"
+  },
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
