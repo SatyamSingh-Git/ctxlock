@@ -55,7 +55,7 @@ const schema = z.strictObject({
     .default({ severity: {}, ignore: [] }),
 });
 
-function describe(issue: z.core.$ZodIssue): string {
+export function describeIssue(issue: z.core.$ZodIssue): string {
   const path = issue.path.map(String);
   if (issue.code === 'unrecognized_keys') {
     return issue.keys.map((key) => `${[...path, key].join('.')}: unknown key`).join('; ');
@@ -75,7 +75,7 @@ export async function loadRegistry(reader: RepoReader): Promise<Registry> {
     throw new RegistryError(`${FILE}: ${(err as Error).message}`);
   }
   const result = schema.safeParse(raw ?? {});
-  if (!result.success) throw new RegistryError(`${FILE}: ${result.error.issues.map(describe).join('; ')}`);
+  if (!result.success) throw new RegistryError(`${FILE}: ${result.error.issues.map(describeIssue).join('; ')}`);
 
   const { harnesses, limits, units, lint } = result.data;
   return {
