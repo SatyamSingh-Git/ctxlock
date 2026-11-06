@@ -6,7 +6,11 @@
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)
 ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-339933.svg)
 
-> **Status: pre-alpha.** The static checks work: `ctxlock scan`, `lint`, `budget` and `diff` run from source, and a GitHub Action posts the result on pull requests. `ctxlock eval`, the behavioral check, runs probes against Claude Code and has caught planted edits on three public repositories ([report](docs/dogfood/2026-11-06-behavioral.md)). Nothing is on npm yet, and there is no release tag. The dependency graph and the feedback loop are still being designed. Everything below that isn't marked as done is planned.
+> **Status: pre-alpha.** Two checks work, from source:
+> - **Static:** `ctxlock scan`, `lint`, `budget` and `diff`.
+> - **Behavioral:** `ctxlock eval` runs probes against Claude Code with the base and the head context, and `ctxlock probe draft` drafts them. On three public repositories it caught every planted edit ([report](docs/dogfood/2026-11-06-behavioral.md)).
+>
+> A GitHub Action posts both on pull requests, but it has not yet run on a live pull request. Nothing is on npm yet, and there is no release tag. `ctxlock build` is next; the dependency graph and the feedback loop are still being designed. Everything below that isn't marked as done is planned.
 
 ---
 
@@ -30,7 +34,7 @@ ctxlock adds the layer the open formats are missing. It does not replace them, a
 
 | | What you get | Built on the principle |
 |---|---|---|
-| **Context CI** | On every pull request that touches agent context: what each agent will actually load, where it breaks each tool's limits, which changes are unsafe, and (later) whether each agent's behavior changed | *Manage context like code* |
+| **Context CI** | On every pull request that touches agent context: what each agent will actually load, where it breaks each tool's limits, which changes are unsafe, and whether the agent still does what the context says (Claude Code today) | *Manage context like code* |
 | **Dependency graph** | Which repos and agents consume each skill or rule, at which version. Upstream changes arrive as reviewed pull requests, not silent drift. | *Manage context like code* |
 | **Agent-native checks** | An evidence-based linter for the shapes that work for agents: compact always-on indexes, small focused skills, nothing the agent can discover on its own | *Build context for agents, not humans* |
 | **Feedback loop** | Agent misses become owned, tested fixes that reach every consumer, with time-to-fix measured | *Treat context as a compounding asset* |
@@ -66,6 +70,22 @@ Execution-affecting changes:
 Resolved: 0
 ```
 
+### What a behavioral check looks like
+
+Real output from `ctxlock eval` for a pull request to [katanemo/plano](https://github.com/katanemo/plano) that changes its `CLAUDE.md` from `npm run typecheck` to `pnpm typecheck`. A probe asks the agent to typecheck the project and expects npm:
+
+```text
+ctxlock eval · Claude Code 2.1.292 · model claude-sonnet-5-5 · 3 runs per arm
+
+  typecheck-with-npm  instructions/CLAUDE.md  base 3/3  head 0/3  regressed
+
+Gated regressions: typecheck-with-npm
+
+Cost: 6 runs (0 cached) · 53s · $0.10 notional on a subscription · 7-day usage window 60% → 60%
+```
+
+Claude Code runs headless on a copy of each side, with every command and edit denied, so it only records what the agent tries. [Evals](the-guide/evals.md) covers probes, drafting, the gate and what is sent to Anthropic.
+
 ## Usage
 
 ### On pull requests
@@ -92,11 +112,28 @@ jobs:
 
 The check fails when the pull request introduces a **must** finding. That means something an agent would read wrongly or not at all, or something that hides text from reviewers (hidden Unicode, a hidden HTML comment, a skill whose frontmatter agents can't load), or any new or changed hook, MCP server, environment variable or auto-approval in agent config or in a skill's frontmatter. A `must` finding that was already on the base branch is reported but does not fail the check. The pull request is judged with the base branch's `ctxlock.yaml`, so it cannot switch off the checks that judge it.
 
+To add the behavioral check, pass a Claude credential from a secret:
+
+```yaml
+      - uses: SatyamSingh-Git/ctxlock@main
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+```
+
+Probes run only when the pull request changes a unit a probe names, so most pull requests start no run. The result is advisory unless `fail-on-regression` is set.
+
 | Input | Default | Meaning |
 |---|---|---|
 | `base` | the pull request's base commit | The ref to compare against |
 | `fail-on-must` | `'true'` | Set `'false'` to report without failing |
 | `comment` | `'true'` | Post the result as one pull request comment, updated on each push. Pull requests from forks get a read-only token, so there the result is in the job summary only |
+| `claude_code_oauth_token` | none | A token from `claude setup-token`. Turns on the behavioral check |
+| `anthropic_api_key` | none | An Anthropic API key, used instead of the token when both are set |
+| `eval` | `auto` | `false` never runs the behavioral check, even with a credential |
+| `fail-on-regression` | `'false'` | `'true'` fails the check when a probe passed every base run and no head run |
+| `claude-code-version` | `2.1.292` | The Claude Code version the behavioral check installs |
+
+[The Action's page](the-guide/github-action.md) covers credentials, cost and the cache.
 
 ### Locally
 
@@ -105,6 +142,10 @@ git clone https://github.com/SatyamSingh-Git/ctxlock.git
 cd ctxlock && npm ci && npm run build
 node dist/cli.js lint /path/to/your/repo
 node dist/cli.js diff --base origin/main /path/to/your/repo
+
+# The behavioral check needs Claude Code, logged in
+node dist/cli.js eval --base origin/main /path/to/your/repo
+node dist/cli.js probe draft --unit instructions/AGENTS.md /path/to/your/repo
 ```
 
 [The guide](the-guide/commands.md) covers every command, flag and exit code, and [rules.md](the-guide/rules.md) covers every rule.
@@ -140,7 +181,7 @@ flowchart LR
 - [x] **Design.** Goals, architecture and phases ([design](docs/superpowers/specs/2026-11-05-ctxlock-design.md)).
 - [x] **Implementation plan** for the static core ([plan](docs/superpowers/plans/2026-11-05-ctxlock-static-core-and-spikes.md)).
 - [ ] **Static core** *(nearly done)*: `ctxlock scan`, `lint`, `budget` and `diff` are built, with 20 checks (L0–L11 and L13) and the GitHub Action, and have had a [first pass over four public repositories](docs/dogfood/2026-11-06-static.md). Running the Action on a live pull request comes next.
-- [ ] **Behavioral CI** *(built and checked live; the Action's first live pull request is next)*: adherence and trigger probes, paired base-vs-head runs through `claude -p` with nothing the agent tries executed, and a behavioral section in the Action ([plan](docs/superpowers/plans/2026-11-06-ctxlock-behavioral-ci.md), [guide](the-guide/evals.md)). On three public repositories it caught every planted change to an instruction or a skill description, and every revert cleared it ([report](docs/dogfood/2026-11-06-behavioral.md)). It stands on four spikes: a [run harness](docs/spikes/S1-eval-runner.md), [rulesync](docs/spikes/S2-rulesync.md) as a generation backend, a [reproduced adherence effect](docs/spikes/S3-reproduction.md), and [load events joined to units](docs/spikes/S4-telemetry.md).
+- [ ] **Behavioral CI** *(built, reviewed and checked live; the Action's first live pull request is next)*: adherence and trigger probes, paired base-vs-head runs through `claude -p` with nothing the agent tries executed, and a behavioral section in the Action ([plan](docs/superpowers/plans/2026-11-06-ctxlock-behavioral-ci.md), [guide](the-guide/evals.md)). On three public repositories it caught every planted change to an instruction or a skill description, and every revert cleared it ([report](docs/dogfood/2026-11-06-behavioral.md)). It stands on four spikes: a [run harness](docs/spikes/S1-eval-runner.md), [rulesync](docs/spikes/S2-rulesync.md) as a generation backend, a [reproduced adherence effect](docs/spikes/S3-reproduction.md), and [load events joined to units](docs/spikes/S4-telemetry.md).
 - [ ] **`ctxlock build`:** a report of each agent's effective context, and `--fill-missing` through rulesync. Plan 3.
 - [ ] **Dependency graph and propagation:** `who-uses`, blast radius, and update pull requests into dependent repos.
 - [ ] **Feedback loop:** agent misses routed to the owner, fixed, validated by replay, and tracked for durability.
@@ -156,7 +197,7 @@ flowchart LR
 - **No new format.** AGENTS.md, Agent Skills and MCP have won. ctxlock reads them as they are.
 - **Evidence over intuition.** Every lint rule cites the research it comes from. Every behavioral claim is reported with its variance and cost.
 - **Never auto-generate context, never auto-merge it.** The research shows generated context hurts. Fixes are proposals that pass evals and get owner approval.
-- **Safe by default.** Hidden characters and execution-affecting config such as hooks, base URLs and auto-approve settings are flagged. Nothing in the scanned repo is ever executed.
+- **Safe by default.** Hidden characters and execution-affecting config such as hooks, base URLs and auto-approve settings are flagged. Nothing in the scanned repo is ever executed: `ctxlock eval` runs the agent on a copy with the repository's hooks and settings removed, and denies every command and edit it tries.
 - **Build on others' work.** ctxlock depends on and credits existing open-source projects rather than rebuilding them.
 
 ## Built on
@@ -166,12 +207,15 @@ ctxlock stands on open standards and open-source projects, including:
   - [AGENTS.md](https://agents.md)
   - [Agent Skills](https://agentskills.io)
   - [Model Context Protocol](https://modelcontextprotocol.io)
-- **Tools we use or interoperate with:**
-  - [rulesync](https://github.com/dyoshikawa/rulesync)
-  - [agnix](https://github.com/agent-sh/agnix)
-  - [promptfoo](https://github.com/promptfoo/promptfoo)
-  - [Microsoft APM](https://github.com/microsoft/apm)
-  - [OpenTelemetry GenAI conventions](https://github.com/open-telemetry/semantic-conventions-genai)
+- **Code and tests we reuse:**
+  - the [Agent Skills reference validator](https://github.com/agentskills/agentskills/tree/main/skills-ref), ported for the skill frontmatter checks (Apache-2.0);
+  - [Codex](https://github.com/openai/codex)'s own `AGENTS.md` loader tests, ported to check ctxlock's Codex predictions (Apache-2.0);
+  - [agnix](https://github.com/agent-sh/agnix), run on request with `--agnix`.
+- **Planned:** [rulesync](https://github.com/dyoshikawa/rulesync) as the generation backend for `ctxlock build --fill-missing` ([spike S2](docs/spikes/S2-rulesync.md)).
+- **Studied, not used:**
+  - [promptfoo](https://github.com/promptfoo/promptfoo): `eval` got its own runner instead ([D35](journey/decisions.md));
+  - [Microsoft APM](https://github.com/microsoft/apm);
+  - [OpenTelemetry GenAI conventions](https://github.com/open-telemetry/semantic-conventions-genai).
 - **Research and benchmarks:**
   - [SkillsBench](https://github.com/benchflow-ai/skillsbench)
   - [eth-sri/agentbench](https://github.com/eth-sri/agentbench)
