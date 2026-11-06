@@ -92,13 +92,13 @@ function listing(top: string, files: string[], links: Map<string, string | null>
   return { top, files, fileSet: new Set(files), links };
 }
 
-async function listGitWorkTree(root: string): Promise<Listing> {
+async function listGitWorkTree(root: string, local: boolean): Promise<Listing> {
   const [staged, untracked, deletedOut, localOut] = await Promise.all([
     git(root, ['ls-files', '-z', '-s', '-t']),
     git(root, ['ls-files', '-z', '--others', '--exclude-standard']),
     git(root, ['ls-files', '-z', '--deleted']),
     // CLAUDE.local.md and .claude/settings.local.json are usually gitignored, yet Claude Code still uses them on this machine.
-    git(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', ':(glob)**/CLAUDE.local.md', '.claude/settings.local.json']),
+    local ? git(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--', ':(glob)**/CLAUDE.local.md', '.claude/settings.local.json']) : '',
   ]);
   const deleted = new Set(nulSplit(deletedOut));
   const files = new Set<string>();
@@ -144,9 +144,11 @@ async function walk(root: string): Promise<Listing> {
   return listing(root, files, links);
 }
 
-export function fsReader(root: string): RepoReader {
+// `local: false` leaves out the gitignored files only this machine has, for a working tree that
+// stands in for a commit.
+export function fsReader(root: string, { local = true } = {}): RepoReader {
   let cached: Promise<Listing> | undefined;
-  const list = () => (cached ??= gitTopLevel(root).then((top) => (top ? listGitWorkTree(top) : walk(root))));
+  const list = () => (cached ??= gitTopLevel(root).then((top) => (top ? listGitWorkTree(top, local) : walk(root))));
 
   return {
     root,

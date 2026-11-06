@@ -143,7 +143,8 @@ const treeOf = async (root: string, ref: string) => (await exec('git', ['-C', ro
 export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   const now = opts.now ?? Date.now;
   const started = now();
-  const readers = { base: await gitReader(opts.root, opts.base), head: opts.head ? await gitReader(opts.root, opts.head) : fsReader(opts.root) };
+  // A working-tree head leaves out the gitignored CLAUDE.local.md, which the base can never have.
+  const readers = { base: await gitReader(opts.root, opts.base), head: opts.head ? await gitReader(opts.root, opts.head) : fsReader(opts.root, { local: false }) };
   const base = await scanRepo(readers.base);
   // The head is judged with the base's settings, as diff does (D30).
   const head = await scanRepo(readers.head, { settings: base.registry });

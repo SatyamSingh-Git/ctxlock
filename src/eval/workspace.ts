@@ -17,7 +17,9 @@ export interface Materialized {
 const EXEC_FILES = /(^|\/)\.claude\/settings(\.local)?\.json$|^\.mcp\.json$/i;
 const CLAUDE_MARKDOWN = /(^|\/)\.claude\/.*\.md$/i;
 // Frontmatter keys that run something: a skill's own hooks, and the tools it may use without asking.
-const RUN_KEYS = ['allowed-tools', 'hooks'];
+// << is a YAML merge key, which ctxlock's parser keeps as a key, but a parser that merges could
+// bring either one in through it.
+const RUN_KEYS = ['allowed-tools', 'hooks', '<<'];
 const FRONTMATTER = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
 // Git paths use /, but on Windows a backslash in one is a separator too, so a tree entry such as
@@ -73,9 +75,10 @@ export async function materialize(reader: RepoReader, dir: string): Promise<Mate
     } else if (CLAUDE_MARKDOWN.test(path)) {
       const text = readFileSync(join(dir, path), 'utf8');
       const { frontmatter, body, error } = splitFrontmatter(text);
-      // Frontmatter ctxlock cannot parse might still parse for Claude Code, so such a line drops all of it.
+      // Frontmatter ctxlock cannot parse might still parse for Claude Code, so naming such a key
+      // anywhere in it, quoted or not, drops all of it.
       const raw = error === null ? '' : (FRONTMATTER.exec(text)?.[1] ?? '');
-      const found = frontmatter ? RUN_KEYS.filter((k) => k in frontmatter) : RUN_KEYS.filter((k) => new RegExp(`^${k}\\s*:`, 'm').test(raw));
+      const found = frontmatter ? RUN_KEYS.filter((k) => k in frontmatter) : RUN_KEYS.filter((k) => raw.includes(k));
       if (found.length > 0) {
         const rest = frontmatter && Object.fromEntries(Object.entries(frontmatter).filter(([k]) => !RUN_KEYS.includes(k)));
         writeFileSync(join(dir, path), rest ? `---\n${stringify(rest)}---\n${body}` : body);

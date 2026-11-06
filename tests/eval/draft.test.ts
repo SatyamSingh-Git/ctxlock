@@ -103,6 +103,18 @@ describe('draftProbes', { timeout: 120_000 }, () => {
     expect(existsSync(join(root, 'evals/probes/agents-md.yaml'))).toBe(false);
   });
 
+  it('drafts without the gitignored CLAUDE.local.md, which CI never has', async () => {
+    scenario(CANDIDATES, {}, [
+      { when: { file: 'AGENTS.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+      { when: { file: 'CLAUDE.local.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+      { calls: [{ tool: 'Bash', input: { command: 'npm install zod' } }] },
+    ]);
+    const root = await repo({ '.gitignore': 'CLAUDE.local.md\n', 'AGENTS.md': 'Use pnpm for every package command.\n' });
+    writeTree(root, { 'CLAUDE.local.md': 'I like pnpm.\n' });
+
+    expect((await draftProbes(options(root))).kept).toEqual(['deps-use-pnpm']);
+  });
+
   it('stops when a validation run changes the copy, without naming what it wrote', async () => {
     scenario(CANDIDATES, { touch: 'CANARY-NAME.txt' });
     const root = await repo();

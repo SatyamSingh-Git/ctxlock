@@ -66,6 +66,29 @@ describe('the run-scoped hook', () => {
     }
   });
 
+  it('reads every alternative in a brace glob, so none can reach outside', () => {
+    for (const payload of [
+      { tool_name: 'Glob', tool_input: { pattern: '{..,x}/*' } },
+      { tool_name: 'Glob', tool_input: { pattern: '{src,/etc}/**' } },
+      { tool_name: 'Glob', tool_input: { pattern: '{x,~/.ssh}/*' } },
+      { tool_name: 'Glob', tool_input: { pattern: '{x,C:/Users}/**' } },
+      { tool_name: 'Grep', tool_input: { pattern: 'x', glob: 'a/{b,../..}/*' } },
+      // Braces ctxlock cannot read, and more than 64 alternatives, are refused.
+      { tool_name: 'Glob', tool_input: { pattern: 'src/{a,b' } },
+      { tool_name: 'Glob', tool_input: { pattern: `${'{a,b}'.repeat(7)}/*` } },
+    ]) {
+      expect(decision(hook('PreToolUse', payload).stdout).permissionDecisionReason, JSON.stringify(payload)).toMatch(/outside the run folder/);
+    }
+    for (const payload of [
+      { tool_name: 'Glob', tool_input: { pattern: 'src/{a,b}/*.ts' } },
+      { tool_name: 'Grep', tool_input: { pattern: 'x', glob: '**/*.{ts,md}' } },
+      { tool_name: 'Glob', tool_input: { pattern: `${'{a,b}'.repeat(6)}/*` } },
+      { tool_name: 'Glob', tool_input: { pattern: 'src/{a,{b,c}}/*' } },
+    ]) {
+      expect(hook('PreToolUse', payload).stdout, JSON.stringify(payload)).toBe('');
+    }
+  });
+
   it('treats a path, pattern or glob that starts at the home folder as outside', () => {
     for (const payload of [
       { tool_name: 'Read', tool_input: { file_path: '~/.ssh/id_rsa' } },

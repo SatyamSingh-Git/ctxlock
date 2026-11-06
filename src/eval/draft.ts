@@ -92,7 +92,8 @@ function candidates(text: string, unit: string): Candidate[] {
 }
 
 export async function draftProbes(opts: DraftOptions): Promise<DraftResult> {
-  const reader = fsReader(opts.root);
+  // Without the gitignored CLAUDE.local.md: the probes it keeps will run in CI, which never has it.
+  const reader = fsReader(opts.root, { local: false });
   const scan = await scanRepo(reader);
   const unit = scan.units.find((u) => u.id === opts.unit);
   if (!unit) throw new DraftError(`no unit ${opts.unit} in ${opts.root}; ctxlock scan lists the units`);

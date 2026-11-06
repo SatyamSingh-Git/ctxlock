@@ -25,9 +25,35 @@ try {
     const rel = relative(fold(resolve(root)), fold(resolve(payload.cwd ?? root, path)));
     return rel === '' || (rel !== '..' && !rel.startsWith('..' + sep) && !isAbsolute(rel));
   };
+  // Glob expands {a,b}, so each alternative is checked. Unbalanced braces, or more than 64
+  // alternatives, give null and count as climbing.
+  const expand = (glob) => {
+    const open = glob.indexOf('{');
+    if (open < 0) return [glob];
+    let depth = 0;
+    let start = open + 1;
+    const parts = [];
+    for (let i = open; i < glob.length; i++) {
+      if (glob[i] === '{') depth++;
+      else if (glob[i] === ',' && depth === 1) {
+        parts.push(glob.slice(start, i));
+        start = i + 1;
+      } else if (glob[i] === '}' && --depth === 0) {
+        parts.push(glob.slice(start, i));
+        const out = [];
+        for (const p of parts) {
+          const more = expand(glob.slice(0, open) + p + glob.slice(i + 1));
+          if (more === null || out.push(...more) > 64) return null;
+        }
+        return out;
+      }
+    }
+    return null;
+  };
   // A glob that starts at an absolute path or the home folder, or climbs out with .., reaches past
   // the folder it is given.
-  const climbs = (glob) => typeof glob === 'string' && (isAbsolute(glob) || /^[A-Za-z]:/.test(glob) || home(glob) || glob.split(/[\\/]/).includes('..'));
+  const reaches = (glob) => isAbsolute(glob) || /^[A-Za-z]:/.test(glob) || home(glob) || glob.split(/[\\/]/).includes('..');
+  const climbs = (glob) => typeof glob === 'string' && (expand(glob)?.some(reaches) ?? true);
 
   if (event !== 'PreToolUse') {
     record({});

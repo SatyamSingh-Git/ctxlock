@@ -98,6 +98,32 @@ describe('materialize', () => {
     expect(result.stripped).toEqual(['.claude/commands/c.md (hooks)']);
     expect(readFileSync(join(out, '.claude/commands/c.md'), 'utf8')).toBe('body\n');
   });
+
+  it('drops frontmatter it cannot parse that names a key that runs something anywhere, quoted or not', async () => {
+    const { dir, shas } = await gitRepo([{
+      '.claude/commands/quoted.md': '---\n"hooks": [unclosed\n---\nbody\n',
+      '.claude/commands/flow.md': '---\n{ allowed-tools: Bash, description: [unclosed }\n---\nbody\n',
+      '.claude/commands/merge.md': '---\n<<: *base\ndescription: [unclosed\n---\nbody\n',
+      '.claude/commands/plain.md': '---\ndescription: [unclosed\n---\nbody\n',
+    }]);
+    const out = join(tempDir(), 'arm');
+
+    const result = await materialize(await gitReader(dir, shas[0]!), out);
+
+    expect(result.stripped).toEqual(['.claude/commands/flow.md (allowed-tools)', '.claude/commands/merge.md (<<)', '.claude/commands/quoted.md (hooks)']);
+    for (const f of ['quoted', 'flow', 'merge']) expect(readFileSync(join(out, `.claude/commands/${f}.md`), 'utf8')).toBe('body\n');
+    expect(readFileSync(join(out, '.claude/commands/plain.md'), 'utf8')).toBe('---\ndescription: [unclosed\n---\nbody\n');
+  });
+
+  it('removes a YAML merge key, which a parser that merges could use to bring in hooks', async () => {
+    const { dir, shas } = await gitRepo([{ '.claude/skills/s/SKILL.md': '---\nname: s\ndescription: d\n<<: { hooks: { PreToolUse: [] } }\n---\nbody\n' }]);
+    const out = join(tempDir(), 'arm');
+
+    const result = await materialize(await gitReader(dir, shas[0]!), out);
+
+    expect(result.stripped).toEqual(['.claude/skills/s/SKILL.md (<<)']);
+    expect(readFileSync(join(out, '.claude/skills/s/SKILL.md'), 'utf8')).toBe('---\nname: s\ndescription: d\n---\nbody\n');
+  });
 });
 
 describe('snapshot and changedSince', () => {

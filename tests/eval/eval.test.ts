@@ -274,6 +274,16 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect((await runEval(options(root, { workdir: join(parent, 'work') }))).outcomes).toHaveLength(1);
   });
 
+  it('leaves a gitignored CLAUDE.local.md out of a working-tree head, as the base never has it', async () => {
+    const root = await repo({ '.gitignore': 'CLAUDE.local.md\n', 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'CLAUDE.local.md': 'Use pnpm.\n' });
+    scenario({ behaviours: [{ when: { file: 'CLAUDE.local.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] }, { calls: [] }] });
+
+    const r = await runEval(options(root, { all: true }));
+
+    expect(r.changedUnits).toEqual([]);
+    expect(r.outcomes[0]).toMatchObject({ status: 'unchanged', head: { passed: 0 } });
+  });
+
   it('stops when a tool call got past the run hook', async () => {
     scenario({ behaviours: [{ calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' }, unhooked: true }] }] });
     const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
