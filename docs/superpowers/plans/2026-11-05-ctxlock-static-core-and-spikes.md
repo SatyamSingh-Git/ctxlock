@@ -31,7 +31,8 @@
 | Batch-3 review (Tasks 11–14) | Done; fixes in, not pushed | `293499d` |
 | S2 | Done: [memo](../../spikes/S2-rulesync.md) | `docs: spike S2, rulesync as the compile backend` |
 | S1 | Done: [memo](../../spikes/S1-eval-runner.md); 21 of 150 runs used | `docs: spike S1, the eval runner` |
-| S3, S4 | Not started | |
+| S3 | Done: [memo](../../spikes/S3-reproduction.md); 96 of 150 runs used in all | `docs: spike S3, reproducing two published effects` |
+| S4 | Not started | |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in three places: there is no tinyglobby (D17); jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7); and markdown-it 15 (MIT) finds code blocks the way CommonMark does, after the batch-2 review found two ways past a hand-written fence scanner.
 
@@ -906,18 +907,18 @@ The spikes are throwaway (code goes in `spikes/`, excluded from the package). Th
 
 Both need neither Docker nor real builds, and both use the S1 harness.
 
-- [ ] **Step 1: Adherence effect** (ETH Zurich, research/03 §1: a tool named in the context file gets used about 1.6 times per task, vs under 0.01 when not named).
+- [x] **Step 1: Adherence effect** (ETH Zurich, research/03 §1: a tool named in the context file gets used about 1.6 times per task, vs under 0.01 when not named).
   - Use 5 tasks where a named tool changes the right command, e.g. `uv` vs `pip`, or `pnpm` vs `npm`.
   - Two arms: an AGENTS.md that names the tool, and one that doesn't. 3 runs each.
   - Grade the intended commands that observe-and-deny captured.
-- [ ] **Step 2: Index vs skill** (Vercel, research/03 §1: an index in AGENTS.md scored 100%, vs 53% when the docs sat behind a skill).
+- [x] **Step 2: Index vs skill** (Vercel, research/03 §1: an index in AGENTS.md scored 100%, vs 53% when the docs sat behind a skill).
   - Use 5 questions whose answers exist only in a docs folder in the repo. Check the answers with a regex.
   - Three arms:
     - (i) the docs behind a `.claude/skills/<x>/SKILL.md` that points at them;
     - (ii) a compact pipe-delimited index in CLAUDE.md that points at the same files;
     - (iii) no pointer.
   - 3 runs each. Record the skill-invocation rate and the units loaded.
-- [ ] **Step 3: Write the memo `docs/spikes/S3-reproduction.md`.** Cover:
+- [x] **Step 3: Write the memo `docs/spikes/S3-reproduction.md`.** Cover:
   - whether each *direction* reproduced on current Claude models;
   - rates with spread;
   - usage spent;
