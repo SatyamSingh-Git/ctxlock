@@ -75,12 +75,12 @@ The hooks run asynchronously, so the events arrive in no fixed order.
   - In all 30 of S3's adherence runs, which had no `CLAUDE.md`, the head arm followed its `AGENTS.md` every time. Yet `InstructionsLoaded` never fired, and the stream did not mention `AGENTS.md` at all.
   - The plugin reports the load only to its own analytics (`agents_md_load`).
   - A collector built on hooks will therefore see nothing in exactly the repositories that use only `AGENTS.md`. Plan 2 needs another signal: either the agent's first `Read` of the file, or a `SessionStart` hook that records what the plugin would choose, using ctxlock's own prediction.
-- **Each developer can change how `AGENTS.md` loads.** The plugin has an `instructionFiles` option, stored under `pluginConfigs` in the user's own settings, not the project's:
+- **Each developer, or their organisation, can change how `AGENTS.md` loads.** The plugin has an `instructionFiles` option under `pluginConfigs`. Claude Code reads plugin options only from the user's settings, a `--settings` file and the organisation's managed settings (`userSettings`, `flagSettings`, `policySettings` in the binary), never from a project's `.claude/settings.json`:
   - `claude-md`: CLAUDE.md only;
   - `claude-md-or-agents-md`: the default;
   - `claude-md-and-agents-md`: AGENTS.md beside CLAUDE.md, without loading an imported file twice;
   - `managed-only`.
 
-  A repository can't see or set this, so ctxlock predicts the default. For a developer who chose `claude-md-and-agents-md`, `L13` doesn't apply. That belongs in the guide's agents page.
+  A repository can't see or set this, so ctxlock predicts the default. For a developer, or a whole organisation through managed settings, on `claude-md-and-agents-md`, `L13` doesn't apply. The guide's agents page now says so.
 - **Symlinked files were not tested.** Whether `file_path` reports the link or its target decides whether the join uses aliases. ctxlock already maps both.
 - **Codex** was not observed, by design. It has no hooks of this kind on this machine. Its prediction is checked by the ported loader tests from Task 5.
