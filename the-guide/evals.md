@@ -2,7 +2,7 @@
 
 A lint can tell you a file is too long or hides a comment. It cannot tell you whether the agent still runs `pnpm add` after someone rewrote the testing section. `ctxlock eval` answers that: it runs small **probes** against Claude Code, once with the base branch's context and once with the pull request's, and reports what changed.
 
-> **Status:** implemented and tested against a stand-in for Claude Code that runs ctxlock's real hooks. Results are advisory unless you ask for a gate.
+> **Status:** implemented, tested against a stand-in for Claude Code that runs ctxlock's real hooks, and checked live with Claude Code 2.1.292 on three public repositories ([the report](../docs/dogfood/2026-11-06-behavioral.md)). Results are advisory unless you ask for a gate.
 
 ## A probe
 
@@ -111,13 +111,19 @@ A probe runs only when the unit it names changed between the two refs; `--all` r
 
 ## Reading the result
 
+This is real output, from a pull request to [katanemo/plano](https://github.com/katanemo/plano) that changes its `CLAUDE.md` from `npm run typecheck` to `pnpm typecheck`, checked with a probe that expects npm:
+
 ```
 ctxlock eval · Claude Code 2.1.292 · model claude-sonnet-5-5 · 3 runs per arm
 
-  deps-use-pnpm  instructions/AGENTS.md  base 0/3  head 3/3  improved
+  typecheck-with-npm  instructions/CLAUDE.md  base 3/3  head 0/3  regressed
 
-Cost: 6 runs (0 cached) · 41s · $0.18 notional on a subscription · 7-day usage window 57% → 57%
+Gated regressions: typecheck-with-npm
+
+Cost: 6 runs (0 cached) · 53s · $0.10 notional on a subscription · 7-day usage window 60% → 60%
 ```
+
+The agent followed the changed line in every head run, even though the repository's `package-lock.json` still says npm. The markdown version, which the Action posts, adds the intervals, whether the agent loaded the changed file (`instructions/CLAUDE.md` loaded in 3/3 head runs), and the input tokens per run (25,212 → 25,273).
 
 | Status | Meaning |
 |---|---|

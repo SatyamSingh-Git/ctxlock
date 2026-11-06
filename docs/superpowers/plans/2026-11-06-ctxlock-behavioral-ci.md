@@ -23,7 +23,17 @@ The decisions they led to are D35–D37 in [journey/decisions.md](../../../journ
 
 | Task | Status | Commits |
 |---|---|---|
-| 1–9 | Not started | |
+| 1 | Done | `5914d50` |
+| 2 | Done | `275f2dd` |
+| 3 | Done | `1221634` |
+| 4 | Done | `f138ccb` |
+| 5 | Done | `8ae5098` |
+| 6 | Done | `6ceddfc` |
+| 7 | Done | `0d64289` |
+| 8 | Done; not yet run on a live pull request | `c626853` |
+| 9 | Done: isolation, and exit items (a) and (b), live in 73 runs ([report](../../dogfood/2026-11-06-behavioral.md)); one bug fixed | `f6f7376` and the docs commit |
+
+As built, Task 2 sends the prompt on stdin, not as an argument (D45, found live in Task 9). The cache lasts for one pull request in the Action, not across pull requests (Task 8). Windows users with an npm install pass the package's `bin/claude.exe` to `--claude`; there is no `cli.js` (Task 8).
 
 **Scope:**
 - **In this plan:**

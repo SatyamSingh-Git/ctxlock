@@ -6,7 +6,7 @@
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)
 ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-339933.svg)
 
-> **Status: pre-alpha.** The static checks work: `ctxlock scan`, `lint`, `budget` and `diff` run from source, and a GitHub Action posts the result on pull requests. `ctxlock eval`, the behavioral check, is built and tested against a stand-in for Claude Code; its first live runs are next. Nothing is on npm yet, and there is no release tag. The dependency graph and the feedback loop are still being designed. Everything below that isn't marked as done is planned.
+> **Status: pre-alpha.** The static checks work: `ctxlock scan`, `lint`, `budget` and `diff` run from source, and a GitHub Action posts the result on pull requests. `ctxlock eval`, the behavioral check, runs probes against Claude Code and has caught planted edits on three public repositories ([report](docs/dogfood/2026-11-06-behavioral.md)). Nothing is on npm yet, and there is no release tag. The dependency graph and the feedback loop are still being designed. Everything below that isn't marked as done is planned.
 
 ---
 
@@ -130,7 +130,7 @@ flowchart LR
 
 | Agent | Predicted loading | Observed at runtime | Behavioral evals |
 |---|---|---|---|
-| Claude Code | Done | Collected inside each probe run, and checked by hand against real sessions ([spike S4](docs/spikes/S4-telemetry.md)) | `ctxlock eval` and `ctxlock probe draft` ([evals](the-guide/evals.md)); live check next |
+| Claude Code | Done | Collected inside each probe run, and checked by hand against real sessions ([spike S4](docs/spikes/S4-telemetry.md)) | `ctxlock eval` and `ctxlock probe draft` ([evals](the-guide/evals.md)), checked live ([report](docs/dogfood/2026-11-06-behavioral.md)) |
 | Codex | Done, checked by Codex's own loader tests | Not yet: contributors with Codex access welcome | Not yet |
 | Copilot CLI, Cursor, Gemini/Antigravity, others | Later | Later | Later |
 
@@ -140,7 +140,7 @@ flowchart LR
 - [x] **Design.** Goals, architecture and phases ([design](docs/superpowers/specs/2026-11-05-ctxlock-design.md)).
 - [x] **Implementation plan** for the static core ([plan](docs/superpowers/plans/2026-11-05-ctxlock-static-core-and-spikes.md)).
 - [ ] **Static core** *(nearly done)*: `ctxlock scan`, `lint`, `budget` and `diff` are built, with 20 checks (L0–L11 and L13) and the GitHub Action, and have had a [first pass over four public repositories](docs/dogfood/2026-11-06-static.md). Running the Action on a live pull request comes next.
-- [ ] **Behavioral CI** *(built; live check next)*: adherence and trigger probes, paired base-vs-head runs through `claude -p` with nothing the agent tries executed, and a behavioral section in the Action ([plan](docs/superpowers/plans/2026-11-06-ctxlock-behavioral-ci.md), [guide](the-guide/evals.md)). It stands on four spikes: a [run harness](docs/spikes/S1-eval-runner.md), [rulesync](docs/spikes/S2-rulesync.md) as a generation backend, a [reproduced adherence effect](docs/spikes/S3-reproduction.md), and [load events joined to units](docs/spikes/S4-telemetry.md).
+- [ ] **Behavioral CI** *(built and checked live; the Action's first live pull request is next)*: adherence and trigger probes, paired base-vs-head runs through `claude -p` with nothing the agent tries executed, and a behavioral section in the Action ([plan](docs/superpowers/plans/2026-11-06-ctxlock-behavioral-ci.md), [guide](the-guide/evals.md)). On three public repositories it caught every planted change to an instruction or a skill description, and every revert cleared it ([report](docs/dogfood/2026-11-06-behavioral.md)). It stands on four spikes: a [run harness](docs/spikes/S1-eval-runner.md), [rulesync](docs/spikes/S2-rulesync.md) as a generation backend, a [reproduced adherence effect](docs/spikes/S3-reproduction.md), and [load events joined to units](docs/spikes/S4-telemetry.md).
 - [ ] **`ctxlock build`:** a report of each agent's effective context, and `--fill-missing` through rulesync. Plan 3.
 - [ ] **Dependency graph and propagation:** `who-uses`, blast radius, and update pull requests into dependent repos.
 - [ ] **Feedback loop:** agent misses routed to the owner, fixed, validated by replay, and tracked for durability.

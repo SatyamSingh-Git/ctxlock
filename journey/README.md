@@ -2,7 +2,12 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [08 — the spikes: watching the agent without letting it act](08-spikes.md).
+**Latest:** [09 — behavioral CI: the agent runs, nothing it tries does](09-behavioral-ci.md).
+- Plan 2: `ctxlock eval`, `ctxlock probe draft`, and a behavioral section in the Action, built test-first against a stand-in for Claude Code; 354 tests.
+- Checked live in 73 runs: isolation held against a fixture built to break it, and every planted change to an instruction or a skill description on three public repositories was caught and cleared by its revert.
+- Found live: a drafting prompt too long for a Windows command line, and that real context files mostly repeat the repository (1 of 9 drafted probes kept).
+
+**Earlier:** [08 — the spikes: watching the agent without letting it act](08-spikes.md).
 - Spikes S1, S3 and S4, on 99 headless Claude Code runs. Nothing the agent tried ran, and the weekly usage window moved two points.
 - A tool named in `AGENTS.md` was used 15 of 15 times, unnamed 0 of 12; an index did not beat a skill in a small repository, but the skill took twice the turns.
 - Every load Claude Code reported matched ctxlock's prediction, except one it never reports: an `AGENTS.md` read through its fallback.

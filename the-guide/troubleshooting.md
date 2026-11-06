@@ -85,3 +85,19 @@ The job summary shows the reason. The usual ones:
 ## `agnix:unavailable`
 
 `--agnix` runs [agnix](https://github.com/agent-sh/agnix) through `npx`, which needs network access the first time. If `npx` cannot run it, ctxlock reports one `agnix:unavailable` info finding and carries on with its own checks.
+
+## `Claude Code not found`
+
+`ctxlock eval` and `ctxlock probe draft` start `claude` from your `PATH`. Install Claude Code, or pass its executable with `--claude <path>`. On Windows, an npm install puts only a `claude.cmd` wrapper on the `PATH`, which ctxlock cannot start without a shell; pass `"$(npm root -g)/@anthropic-ai/claude-code/bin/claude.exe"` instead. The native installer's `claude.exe` works as is.
+
+## `... is above the run folder and would load into every run`
+
+Claude Code loads instructions from every folder above the one it starts in. ctxlock excludes `CLAUDE.md`, `CLAUDE.local.md` and `.claude/rules` above its run folders, but it cannot exclude an `AGENTS.md` or a `.claude/skills` folder, so it refuses to run below one. Pass `--workdir` with a folder that has none above it. On Windows the system temp folder is under your home folder, which matters only if you keep an `AGENTS.md` there; your own `~/.claude/skills` is fine.
+
+## A probe is `inconclusive`
+
+An arm needs at least 2 runs that finished. Each run that failed is listed under **Errors** with Claude Code's reason: often an expired token (`claude setup-token` makes a new one), a usage limit, or a time-out. With `--runs 1` every probe is inconclusive; use it only to look at one run with `--keep-runs`.
+
+## `probe draft` keeps nothing
+
+Each candidate must pass every run with the unit, and, for an instruction, no run without it. On the repositories ctxlock was tried on, most candidates failed the second test: the repository already told the agent the same command, through a lockfile, a `package.json` script or a skill. That is a finding about the file, and a reason to read [L4](rules.md). You can still write a probe by hand for an instruction you expect people to change.

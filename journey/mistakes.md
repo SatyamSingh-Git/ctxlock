@@ -194,4 +194,44 @@ The first draft of the dogfood report said 132 findings before the fixes, 96 aft
 
 *Changed:* every number in a report is read from the saved output (`grep -c`) and checked before the commit, and each claim about a file is checked against the file list.
 
-*Since:* the same check caught three more before their commits: a test count (266 for 265) in chapter 7, a package count that was npm's change since the last install rather than a total in the S1 memo, and "9 of 9" predictions where there were 8 in the S4 memo. Each was written before being counted.
+*Since:* the same check caught three more before their commits: a test count (266 for 265) in chapter 7, a package count that was npm's change since the last install rather than a total in the S1 memo, and "9 of 9" predictions where there were 8 in the S4 memo. Each was written before being counted. The behavioral dogfood report's draft then said 75 runs and $2.27 before the last run had finished (it was 73 runs, and only 32 of them report a cost: $0.81), and gave a unit size from an older commit. Both were written to fill a gap, and both were caught by reading the saved output before the commit.
+
+### Code written while the tests were busy
+
+In Plan 2, a mutation run held the eval tests for ten minutes at a time. Rather than wait, the next tasks' code went in alongside their tests, and four times the tests were not run first: the run-scoped hook, the report renderer and CLI command, `probe draft`, and the Action's new steps.
+
+*Cause:* treating the wait as idle time, and writing the code and its tests together in it.
+
+*Cost:* each test then had to be shown failing after the fact, against a stub or the committed file: a no-op hook, a renderer returning nothing, the previous `cli.ts` and `action.yml`. All of them failed as they should, and the slips are in the ledger.
+
+*Changed:* tests come first even when a run is in the way. Work that fits the wait is docs and work on files the run does not load, and anything else waits.
+
+### Asking for a push that was already allowed
+
+Sixteen commits, about eight hours of work, sat unpushed while each final message asked Satyam whether to push. They had already said, in Plan 1's first days, to push after every task. A plan step saying "ask Satyam before pushing" was read as overriding that.
+
+*Cost:* those eight hours of work went untested on GitHub's Ubuntu and Windows runners, and Satyam had to say it again.
+
+*Changed:* the memory now says the standing instruction is the approval, and a plan's "ask first" applies to anything other than a push to `main`. Tasks 1–8 were pushed as each finished, after a green `npm run ci` on exactly what was committed.
+
+### A command line has a length
+
+`probe draft` passed its prompt to `claude -p` as an argument. The prompt holds the unit's text. The first live draft, on a repository with a 38 KB `AGENTS.md`, stopped with `spawn ENAMETOOLONG`, because Windows allows 32,767 characters on a command line.
+
+*Cause:* the tests' prompts were all short, and Linux allows far more per argument, so neither CI nor the stand-in for Claude Code could have shown it.
+
+*Cost:* one failed draft, found on the first real repository.
+
+*Changed:* prompts go to Claude Code on stdin, checked live first with a 40,121-character prompt. A test sends 40,000 characters and asserts that none of them are in the arguments.
+
+### Two claims about tools, written from memory
+
+Two lines in the Plan 2 docs described other tools from memory, and both were wrong:
+- "An npm install of Claude Code has a `cli.js` to pass to `--claude`." `npm view` shows the package installs a native `bin/claude.exe`.
+- "Pull requests against the same base share the eval cache." GitHub scopes caches by branch, so a pull request can restore only its own caches and its base branch's.
+
+*Cause:* the same as "Building from research notes instead of the docs": a plausible statement about someone else's software, not checked against it.
+
+*Cost:* none; both were checked and corrected before the docs were pushed.
+
+*Changed:* nothing new; the rule already existed. Both slips were caught by applying it before pushing, not after.
