@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, posix } from 'node:path';
+import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { stringify } from 'yaml';
 import type { RepoReader } from '../repo/reader.js';
 import { splitFrontmatter } from '../units/frontmatter.js';
@@ -13,14 +13,22 @@ export interface Materialized {
 }
 
 // Config that makes Claude Code run commands of its own: project hooks, MCP servers, apiKeyHelper.
-const EXEC_FILES = /(^|\/)\.claude\/settings(\.local)?\.json$|^\.mcp\.json$/;
-const CLAUDE_MARKDOWN = /(^|\/)\.claude\/.*\.md$/;
+// Case-insensitive: on Windows and macOS, Claude Code opening .claude/settings.json finds .Claude/Settings.JSON.
+const EXEC_FILES = /(^|\/)\.claude\/settings(\.local)?\.json$|^\.mcp\.json$/i;
+const CLAUDE_MARKDOWN = /(^|\/)\.claude\/.*\.md$/i;
+// Frontmatter keys that run something: a skill's own hooks, and the tools it may use without asking.
+const RUN_KEYS = ['allowed-tools', 'hooks'];
 const FRONTMATTER = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
-function write(dir: string, path: string, bytes: Buffer): void {
-  const full = join(dir, path);
+// Git paths use /, but on Windows a backslash in one is a separator too, so a tree entry such as
+// a\..\..\x would land outside the copy. Such a file is not written.
+function write(dir: string, path: string, bytes: Buffer): boolean {
+  const full = resolve(dir, path);
+  const rel = relative(dir, full);
+  if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return false;
   mkdirSync(dirname(full), { recursive: true });
   writeFileSync(full, bytes);
+  return true;
 }
 
 // A copy of the arm for an agent to work in. Links become plain files, so nothing in the copy can
@@ -29,10 +37,9 @@ function write(dir: string, path: string, bytes: Buffer): void {
 export async function materialize(reader: RepoReader, dir: string): Promise<Materialized> {
   mkdirSync(dir, { recursive: true });
   const written: string[] = [];
-  await reader.readAll((path, bytes) => {
-    write(dir, path, bytes);
-    written.push(path);
-  });
+  const outside: string[] = [];
+  const put = (path: string, bytes: Buffer) => void (write(dir, path, bytes) ? written : outside).push(path);
+  await reader.readAll(put);
 
   const files = await reader.listFiles();
   const links = await reader.listSymlinks();
@@ -45,13 +52,11 @@ export async function materialize(reader: RepoReader, dir: string): Promise<Mate
     }
     const under = files.filter((f) => f.startsWith(`${target}/`));
     if (files.includes(target)) {
-      write(dir, link, await reader.readFile(target));
-      written.push(link);
+      put(link, await reader.readFile(target));
     } else if (under.length > 0) {
       for (const f of under) {
         const path = `${link}${f.slice(target.length)}`;
-        write(dir, path, await reader.readFile(f));
-        written.push(path);
+        put(path, await reader.readFile(f));
       }
     } else {
       droppedLinks.push(link);
@@ -68,20 +73,19 @@ export async function materialize(reader: RepoReader, dir: string): Promise<Mate
     } else if (CLAUDE_MARKDOWN.test(path)) {
       const text = readFileSync(join(dir, path), 'utf8');
       const { frontmatter, body, error } = splitFrontmatter(text);
-      // Frontmatter ctxlock cannot parse might still parse for Claude Code, so a hooks line drops all of it.
-      const unparsedHooks = error !== null && /^hooks\s*:/m.test(FRONTMATTER.exec(text)?.[1] ?? '');
-      if (frontmatter && 'hooks' in frontmatter) {
-        const { hooks: _, ...rest } = frontmatter;
-        writeFileSync(join(dir, path), `---\n${stringify(rest)}---\n${body}`);
-        stripped.push(`${path} (hooks)`);
-      } else if (unparsedHooks) {
-        writeFileSync(join(dir, path), body);
-        stripped.push(`${path} (hooks)`);
+      // Frontmatter ctxlock cannot parse might still parse for Claude Code, so such a line drops all of it.
+      const raw = error === null ? '' : (FRONTMATTER.exec(text)?.[1] ?? '');
+      const found = frontmatter ? RUN_KEYS.filter((k) => k in frontmatter) : RUN_KEYS.filter((k) => new RegExp(`^${k}\\s*:`, 'm').test(raw));
+      if (found.length > 0) {
+        const rest = frontmatter && Object.fromEntries(Object.entries(frontmatter).filter(([k]) => !RUN_KEYS.includes(k)));
+        writeFileSync(join(dir, path), rest ? `---\n${stringify(rest)}---\n${body}` : body);
+        stripped.push(`${path} (${found.join(', ')})`);
       }
     }
   }
 
   execFileSync('git', ['init', '-q'], { cwd: dir });
+  stripped.push(...outside.map((p) => `${p} (outside the copy)`));
   return { files: written.length - removed, stripped: stripped.sort(), droppedLinks: droppedLinks.sort() };
 }
 

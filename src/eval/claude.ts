@@ -47,12 +47,14 @@ export interface Transcript {
   loads: ObservedLoad[];
   denied: number;
   outsideReads: number;
+  // Calls to a tool that acts which the run hook never saw. Anything above 0 means isolation failed.
+  unhooked: number;
   // The final reply. Probe drafting reads it; no report ever shows it.
   text: string;
   error: string | null;
 }
 
-type StreamFacts = Omit<Transcript, 'loads' | 'denied' | 'outsideReads' | 'wallMs'>;
+type StreamFacts = Omit<Transcript, 'loads' | 'denied' | 'outsideReads' | 'wallMs' | 'unhooked'> & { acted: number };
 
 export class ClaudeNotFound extends Error {}
 
@@ -75,6 +77,8 @@ export function claudeSettings(hook: (event: string) => string, excludes: string
   const run = (event: string) => [{ type: 'command', command: hook(event) }];
   return {
     claudeMdExcludes: excludes,
+    // A skill's inline shell runs when the skill loads, not as a tool call the hook could deny.
+    disableSkillShellExecution: true,
     hooks: {
       InstructionsLoaded: [{ hooks: run('InstructionsLoaded') }],
       PostToolUse: [{ matcher: 'Skill', hooks: run('PostToolUse') }],
@@ -115,7 +119,7 @@ interface StreamMessage {
 export function parseStream(text: string, dir: string): StreamFacts {
   const facts: StreamFacts = {
     model: null, version: null, turns: 0, durationMs: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, utilization: null,
-    commands: [], edits: [], skills: [], listedSkills: [], text: '', error: null,
+    commands: [], edits: [], skills: [], listedSkills: [], text: '', error: null, acted: 0,
   };
   let result = false;
   for (const line of text.split('\n')) {
@@ -134,6 +138,7 @@ export function parseStream(text: string, dir: string): StreamFacts {
     } else if (m.type === 'assistant') {
       for (const c of m.message?.content ?? []) {
         if (c.type !== 'tool_use' || c.name === undefined) continue;
+        if (SHELLS.has(c.name) || EDITS.has(c.name)) facts.acted++;
         if (SHELLS.has(c.name) && typeof c.input?.command === 'string') facts.commands.push(c.input.command);
         const file = c.input?.file_path ?? c.input?.notebook_path;
         if (EDITS.has(c.name) && typeof file === 'string') facts.edits.push(place(dir, file));
@@ -218,7 +223,7 @@ export async function runClaude(run: ClaudeRun): Promise<Transcript> {
   writeFileSync(join(run.scratch, 'stream.jsonl'), exit.stdout);
   if (exit.stderr) writeFileSync(join(run.scratch, 'stderr.txt'), exit.stderr);
 
-  const facts = parseStream(exit.stdout, run.dir);
+  const { acted, ...facts } = parseStream(exit.stdout, run.dir);
   const events = readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
   const loads = events
     .filter((e) => e.event === 'InstructionsLoaded')
@@ -230,10 +235,14 @@ export async function runClaude(run: ClaudeRun): Promise<Transcript> {
     }));
   const pre = events.filter((e) => e.event === 'PreToolUse');
   const firstLine = exit.stderr.split('\n')[0]!.trim().slice(0, 200);
+  const denied = pre.filter((e) => !e.outside).length;
+  // Every call to a tool that acts must have passed the hook; one that did not may have run.
+  const unhooked = Math.max(0, acted - denied);
   let error = facts.error;
-  if (exit.failure) error = `claude failed: ${exit.failure}`;
+  if (unhooked > 0) error = `${unhooked} tool call${unhooked === 1 ? '' : 's'} reached Claude Code without passing the run hook`;
+  else if (exit.failure) error = `claude failed: ${exit.failure}`;
   else if (exit.timedOut) error = `timed out after ${timeoutMs} ms`;
   else if (exit.code !== 0) error = `claude exited ${exit.code}${firstLine ? `: ${firstLine}` : ''}`;
 
-  return { ...facts, wallMs, loads, denied: pre.filter((e) => !e.outside).length, outsideReads: pre.filter((e) => e.outside).length, error };
+  return { ...facts, wallMs, loads, denied, outsideReads: pre.filter((e) => e.outside).length, unhooked, error };
 }

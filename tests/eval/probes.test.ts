@@ -34,7 +34,7 @@ const errorOf = (files: Record<string, string>) =>
 
 const transcript = (t: Partial<Transcript>): Transcript => ({
   model: null, version: null, turns: 1, durationMs: 0, wallMs: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, utilization: null,
-  commands: [], edits: [], skills: [], listedSkills: [], loads: [], denied: 0, outsideReads: 0, text: '', error: null, ...t,
+  commands: [], edits: [], skills: [], listedSkills: [], loads: [], denied: 0, outsideReads: 0, unhooked: 0, text: '', error: null, ...t,
 });
 
 describe('loadProbes', () => {

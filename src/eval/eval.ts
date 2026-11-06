@@ -8,7 +8,7 @@ import { type ScanResult, scanRepo } from '../scan.js';
 import { sha256Hex } from '../units/digest.js';
 import { type Transcript, claudeVersion as readVersion, runClaude } from './claude.js';
 import { type LoadRecord, joinLoads } from './loads.js';
-import { type Probe, grade, loadProbes } from './probes.js';
+import { type Probe, ProbeError, grade, loadProbes } from './probes.js';
 import { ancestorContext, changedSince, materialize, snapshot } from './workspace.js';
 
 const exec = promisify(execFile);
@@ -67,6 +67,8 @@ export interface EvalResult {
   outcomes: ProbeOutcome[];
   stripped: string[];
   gateFailures: string[];
+  // Probe files in the head that could not be used; the base's probes ran regardless.
+  headProbeErrors: string[];
   totals: { runs: number; cachedRuns: number; wallMs: number; costUsd: number; utilizationBefore: number | null; utilizationAfter: number | null };
 }
 
@@ -149,19 +151,30 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
 
   // A probe both sides define keeps the base's definition, so a pull request cannot rewrite its judge.
   const baseProbes = await loadProbes(readers.base);
-  const headProbes = new Map((await loadProbes(readers.head)).map((p) => [p.id, p]));
+  // The head's own probe files are the pull request's to break. That is reported, and the base's
+  // probes still run; stopping the check would also stop the gate that judges the pull request.
+  const headProbeErrors: string[] = [];
+  let headLoaded: Probe[] = [];
+  try {
+    headLoaded = await loadProbes(readers.head);
+  } catch (err) {
+    if (!(err instanceof ProbeError)) throw err;
+    headProbeErrors.push(err.message);
+  }
+  const headProbes = new Map(headLoaded.map((p) => [p.id, p]));
+  const unitIds = new Set([...base.units, ...head.units].map((u) => u.id));
+  const unknownUnit = (probe: Probe) => `${probe.file}: probe ${probe.id}: unit ${probe.unit} is in neither the base nor the head`;
+  for (const probe of baseProbes) if (!unitIds.has(probe.unit)) throw new EvalError(unknownUnit(probe));
+  const headOnly = [...headProbes.values()].filter((p) => !baseProbes.some((b) => b.id === p.id));
+  for (const probe of headOnly) if (!unitIds.has(probe.unit)) headProbeErrors.push(unknownUnit(probe));
   const candidates = [
     ...baseProbes.map((probe) => ({ probe, source: 'base' as const, changedInHead: headProbes.has(probe.id) && headProbes.get(probe.id)!.hash !== probe.hash })),
-    ...[...headProbes.values()].filter((p) => !baseProbes.some((b) => b.id === p.id)).map((probe) => ({ probe, source: 'head' as const, changedInHead: false })),
+    ...headOnly.filter((p) => unitIds.has(p.unit)).map((probe) => ({ probe, source: 'head' as const, changedInHead: false })),
   ];
-  const unitIds = new Set([...base.units, ...head.units].map((u) => u.id));
-  for (const { probe } of candidates) {
-    if (!unitIds.has(probe.unit)) throw new EvalError(`${probe.file}: probe ${probe.id}: unit ${probe.unit} is in neither the base nor the head`);
-  }
   const selected = candidates.filter((c) => opts.all || changedUnits.includes(c.probe.unit));
 
   const result: EvalResult = {
-    harness: 'claude-code', model: null, claudeVersion: null, runsPerArm: opts.runs, changedUnits, outcomes: [], stripped: [], gateFailures: [],
+    harness: 'claude-code', model: null, claudeVersion: null, runsPerArm: opts.runs, changedUnits, outcomes: [], stripped: [], gateFailures: [], headProbeErrors,
     totals: { runs: 0, cachedRuns: 0, wallMs: 0, costUsd: 0, utilizationBefore: null, utilizationAfter: null },
   };
   if (selected.length === 0) {
@@ -197,7 +210,9 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     const readCache = (key: string | null): RunRecord[] => {
       if (key === null || opts.cacheDir === null) return [];
       const file = join(opts.cacheDir, `${key}.json`);
-      return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as { records: RunRecord[] }).records.slice(0, opts.runs) : [];
+      if (!existsSync(file)) return [];
+      // A run that failed (logged out, rate-limited) says nothing about the context, so it is never reused.
+      return (JSON.parse(readFileSync(file, 'utf8')) as { records: RunRecord[] }).records.filter((r) => r.error === null).slice(0, opts.runs);
     };
 
     let planned = 0;
@@ -225,6 +240,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
           }
           plan.started = true;
           const t: Transcript = await runClaude({ dir: dirs[arm], scratch: join(runRoot, 'scratch', String(++n)), prompt: plan.probe.prompt, model: opts.model, claude: opts.claude });
+          if (t.unhooked > 0) throw new EvalError(`${t.error}; stopping before anything else runs`);
           const changed = changedSince(dirs[arm], before[arm]!);
           if (changed.length > 0) throw new EvalError(`a run changed files in the copy: ${changed.join(', ')}`);
           plan.records[arm].push({
@@ -250,9 +266,10 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
       if (timeUp) break;
       for (const arm of ['base', 'head'] as const) {
         const key = plan.keys[arm];
-        if (key !== null && plan.records[arm].length > plan.cached[arm]) {
+        const keep = plan.records[arm].filter((r) => r.error === null);
+        if (key !== null && keep.length > plan.cached[arm]) {
           mkdirSync(opts.cacheDir!, { recursive: true });
-          writeFileSync(join(opts.cacheDir!, `${key}.json`), JSON.stringify({ records: plan.records[arm] }));
+          writeFileSync(join(opts.cacheDir!, `${key}.json`), JSON.stringify({ records: keep }));
         }
       }
     }

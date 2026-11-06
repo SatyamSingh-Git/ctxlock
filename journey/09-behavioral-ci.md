@@ -12,7 +12,7 @@ The design's Phase 1 exit items (a) and (b) were then checked on three public re
 - **`ctxlock eval`.** For each probe whose unit the pull request changes, it copies each side out of git into a folder outside the repository, with execution config removed. It runs `claude -p` there 3 times per side, and reports how often the agent did what the probe expects, whether it loaded the changed unit, the tokens, and the cost. A hook written next to each run denies every command and edit, and every read outside the copy.
 - **`ctxlock probe draft`.** Claude drafts candidates from a unit, with every tool off. ctxlock then runs each in a copy with the unit and one without, and writes only those that tell the two apart.
 - **The Action.** With a Claude token or API key, it installs Claude Code and appends the behavioral section to the pull request comment. Without one it says why it skipped. It never fails the job unless asked to fail on a gated regression.
-- **The suite** has 354 tests, all against a stand-in for Claude Code that runs ctxlock's real hooks. CI has no Claude credentials, so no test calls the real one.
+- **The suite** has 364 tests, all against a stand-in for Claude Code that runs ctxlock's real hooks. CI has no Claude credentials, so no test calls the real one.
 
 ## What worked
 
@@ -43,6 +43,23 @@ Each got a test.
 - **Asking before pushing,** though Satyam had already said to push after each task. Sixteen commits waited; then Tasks 1–8 went up one by one.
 - **Two statements about other tools from memory:** a `cli.js` that Claude Code's npm package does not have, and a cache GitHub does not share between pull requests. Both were checked and corrected before they were pushed.
 - **The test harness for the live checks** had its own bugs: a `git revert -q` that does not exist, newlines that do not survive Git Bash, and a CRLF checkout. Each was caught by a guard that refused to edit text it could not find exactly once.
+
+## The final review
+
+One fresh reviewer read the whole branch and returned "with fixes": three critical findings, four important, ten minor. The three critical ones each broke "nothing runs" for a hostile pull request:
+- **A path that leaves the copy.** A git tree entry named `a\..\..\x` is one file name to git, but Windows reads the backslashes as folders, so the copy wrote it outside the run folder. Such entries are now dropped and reported.
+- **Letter case.** The strip matched `.claude/settings.json` exactly, while Windows and macOS file systems ignore case, so `.Claude/Settings.JSON` would have stayed in the copy and loaded. The patterns ignore case now.
+- **A skill's inline shell.** Claude Code runs `` !`command` `` in a skill's body when the skill loads, with no tool call for the hook to deny, and `allowed-tools` grants the permission. Both are now switched off. A live control showed it was real: with the setting off and `allowed-tools` kept, the command wrote its marker ([report](../docs/dogfood/2026-11-06-behavioral.md#after-the-final-review-a-skills-inline-shell)).
+
+The important ones:
+- a failed run was cached, so logging back in did not run the arm again;
+- a pull request could switch off the gate by breaking its own probe file;
+- `~/.ssh/id_rsa` read as a path inside the copy;
+- the hook failed open: Claude Code lets a call through when its hook exits with anything but 2, so a crash allowed it.
+
+The hook now fails closed, and every run is checked against it: a command or edit in the stream that never reached the hook stops the check (D47). Each fix had a test that failed first. A mutation pass over the fixes then killed 16 of 21 mutants. Four of the survivors were real gaps in the tests and got tests; one was an ordering that failing closed had made irrelevant, so the order went back to how it was.
+
+Two findings were ruled on rather than fixed. Claude Code still gets the runner's whole environment (D48). On macOS, where the temp folder sits behind a symlink, every read may be denied; that fails closed, and there was no Mac to check a fix on. The other nine minor findings are listed in [the plan](../docs/superpowers/plans/2026-11-06-ctxlock-behavioral-ci.md) for later.
 
 ## What was learned
 

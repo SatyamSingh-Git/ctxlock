@@ -141,6 +141,7 @@ export async function draftProbes(opts: DraftOptions): Promise<DraftResult> {
         for (const arm of armNames) {
           const t = await runClaude({ dir: arms[arm], scratch: scratch(), prompt: probe.prompt, model: opts.model, claude: opts.claude });
           runs++;
+          if (t.unhooked > 0) throw new DraftError(`${t.error}; stopping before anything else runs`);
           const changed = changedSince(arms[arm], before[arm]);
           if (changed.length > 0) throw new DraftError(`a run changed files in the copy: ${changed.join(', ')}`);
           if (t.error) errors.push(t.error);

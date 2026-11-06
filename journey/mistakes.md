@@ -206,6 +206,8 @@ In Plan 2, a mutation run held the eval tests for ten minutes at a time. Rather 
 
 *Changed:* tests come first even when a run is in the way. Work that fits the wait is docs and work on files the run does not load, and anything else waits.
 
+*Since:* once more, in the final review's fix pass, with no run in the way: the check that stops `probe draft` when a call gets past the hook went in with the same check in `eval`, before its own test. Removing it made the new test fail as it should. The habit is copying a fix to its second caller without asking whether the second caller has a test.
+
 ### Asking for a push that was already allowed
 
 Sixteen commits, about eight hours of work, sat unpushed while each final message asked Satyam whether to push. They had already said, in Plan 1's first days, to push after every task. A plan step saying "ask Satyam before pushing" was read as overriding that.

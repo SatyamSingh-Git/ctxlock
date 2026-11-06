@@ -63,6 +63,7 @@ export function renderEval(r: EvalResult, format: 'text' | 'json' | 'markdown'):
       for (const e of [...(o.base?.errors ?? []).map((x) => `base: ${x}`), ...(o.head?.errors ?? []).map((x) => `head: ${x}`)]) lines.push(`    error, ${e}`);
     }
     if (r.stripped.length > 0) lines.push('', `Removed from the copies before running: ${r.stripped.join(', ')}`);
+    if (r.headProbeErrors.length > 0) lines.push('', `Probe files in this pull request that could not be used: ${r.headProbeErrors.join('; ')}`);
     if (r.gateFailures.length > 0) lines.push('', `Gated regressions: ${r.gateFailures.join(', ')}`);
     lines.push('', costLine(r));
     return `${lines.join('\n')}\n`;
@@ -89,6 +90,7 @@ export function renderEval(r: EvalResult, format: 'text' | 'json' | 'markdown'):
   block('Models', ran.flatMap((o) => (models(o) ? [`${code(o.probe.id)}: the base ran on ${code(models(o)!.b)}, the head on ${code(models(o)!.h)}`] : [])));
   block('Errors', ran.flatMap((o) => [...(o.base?.errors ?? []).map((e) => `${code(o.probe.id)} base: ${code(e)}`), ...(o.head?.errors ?? []).map((e) => `${code(o.probe.id)} head: ${code(e)}`)]));
   block('Not run', r.outcomes.filter((o) => o.reason).map((o) => `${code(o.probe.id)}: ${o.reason}`));
+  block("This pull request's probe files could not be used; the base's probes ran", r.headProbeErrors.map(code));
   if (r.stripped.length > 0) lines.push('', `Removed from the copies before running, so no hook or server from the repository ran: ${r.stripped.map(code).join(', ')}`);
 
   lines.push('', costLine(r), '', '---', '', '_Advisory. Probes ran on Claude Code only; Codex is predicted statically._');

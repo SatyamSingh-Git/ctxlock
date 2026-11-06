@@ -23,7 +23,7 @@ const result = (extra: Partial<EvalResult> = {}): EvalResult => ({
     { probe: probe('deps'), source: 'base', changedInHead: false, base: arm(0, 3, [0, 0.5615]), head: arm(3, 3, [0.4385, 1], { inputTokens: 1010 }), status: 'improved' },
     { probe: probe('b'), source: 'base', changedInHead: false, base: null, head: null, status: 'not-run', reason: 'run budget (6 runs)' },
   ],
-  stripped: ['.claude/settings.json'], gateFailures: [],
+  stripped: ['.claude/settings.json'], gateFailures: [], headProbeErrors: [],
   totals: { runs: 6, cachedRuns: 0, wallMs: 72_000, costUsd: 0.26, utilizationBefore: 0.57, utilizationAfter: 0.57 },
   ...extra,
 });
@@ -64,6 +64,13 @@ describe('renderEval markdown', () => {
     const [deps] = result().outcomes;
     const hostile = renderEval(result({ outcomes: [{ ...deps!, probe: probe('@octocat|x') }] }), 'markdown');
     expect(hostile).toContain('| `@octocat\\|x` |');
+  });
+
+  it("lists the pull request's probe files that could not be used, as code", () => {
+    const md = renderEval(result({ headProbeErrors: ['evals/probes/zz.yaml: version: Invalid input: expected 1'] }), 'markdown');
+    expect(md).toContain("**This pull request's probe files could not be used; the base's probes ran**");
+    expect(md).toContain('- `evals/probes/zz.yaml: version: Invalid input: expected 1`');
+    expect(renderEval(result({ headProbeErrors: ['evals/probes/zz.yaml: bad'] }), 'text')).toContain('Probe files in this pull request that could not be used: evals/probes/zz.yaml: bad');
   });
 
   it('says why nothing ran', () => {

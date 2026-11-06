@@ -66,6 +66,30 @@ describe('the run-scoped hook', () => {
     }
   });
 
+  it('treats a path, pattern or glob that starts at the home folder as outside', () => {
+    for (const payload of [
+      { tool_name: 'Read', tool_input: { file_path: '~/.ssh/id_rsa' } },
+      { tool_name: 'Grep', tool_input: { pattern: 'x', path: '~' } },
+      { tool_name: 'Glob', tool_input: { pattern: '*', path: '~/.claude' } },
+      { tool_name: 'Glob', tool_input: { pattern: '~/.aws/*' } },
+      { tool_name: 'Grep', tool_input: { pattern: 'x', glob: '~/x' } },
+    ]) {
+      expect(decision(hook('PreToolUse', payload).stdout).permissionDecisionReason, JSON.stringify(payload)).toMatch(/outside the run folder/);
+    }
+  });
+
+  it('blocks the call when the hook itself fails, since Claude Code goes ahead on any exit but 2', () => {
+    expect(hook('PreToolUse', { tool_name: 'Read', tool_input: { file_path: 42 } }).status).toBe(2);
+
+    const dir = tempDir();
+    const script = join(dir, 'hook.mjs');
+    writeFileSync(script, HOOK_SCRIPT);
+    const unwritable = join(dir, 'no-such-dir', 'events.jsonl');
+    const r = spawnSync(process.execPath, [script, 'PreToolUse', unwritable, join(dir, 'run')], { input: JSON.stringify({ cwd: join(dir, 'run'), tool_name: 'Bash', tool_input: { command: 'rm -rf /' } }), encoding: 'utf8' });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/denied/);
+  });
+
   it.runIf(process.platform === 'win32')('compares paths without case on Windows', () => {
     const root = join(tempDir(), 'run');
     expect(hook('PreToolUse', { tool_name: 'Read', tool_input: { file_path: join(root.toUpperCase(), 'a.ts') } }, root).stdout).toBe('');

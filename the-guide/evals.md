@@ -101,11 +101,11 @@ eval:
 
 A probe runs only when the unit it names changed between the two refs; `--all` runs them all. For each probe, ctxlock runs Claude Code headless (`claude -p`) `runs` times in each arm, alternating base and head:
 
-- **Each arm is a copy** of the repository at that ref, in a fresh folder under `--workdir`. Links become plain files, and links that leave the repository are dropped.
-- **Execution config is removed from the copy**: `.claude/settings.json` and `.claude/settings.local.json` at any depth, `.mcp.json`, and any `hooks:` in the frontmatter of a markdown file under `.claude/`. The report lists what was removed. No hook, MCP server or key helper from the repository runs.
-- **Nothing the agent tries is executed.** A hook that ctxlock writes next to each run denies every `Bash`, `PowerShell`, `Write`, `Edit`, `MultiEdit` and `NotebookEdit` call, and records what it would have done. `Read`, `Glob` and `Grep` are allowed only inside the copy. No other tool is available: no web access, no subagents, no MCP.
+- **Each arm is a copy** of the repository at that ref, in a fresh folder under `--workdir`. Links become plain files, and links that leave the repository are dropped. So is any file whose path would land outside the copy, such as a Windows path with `..\` in it.
+- **Execution config is removed from the copy**: `.claude/settings.json` and `.claude/settings.local.json` at any depth and in any letter case, `.mcp.json`, and any `hooks:` or `allowed-tools:` in the frontmatter of a markdown file under `.claude/`. The report lists what was removed. No hook, MCP server or key helper from the repository runs, and no skill grants itself a tool.
+- **Nothing the agent tries is executed.** A hook that ctxlock writes next to each run denies every `Bash`, `PowerShell`, `Write`, `Edit`, `MultiEdit` and `NotebookEdit` call, and records what it would have done. `Read`, `Glob` and `Grep` are allowed only inside the copy; a path that starts with `~` is outside. If the hook itself fails, the call is denied. Shell commands written inline in a skill, which Claude Code runs when the skill loads rather than as a tool call, are switched off. No other tool is available: no web access, no subagents, no MCP.
 - **Nothing outside the copy loads.** ctxlock excludes every `CLAUDE.md`, `CLAUDE.local.md` and `.claude/rules` above the run folder, and refuses to run below an `AGENTS.md` or a `.claude/skills` folder it cannot exclude. Pass `--workdir` to run somewhere else.
-- **A run that changes the copy anyway stops the check** with exit 2.
+- **A run that gets past these anyway stops the check** with exit 2: one that changes the copy, or one that made a tool call the hook never saw.
 
 **What leaves your machine.** Running `ctxlock eval` sends the repository's context, the files the agent reads, and the probe prompt to Anthropic's API through Claude Code, under your Claude account or API key. Claude Code's non-essential traffic (telemetry, error reports, update checks) is switched off for these runs. ctxlock's own output carries counts, statuses, unit IDs and probe definitions only, never what the agent tried or replied.
 
@@ -137,9 +137,9 @@ A run that fails, because Claude Code is logged out, rate-limited or timed out, 
 
 **Did the agent see the change?** For each probe, the report says in how many head runs Claude Code loaded the probe's unit. Claude Code reports most loads through its `InstructionsLoaded` hook. It does not report an `AGENTS.md` it reads because the project has no `CLAUDE.md`, though the agent follows it, so those loads are marked *predicted*.
 
-**The gate** (`--fail-on-regression`). A probe fails it when every base run passed and no head run did, with at least 3 valid runs in each arm. At 3 against 3 that is a one-sided Fisher p of 0.05, the strongest result 3 runs can give. Probes the pull request adds never gate; the base's definition of a probe is the one that runs, and the report says when the pull request edits it.
+**The gate** (`--fail-on-regression`). A probe fails it when every base run passed and no head run did, with at least 3 valid runs in each arm. At 3 against 3 that is a one-sided Fisher p of 0.05, the strongest result 3 runs can give. Probes the pull request adds never gate; the base's definition of a probe is the one that runs, and the report says when the pull request edits it. If the pull request breaks its own probe files, the report says which, and the base's probes still run.
 
-**The cache.** Results from a git ref are cached by its tree, the probe, the model and Claude Code's version, under `--cache`. On your machine, a base you check against again is not run again. In the Action, the cache lasts for one pull request (see [its page](github-action.md#the-behavioral-check)). The working tree is never cached.
+**The cache.** Results from a git ref are cached by its tree, the probe, the model and Claude Code's version, under `--cache`. On your machine, a base you check against again is not run again. Runs that failed are not cached. In the Action, the cache lasts for one pull request (see [its page](github-action.md#the-behavioral-check)). The working tree is never cached.
 
 ## On Windows
 

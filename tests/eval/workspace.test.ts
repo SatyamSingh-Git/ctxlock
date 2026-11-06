@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -49,12 +50,43 @@ describe('materialize', () => {
 
     const result = await materialize(await gitReader(dir, git(dir, 'rev-parse', 'HEAD')), out);
 
-    expect(result.stripped).toEqual(['.claude/settings.json', '.claude/skills/r/SKILL.md (hooks)', '.mcp.json', 'pkg/.claude/settings.local.json']);
+    expect(result.stripped).toEqual(['.claude/settings.json', '.claude/skills/r/SKILL.md (allowed-tools, hooks)', '.mcp.json', 'pkg/.claude/settings.local.json']);
     const copied = readFileSync(join(out, '.claude/skills/r/SKILL.md'), 'utf8');
-    expect(splitFrontmatter(copied).frontmatter).toEqual({ name: 'r', description: 'd', 'allowed-tools': 'Bash' });
+    // allowed-tools goes too: it is the permission a skill's own commands would run under.
+    expect(splitFrontmatter(copied).frontmatter).toEqual({ name: 'r', description: 'd' });
     expect(copied.endsWith('---\nbody\n')).toBe(true);
     expect(readFileSync(join(out, 'docs/hooks.md'), 'utf8')).toContain('hooks: kept');
     for (const gone of ['.claude/settings.json', 'pkg/.claude/settings.local.json', '.mcp.json']) expect(existsSync(join(out, gone))).toBe(false);
+  });
+
+  it('strips execution config whatever its case, since Windows and macOS file systems ignore case', async () => {
+    const skill = '---\nname: up\ndescription: d\nallowed-tools: Bash\n---\nbody\n';
+    const { dir, shas } = await gitRepo([{ 'pkg/.Claude/Settings.JSON': '{"hooks":{}}', '.MCP.json': '{}', 'tools/.claude/skills/up/SKILL.MD': skill }]);
+    const out = join(tempDir(), 'arm');
+
+    const result = await materialize(await gitReader(dir, shas[0]!), out);
+
+    expect(result.stripped).toEqual(['.MCP.json', 'pkg/.Claude/Settings.JSON', 'tools/.claude/skills/up/SKILL.MD (allowed-tools)']);
+    expect(existsSync(join(out, 'pkg/.Claude/Settings.JSON'))).toBe(false);
+    expect(splitFrontmatter(readFileSync(join(out, 'tools/.claude/skills/up/SKILL.MD'), 'utf8')).frontmatter).toEqual({ name: 'up', description: 'd' });
+  });
+
+  it('never writes outside the copy, whatever a tree entry is called', async () => {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'a\n' }]);
+    // On Windows, path.join treats a backslash in a git path as a separator.
+    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: 'escaped\n', encoding: 'utf8' }).trim();
+    const agents = git(dir, 'rev-parse', 'HEAD:AGENTS.md');
+    const tree = execFileSync('git', ['mktree'], { cwd: dir, input: `100644 blob ${agents}\tAGENTS.md\n100644 blob ${blob}\ta\\..\\..\\escaped.txt\n`, encoding: 'utf8' }).trim();
+    const commit = execFileSync('git', ['commit-tree', tree, '-m', 'hostile'], { cwd: dir, encoding: 'utf8' }).trim();
+    const root = tempDir();
+    const out = join(root, 'run', 'arm');
+
+    const result = await materialize(await gitReader(dir, commit), out);
+
+    expect(existsSync(join(root, 'escaped.txt'))).toBe(false);
+    expect(existsSync(join(root, 'run', 'escaped.txt'))).toBe(false);
+    expect(readFileSync(join(out, 'AGENTS.md'), 'utf8')).toBe('a\n');
+    if (process.platform === 'win32') expect(result.stripped).toContain('a\\..\\..\\escaped.txt (outside the copy)');
   });
 
   it('drops frontmatter it cannot parse when it has a hooks line', async () => {

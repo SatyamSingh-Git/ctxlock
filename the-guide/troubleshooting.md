@@ -94,6 +94,10 @@ The job summary shows the reason. The usual ones:
 
 Claude Code loads instructions from every folder above the one it starts in. ctxlock excludes `CLAUDE.md`, `CLAUDE.local.md` and `.claude/rules` above its run folders, but it cannot exclude an `AGENTS.md` or a `.claude/skills` folder, so it refuses to run below one. Pass `--workdir` with a folder that has none above it. On Windows the system temp folder is under your home folder, which matters only if you keep an `AGENTS.md` there; your own `~/.claude/skills` is fine.
 
+## `... reached Claude Code without passing the run hook` or `a run changed files in the copy`
+
+Either means a run got past ctxlock's isolation, so the check stops at once rather than run more. The first says Claude Code reported a tool call that acts, such as a `Bash` command, that ctxlock's hook never saw: a Claude Code version that runs hooks differently, or a hook that could not start. The second says a file in the copy changed while every such call was meant to be denied. Neither should happen. Run `ctxlock eval` again with `--keep-runs`, which keeps each run's `stream.jsonl` and `events.jsonl` under `--workdir`, and open an issue with them.
+
 ## A probe is `inconclusive`
 
 An arm needs at least 2 runs that finished. Each run that failed is listed under **Errors** with Claude Code's reason: often an expired token (`claude setup-token` makes a new one), a usage limit, or a time-out. With `--runs 1` every probe is inconclusive; use it only to look at one run with `--keep-runs`.

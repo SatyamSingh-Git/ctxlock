@@ -95,6 +95,14 @@ describe('draftProbes', { timeout: 120_000 }, () => {
     expect(readFileSync(join(root, 'evals/probes/agents-md.yaml'), 'utf8')).toBe('mine\n');
   });
 
+  it('stops, writing nothing, when a validation run got past the run hook', async () => {
+    scenario(CANDIDATES, {}, [{ calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' }, unhooked: true }] }]);
+    const root = await repo();
+
+    await expect(draftProbes(options(root))).rejects.toThrow(/^1 tool call reached Claude Code without passing the run hook; stopping/);
+    expect(existsSync(join(root, 'evals/probes/agents-md.yaml'))).toBe(false);
+  });
+
   it('says so when the reply has no yaml block, and discards an invalid candidate with its reason', async () => {
     scenario('I could not think of any.');
     await expect(draftProbes(options(await repo()))).rejects.toThrow(/no ```yaml block/);

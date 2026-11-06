@@ -153,6 +153,24 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect((await runEval(options(root, { cacheDir }))).outcomes[0]!.base!.cached).toBe(0);
   });
 
+  it('never caches a run that failed, so logging back in runs the arm again', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+    const cacheDir = join(tempDir(), 'cache');
+    scenario({ behaviours: [{ when: { file: 'AGENTS.md', contains: 'Use npm' }, exit: 1, stderr: 'Invalid API key · Please run /login' }, { calls: [] }] });
+    expect((await runEval(options(root, { cacheDir }))).outcomes[0]!.base).toMatchObject({ valid: 0, cached: 0 });
+    const files = () => (existsSync(cacheDir) ? readdirSync(cacheDir).map((f) => join(cacheDir, f)) : []);
+    const records = (file: string) => (JSON.parse(readFileSync(file, 'utf8')) as { records: Array<{ error: string | null }> }).records;
+    expect(files().flatMap(records).filter((r) => r.error !== null)).toEqual([]);
+
+    scenario({});
+    expect((await runEval(options(root, { cacheDir }))).outcomes[0]!.base).toMatchObject({ valid: 3, cached: 0, passed: 0 });
+
+    // A cache written before failed runs were kept out of it can still hold them.
+    const [file] = files();
+    writeFileSync(file!, JSON.stringify({ records: records(file!).map((r) => ({ ...r, error: 'claude exited 1: Invalid API key' })) }));
+    expect((await runEval(options(root, { cacheDir }))).outcomes[0]!.base).toMatchObject({ valid: 3, cached: 0 });
+  });
+
   it('keeps each probe’s cached runs apart, even on the same tree', async () => {
     const root = await repo(
       { 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'a' }, { id: 'b', pattern: '\\bnpm\\s+install\\b' }) },
@@ -184,6 +202,26 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect(o).toMatchObject({ status: 'inconclusive', head: { valid: 0, passed: 0, errors: ['claude exited 1: boom', 'claude exited 1: boom', 'claude exited 1: boom'] } });
   });
 
+  it("still runs the base's probes when the pull request breaks its own probe files, so the gate cannot be switched off", async () => {
+    const broken = await runEval(
+      options(await repo({ 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use npm.\n', 'evals/probes/zz.yaml': 'version: 2\n' })),
+    );
+    expect(broken.gateFailures).toEqual(['deps']);
+    expect(broken.headProbeErrors).toEqual([expect.stringMatching(/^evals\/probes\/zz\.yaml: .*version/)]);
+
+    const unknown = await runEval(
+      options(
+        await repo(
+          { 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) },
+          { 'AGENTS.md': 'Use npm.\n', 'evals/probes/q.yaml': probeFile({ id: 'ghost', unit: 'rule/nope.md' }) },
+        ),
+      ),
+    );
+    expect(unknown.outcomes.map((o) => o.probe.id)).toEqual(['deps']);
+    expect(unknown.gateFailures).toEqual(['deps']);
+    expect(unknown.headProbeErrors).toEqual(['evals/probes/q.yaml: probe ghost: unit rule/nope.md is in neither the base nor the head']);
+  });
+
   it('refuses a probe on a unit that exists in neither arm', async () => {
     const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps', unit: 'rule/nope.md' }) });
 
@@ -201,6 +239,14 @@ describe('runEval', { timeout: 120_000 }, () => {
 
     writeTree(parent, { 'AGENTS.md': null });
     expect((await runEval(options(root, { workdir: join(parent, 'work') }))).outcomes).toHaveLength(1);
+  });
+
+  it('stops when a tool call got past the run hook', async () => {
+    scenario({ behaviours: [{ calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' }, unhooked: true }] }] });
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+
+    await expect(runEval(options(root))).rejects.toThrow(/^1 tool call reached Claude Code without passing the run hook; stopping/);
+    expect(claudeRuns()).toBe(1);
   });
 
   it('stops when a run changes the copy behind the hooks', async () => {

@@ -46,6 +46,8 @@ describe('claudeArgs and claudeSettings', () => {
       hooks: Record<string, Array<{ matcher?: string; hooks: Array<{ type: string; command: string }> }>>;
     };
     expect(settings.claudeMdExcludes).toEqual(['/a/CLAUDE.md']);
+    // A skill's inline shell runs when the skill loads, not through a hooked tool call.
+    expect((settings as unknown as { disableSkillShellExecution: boolean }).disableSkillShellExecution).toBe(true);
     expect(settings.hooks.PreToolUse).toEqual([{ matcher: 'Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|Glob|Grep', hooks: [{ type: 'command', command: 'hook PreToolUse' }] }]);
     expect(settings.hooks.PostToolUse).toEqual([{ matcher: 'Skill', hooks: [{ type: 'command', command: 'hook PostToolUse' }] }]);
     expect(settings.hooks.InstructionsLoaded).toEqual([{ hooks: [{ type: 'command', command: 'hook InstructionsLoaded' }] }]);
@@ -105,6 +107,19 @@ describe('runClaude', () => {
     const seen = JSON.parse(readFileSync(argvLog, 'utf8').trim()) as { argv: string[]; prompt: string };
     expect(seen.argv.join(' ')).not.toContain('xxxx');
     expect(seen.prompt).toBe(`Draft probes. ${long}`);
+  });
+
+  it('makes a run an error when a tool call reached Claude Code without passing the run hook', async () => {
+    useScenario({ behaviours: [{ calls: [{ tool: 'Bash', input: { command: 'ls' } }, { tool: 'Bash', input: { command: 'echo unhooked' }, unhooked: true }] }] });
+
+    const t = await run(arm());
+
+    expect(t.unhooked).toBe(1);
+    expect(t.error).toBe('1 tool call reached Claude Code without passing the run hook');
+
+    // An edit counts too, and a denied read outside the copy does not stand in for a missing call.
+    useScenario({ behaviours: [{ calls: [{ tool: 'Read', input: { file_path: '../outside.txt' } }, { tool: 'Write', input: { file_path: 'x.txt', content: 'x' }, unhooked: true }] }] });
+    expect((await run(arm())).unhooked).toBe(1);
   });
 
   it('counts a read outside the copy', async () => {

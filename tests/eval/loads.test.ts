@@ -13,7 +13,7 @@ const digestOf = (path: string, content: string) => `sha256:${sha(`${path}\0${sh
 
 const transcript = (t: Partial<Transcript>): Transcript => ({
   model: null, version: null, turns: 1, durationMs: 0, wallMs: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, utilization: null,
-  commands: [], edits: [], skills: [], listedSkills: [], loads: [], denied: 0, outsideReads: 0, text: '', error: null, ...t,
+  commands: [], edits: [], skills: [], listedSkills: [], loads: [], denied: 0, outsideReads: 0, unhooked: 0, text: '', error: null, ...t,
 });
 
 async function setup(files: Record<string, string>) {

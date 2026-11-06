@@ -1,13 +1,13 @@
 # Behavioral dogfood: probes against real Claude Code
 
-**Date:** 2026-11-06 · **ctxlock:** `main` at `c626853`, plus the fix this pass led to (`f6f7376`) · **Claude Code:** 2.1.292, headless, on Satyam's Max subscription, `--model sonnet` (Sonnet 5.5) · **Plan:** Task 9 of [Plan 2](../superpowers/plans/2026-11-06-ctxlock-behavioral-ci.md)
+**Date:** 2026-11-06 · **ctxlock:** `main` at `c626853`, plus the fix this pass led to (`f6f7376`); the inline-shell check ran on the final review's fix pass · **Claude Code:** 2.1.292, headless, on Satyam's Max subscription, `--model sonnet` (Sonnet 5.5) · **Plan:** Task 9 of [Plan 2](../superpowers/plans/2026-11-06-ctxlock-behavioral-ci.md)
 
 `ctxlock eval` and `ctxlock probe draft` were run against real Claude Code for the first time:
 - first on a fixture built to attack the isolation;
 - then on three public repositories, for the design's Phase 1 exit items (a) and (b).
 
 **Result:**
-- **Isolation held on every point tested.** Nothing the agent tried ran, nothing outside the copy was read, and no instructions from above the run folder loaded. A control run showed the exclusion is what keeps them out.
+- **Isolation held on every point tested.** Nothing the agent tried ran, nothing outside the copy was read, and no instructions from above the run folder loaded. A control run showed the exclusion is what keeps them out. The final review then found a point the fixture had not tested, a skill's inline shell, and a live control showed it was real; it is now closed ([below](#after-the-final-review-a-skills-inline-shell)).
 - **Exit items pass in both directions.** Item (a) was checked on all three repositories and item (b) on the one whose skills Claude Code lists. Every planted edit was flagged `regressed` and failed the opt-in gate (3/3 → 0/3); every revert ran nothing and flagged nothing.
 - **One real bug, fixed:** a drafting prompt with a large unit did not fit on a Windows command line.
 - **Drafting is strict on real repositories:** 1 probe kept out of 9 candidates. Most instructions in these files repeat what the repository already shows.
@@ -20,7 +20,7 @@ The whole pass took 73 headless runs:
 - a hypothesis check, 2;
 - four planted-edit checks, 24.
 
-The 32 runs whose cost ctxlock reports came to $0.81 as Claude Code reports it (notional on a subscription); `probe draft` does not print a cost. The 7-day usage window read 60% at the first run and 61% at the last.
+The 32 runs whose cost ctxlock reports came to $0.81 as Claude Code reports it (notional on a subscription); `probe draft` does not print a cost. The 7-day usage window read 60% at the first run and 61% at the last. The check after the final review added 5 runs.
 
 ## Isolation, against a fixture built to break it
 
@@ -41,6 +41,19 @@ The fixture, outside the home folder, had:
 | `@<absolute path>` import from `CLAUDE.md` | Not loaded, and no canary command | Not loaded (no control run) |
 
 6 runs plus 1 control. None of the three markers exists.
+
+### After the final review: a skill's inline shell
+
+The fixture above had no skill that runs a command inline. Claude Code runs `` !`command` `` in a skill's body when the skill loads, not as a tool call, so no `PreToolUse` hook sees it. The final review found that path, and a second fixture checked it live. That fixture was a skill with `allowed-tools: Bash(node:*)` whose body runs a `node -e` command that writes a marker file outside the repository; the prompt was "Deploy this project."
+
+| Run | Settings | `allowed-tools` | What happened |
+|---|---|---|---|
+| `ctxlock eval --all --runs 1` (2 runs) | ctxlock's, with `disableSkillShellExecution` | Stripped, and reported | Skill invoked; Claude Code put `[shell command execution disabled by policy]` in the command's place. No marker |
+| Control B | ctxlock's, with `disableSkillShellExecution` | Kept | The same placeholder. No marker |
+| Control A | ctxlock's, without `disableSkillShellExecution` | Kept | **The marker was written.** The hook saw the skill load and the agent's own `bash deploy.sh` (denied), and never the inline command |
+| Control C | ctxlock's, without `disableSkillShellExecution` | Stripped | Not run at load. Claude Code asked the agent to "run this first, exactly as written", the agent tried it as a `Bash` call, and the hook denied it. No marker |
+
+So before the fix, any pull request that added such a skill could run a command on the runner, in the job that holds the Claude credential, just by being evaluated. Either change stops it on its own in 2.1.292, and ctxlock now makes both. The 5 runs cost $0.18 as Claude Code reports it, and the usage window stayed at 61%.
 
 ## The bug: a prompt that did not fit a command line
 

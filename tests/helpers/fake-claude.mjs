@@ -52,7 +52,9 @@ function runHooks(event, toolName, payload) {
     if (group.matcher && !new RegExp(`^(?:${group.matcher})$`).test(toolName)) continue;
     for (const h of group.hooks) {
       const r = spawnSync(h.command, { shell: true, input: JSON.stringify({ hook_event_name: event, cwd, ...payload }), encoding: 'utf8' });
-      if (r.stdout.trim()) decisions.push(JSON.parse(r.stdout).hookSpecificOutput?.permissionDecision);
+      // As in Claude Code: exit 2 blocks, any other failure lets the tool go ahead.
+      if (r.status === 2) decisions.push('deny');
+      else if (r.status === 0 && r.stdout.trim()) decisions.push(JSON.parse(r.stdout).hookSpecificOutput?.permissionDecision);
     }
   }
   return decisions;
@@ -72,7 +74,8 @@ let id = 0;
 for (const call of behaviour.calls ?? []) {
   const toolUseId = `toolu_${++id}`;
   emit({ type: 'assistant', message: { content: [{ type: 'tool_use', id: toolUseId, name: call.tool, input: call.input }] } });
-  const denied = runHooks('PreToolUse', call.tool, { tool_name: call.tool, tool_input: call.input }).includes('deny');
+  // `unhooked` stands for a hook that never ran, such as one whose command could not start.
+  const denied = !call.unhooked && runHooks('PreToolUse', call.tool, { tool_name: call.tool, tool_input: call.input }).includes('deny');
   if (!denied && call.tool === 'Write') writeFileSync(resolve(cwd, call.input.file_path), call.input.content ?? '');
   if (!denied && call.tool === 'Skill') runHooks('PostToolUse', 'Skill', { tool_name: 'Skill', tool_input: call.input });
   emit({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: toolUseId, is_error: denied, content: denied ? 'denied by hook' : 'ok' }] } });
