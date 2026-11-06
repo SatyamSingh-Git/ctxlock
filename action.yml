@@ -1,5 +1,5 @@
 name: ctxlock
-description: Check a pull request's changes to AI agent context (AGENTS.md, CLAUDE.md, rules, skills, agent config)
+description: Check a pull request's changes to AI agent context (AGENTS.md, CLAUDE.md, rules, skills, agent config), and how Claude Code behaves with them
 author: SatyamSingh-Git
 branding:
   icon: shield
