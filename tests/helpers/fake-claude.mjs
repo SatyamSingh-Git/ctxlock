@@ -18,13 +18,19 @@ if (argv[0] === '--version') {
   process.stdout.write(`${scenario.version ?? '2.1.292'} (Claude Code)\n`);
   process.exit(0);
 }
-if (scenario.exit) {
-  process.stderr.write(scenario.stderr ?? '');
-  process.exit(scenario.exit);
-}
-
 const arg = (flag) => argv[argv.indexOf(flag) + 1];
 const prompt = arg('-p');
+const matches = (when) =>
+  !when ||
+  (when.promptContains !== undefined ? prompt.includes(when.promptContains) : existsSync(join(cwd, when.file)) && readFileSync(join(cwd, when.file), 'utf8').includes(when.contains));
+const behaviour = (scenario.behaviours ?? []).find((b) => matches(b.when)) ?? { calls: [] };
+
+// A behaviour can fail on its own, so one arm fails while the other runs.
+const exit = behaviour.exit ?? scenario.exit;
+if (exit) {
+  process.stderr.write(behaviour.stderr ?? scenario.stderr ?? '');
+  process.exit(exit);
+}
 const settings = JSON.parse(readFileSync(arg('--settings'), 'utf8'));
 const out = [];
 const emit = (message) => out.push(JSON.stringify(message));
@@ -50,11 +56,6 @@ for (const load of scenario.loads ?? []) {
   loadedBytes += statSync(file).size;
   runHooks('InstructionsLoaded', '', { file_path: file, memory_type: 'Project', load_reason: load.reason, ...(load.parent ? { parent_file_path: join(cwd, load.parent) } : {}) });
 }
-
-const matches = (when) =>
-  !when ||
-  (when.promptContains !== undefined ? prompt.includes(when.promptContains) : existsSync(join(cwd, when.file)) && readFileSync(join(cwd, when.file), 'utf8').includes(when.contains));
-const behaviour = (scenario.behaviours ?? []).find((b) => matches(b.when)) ?? { calls: [] };
 
 let id = 0;
 for (const call of behaviour.calls ?? []) {

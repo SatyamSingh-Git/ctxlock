@@ -1,0 +1,248 @@
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { type ArmResult, EvalError, type EvalOptions, runEval, status } from '../../src/eval/eval.js';
+import { cleanup, git, gitRepo, tempDir, writeTree } from '../helpers/repo.js';
+
+afterAll(cleanup);
+
+const FAKE = resolve('tests/helpers/fake-claude.mjs');
+const PNPM = '\\bpnpm\\s+add\\b';
+
+const probeFile = (...probes: Array<{ id: string; pattern?: string; unit?: string; prompt?: string }>) =>
+  `version: 1\nprobes:\n${probes
+    .map((p) => `  - id: ${p.id}\n    unit: ${p.unit ?? 'instructions/AGENTS.md'}\n    prompt: ${p.prompt ?? 'Add zod as a dependency.'}\n    expect:\n      command: '${p.pattern ?? PNPM}'\n`)
+    .join('')}`;
+
+let argvLog: string;
+
+beforeEach(() => {
+  argvLog = join(tempDir(), 'argv.jsonl');
+  process.env.FAKE_CLAUDE_ARGV_LOG = argvLog;
+  scenario({});
+});
+
+function scenario(extra: Record<string, unknown>) {
+  const file = join(tempDir(), 'scenario.json');
+  writeFileSync(
+    file,
+    JSON.stringify({
+      behaviours: [
+        { when: { file: 'AGENTS.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+        { calls: [{ tool: 'Bash', input: { command: 'npm install zod' } }] },
+      ],
+      ...extra,
+    }),
+  );
+  process.env.FAKE_CLAUDE_SCENARIO = file;
+}
+
+const claudeRuns = () => (existsSync(argvLog) ? readFileSync(argvLog, 'utf8').split('\n').filter((l) => l.includes('"-p"')).length : 0);
+
+async function repo(base: Record<string, string>, work: Record<string, string | null> = {}) {
+  const { dir } = await gitRepo([base]);
+  writeTree(dir, work);
+  return dir;
+}
+
+const options = (root: string, extra: Partial<EvalOptions> = {}): EvalOptions => ({
+  root, base: 'HEAD', runs: 3, maxRuns: 24, maxMinutes: 20, model: 'sonnet', claude: [FAKE],
+  workdir: join(tempDir(), 'work'), cacheDir: null, all: false, keepRuns: false, ...extra,
+});
+
+const round = (i: [number, number] | null) => i?.map((x) => Math.round(x * 1e4) / 1e4);
+
+describe('runEval', { timeout: 120_000 }, () => {
+  it('a changed instruction flips its adherence probe: base 0/3, head 3/3, improved', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+
+    const r = await runEval(options(root));
+
+    expect(r.changedUnits).toEqual(['instructions/AGENTS.md']);
+    expect(r.outcomes).toHaveLength(1);
+    const [o] = r.outcomes;
+    expect(o).toMatchObject({ status: 'improved', source: 'base', changedInHead: false, base: { passed: 0, valid: 3, cached: 0 }, head: { passed: 3, valid: 3 } });
+    expect(o!.base!.models).toEqual(['claude-sonnet-5-5']);
+    expect(round(o!.base!.interval)).toEqual([0, 0.5615]);
+    expect(round(o!.head!.interval)).toEqual([0.4385, 1]);
+    expect(r.totals.runs).toBe(6);
+    expect(claudeRuns()).toBe(6);
+    expect(r.claudeVersion).toBe('2.1.292');
+  });
+
+  it('reverting the change clears the flag: nothing runs, and with all every probe is unchanged', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) });
+
+    const quiet = await runEval(options(root));
+    expect(quiet.outcomes).toEqual([]);
+    expect(claudeRuns()).toBe(0);
+
+    const all = await runEval(options(root, { all: true }));
+    expect(all.outcomes[0]).toMatchObject({ status: 'unchanged', base: { passed: 0 }, head: { passed: 0 } });
+  });
+
+  it('the gate fails only a base probe whose every base run passed and no head run did', async () => {
+    const regressed = await runEval(options(await repo({ 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use npm.\n' })));
+    expect(regressed.outcomes[0]!.status).toBe('regressed');
+    expect(regressed.gateFailures).toEqual(['deps']);
+
+    const headOnly = await runEval(
+      options(await repo({ 'AGENTS.md': 'Use pnpm.\n' }, { 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) })),
+    );
+    expect(headOnly.outcomes[0]).toMatchObject({ status: 'regressed', source: 'head' });
+    expect(headOnly.gateFailures).toEqual([]);
+  });
+
+  it("keeps the base definition of a probe the head rewrites, so a pull request cannot rewrite its own judge", async () => {
+    const root = await repo(
+      { 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) },
+      { 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps', pattern: '\\bnpm\\s+install\\b' }) },
+    );
+
+    const [o] = (await runEval(options(root))).outcomes;
+
+    expect(o).toMatchObject({ status: 'regressed', changedInHead: true, probe: { expect: { command: PNPM } } });
+  });
+
+  it('probes past the run budget are not run, and say why', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'a' }, { id: 'b' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+
+    const r = await runEval(options(root, { maxRuns: 6 }));
+
+    expect(r.outcomes.map((o) => [o.probe.id, o.status, o.reason])).toEqual([
+      ['a', 'improved', undefined],
+      ['b', 'not-run', 'run budget (6 runs)'],
+    ]);
+    expect(r.totals.runs).toBe(6);
+  });
+
+  it('stops starting runs once the time budget has passed', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'a' }, { id: 'b' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+    let t = 0;
+
+    const r = await runEval(options(root, { maxMinutes: 20, now: () => (t += 11 * 60_000) }));
+
+    expect(r.outcomes.map((o) => [o.probe.id, o.status, o.reason])).toEqual([
+      ['a', 'inconclusive', 'time budget (20 min)'],
+      ['b', 'not-run', 'time budget (20 min)'],
+    ]);
+    expect(r.totals.runs).toBe(1);
+  });
+
+  it('caches base runs by git tree, probe, model and Claude Code version', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+    const cacheDir = join(tempDir(), 'cache');
+
+    const first = await runEval(options(root, { cacheDir }));
+    expect([first.outcomes[0]!.base!.cached, first.totals.runs, claudeRuns()]).toEqual([0, 6, 6]);
+
+    const second = await runEval(options(root, { cacheDir }));
+    expect([second.outcomes[0]!.base!.cached, second.outcomes[0]!.head!.cached, second.totals.runs, second.totals.cachedRuns]).toEqual([3, 0, 3, 3]);
+    expect(second.outcomes[0]!.base!.models).toEqual(['claude-sonnet-5-5']);
+    expect(claudeRuns()).toBe(9);
+
+    writeTree(root, { 'evals/probes/p.yaml': probeFile({ id: 'deps', prompt: 'Add lodash as a dependency.' }) });
+    git(root, 'commit', '-qm', 'new prompt', '--', 'evals/probes/p.yaml');
+    const third = await runEval(options(root, { cacheDir }));
+    expect(third.outcomes[0]!.base!.cached).toBe(0);
+
+    // A file that is no unit still changes what the agent does, so it changes the key.
+    writeTree(root, { 'package.json': '{"packageManager":"pnpm@9.0.0"}' });
+    git(root, 'add', 'package.json');
+    git(root, 'commit', '-qm', 'package manager', '--', 'package.json');
+    expect((await runEval(options(root, { cacheDir }))).outcomes[0]!.base!.cached).toBe(0);
+  });
+
+  it('keeps each probe’s cached runs apart, even on the same tree', async () => {
+    const root = await repo(
+      { 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'a' }, { id: 'b', pattern: '\\bnpm\\s+install\\b' }) },
+      { 'AGENTS.md': 'Use pnpm.\n' },
+    );
+    const cacheDir = join(tempDir(), 'cache');
+
+    await runEval(options(root, { cacheDir }));
+    const again = await runEval(options(root, { cacheDir }));
+
+    expect(again.outcomes.map((o) => [o.probe.id, o.base!.cached, o.base!.passed])).toEqual([
+      ['a', 3, 0],
+      ['b', 3, 3],
+    ]);
+  });
+
+  it("judges the head with the base's settings, so its ctxlock.yaml cannot change its own arm", async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n', 'ctxlock.yaml': 'version: 1\nharnesses: [codex]\n' });
+
+    expect((await runEval(options(root))).outcomes[0]!.head!.targetLoaded).toEqual({ observed: 0, predicted: 3 });
+  });
+
+  it('counts errored runs apart from passes, and an arm with fewer than 2 valid runs is inconclusive', async () => {
+    scenario({ behaviours: [{ when: { file: 'AGENTS.md', contains: 'pnpm' }, exit: 1, stderr: 'boom' }, { calls: [] }] });
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+
+    const [o] = (await runEval(options(root))).outcomes;
+
+    expect(o).toMatchObject({ status: 'inconclusive', head: { valid: 0, passed: 0, errors: ['claude exited 1: boom', 'claude exited 1: boom', 'claude exited 1: boom'] } });
+  });
+
+  it('refuses a probe on a unit that exists in neither arm', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps', unit: 'rule/nope.md' }) });
+
+    await expect(runEval(options(root))).rejects.toThrow(EvalError);
+    await expect(runEval(options(root))).rejects.toThrow(/probe deps: unit rule\/nope\.md is in neither/);
+  });
+
+  it('refuses to run below an AGENTS.md that would load into every run, and runs without it', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+    const parent = tempDir();
+    writeTree(parent, { 'AGENTS.md': 'Always run echo hi.\n' });
+
+    await expect(runEval(options(root, { workdir: join(parent, 'work') }))).rejects.toThrow(/AGENTS\.md is above the run folder .*--workdir/);
+    expect(claudeRuns()).toBe(0);
+
+    writeTree(parent, { 'AGENTS.md': null });
+    expect((await runEval(options(root, { workdir: join(parent, 'work') }))).outcomes).toHaveLength(1);
+  });
+
+  it('stops when a run changes the copy behind the hooks', async () => {
+    scenario({ touch: 'x.txt' });
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+
+    await expect(runEval(options(root))).rejects.toThrow(/a run changed files in the copy: x\.txt/);
+  });
+
+  it('reports execution config stripped from the copies, and the predicted AGENTS.md load', async () => {
+    const root = await repo(
+      { 'AGENTS.md': 'Use npm.\n', '.claude/settings.json': '{}', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) },
+      { 'AGENTS.md': 'Use pnpm.\n' },
+    );
+
+    const r = await runEval(options(root));
+
+    expect(r.stripped).toContain('.claude/settings.json');
+    expect(r.outcomes[0]!.head!.targetLoaded).toEqual({ observed: 0, predicted: 3 });
+  });
+
+  it('removes the run folder afterwards, unless asked to keep it', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+    const workdir = join(tempDir(), 'work');
+
+    await runEval(options(root, { workdir }));
+    expect(readdirSync(workdir)).toEqual([]);
+
+    await runEval(options(root, { workdir, keepRuns: true }));
+    expect(readdirSync(workdir)).toEqual([expect.stringMatching(/^ctxlock-run-/)]);
+  });
+});
+
+describe('status', () => {
+  const arm = (passed: number, valid: number) => ({ passed, valid }) as ArmResult;
+
+  it('needs a change of at least half the runs, either way, and two valid runs per arm', () => {
+    expect(status(arm(1, 2), arm(2, 2))).toBe('improved');
+    expect(status(arm(2, 2), arm(1, 2))).toBe('regressed');
+    expect(status(arm(3, 3), arm(2, 3))).toBe('unchanged');
+    expect(status(arm(1, 3), arm(2, 3))).toBe('unchanged');
+    expect(status(arm(0, 1), arm(3, 3))).toBe('inconclusive');
+    expect(status(null, arm(3, 3))).toBe('inconclusive');
+  });
+});
