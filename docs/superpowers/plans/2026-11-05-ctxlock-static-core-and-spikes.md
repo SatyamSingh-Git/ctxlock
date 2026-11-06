@@ -944,6 +944,8 @@ Both need neither Docker nor real builds, and both use the S1 harness.
 
 ## After this plan
 
+**Written:** [Plan 2](2026-11-06-ctxlock-behavioral-ci.md). It moved `ctxlock build` to a Plan 3 of its own and left the Codex collector for a contributor with access; its Scope section gives the reasons.
+
 Write **Plan 2: behavioral Context CI** from the S1–S4 memos. It covers:
 - adherence and trigger probes (`evals/probes/`, drafted by an LLM and reviewed once);
 - `ctxlock eval --base --head` with arms, repeats, base-arm caching, and the cap of 24 runs and 20 minutes (Claude Code via `claude -p`, isolated per run without Docker);
