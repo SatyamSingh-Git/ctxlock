@@ -15,11 +15,29 @@ inputs:
   comment:
     description: Post the result as a sticky pull request comment.
     default: 'true'
+  claude_code_oauth_token:
+    description: A token from `claude setup-token`. The behavioral check then runs on that person's Claude subscription. Pass it from a secret.
+    default: ''
+  anthropic_api_key:
+    description: An Anthropic API key. Claude Code uses it instead of the token when both are set. Pass it from a secret.
+    default: ''
+  eval:
+    description: "auto: run the behavioral check when a Claude credential is set. false: never run it."
+    default: auto
+  fail-on-regression:
+    description: Fail the check when a probe from the base branch passed every base run and no head run.
+    default: 'false'
+  claude-code-version:
+    description: The Claude Code version the behavioral check installs.
+    default: '2.1.292'
 
 outputs:
   exit-code:
     description: 0 clean, 1 must-fix issues, 2 could not run.
     value: ${{ steps.diff.outputs.exit-code }}
+  eval-exit-code:
+    description: The behavioral check's exit code, 0 done, 1 a gated regression, 2 could not run. Empty when it did not run.
+    value: ${{ steps.eval.outputs.exit-code }}
 
 runs:
   using: composite
@@ -59,6 +77,57 @@ runs:
         fi
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
 
+    - name: Install Claude Code
+      if: inputs.eval != 'false' && (inputs.claude_code_oauth_token != '' || inputs.anthropic_api_key != '')
+      shell: bash
+      env:
+        VERSION: ${{ inputs.claude-code-version }}
+      run: npm install -g "@anthropic-ai/claude-code@$VERSION" --no-audit --no-fund
+
+    # Base results are cached by git tree, so a pull request pushed again does not re-run its base arm.
+    - name: Restore eval cache
+      if: inputs.eval != 'false' && (inputs.claude_code_oauth_token != '' || inputs.anthropic_api_key != '')
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/ctxlock-cache
+        key: ctxlock-eval-${{ github.event.pull_request.base.sha }}-${{ github.run_id }}
+        restore-keys: ctxlock-eval-${{ github.event.pull_request.base.sha }}-
+
+    - name: Behavioral check
+      id: eval
+      shell: bash
+      env:
+        BASE: ${{ inputs.base }}
+        EVAL: ${{ inputs.eval }}
+        TOKEN: ${{ inputs.claude_code_oauth_token }}
+        KEY: ${{ inputs.anthropic_api_key }}
+        FAIL_ON_REGRESSION: ${{ inputs.fail-on-regression }}
+      run: |
+        report="$RUNNER_TEMP/ctxlock.md"
+        # Without a base the static step has already said why nothing could run.
+        if [ "$EVAL" = "false" ] || [ -z "$BASE" ]; then exit 0; fi
+        if [ -z "$TOKEN" ] && [ -z "$KEY" ]; then
+          printf '\n%s\n\n%s\n' '#### Behavioral check' 'Skipped: no Claude credentials. Pull requests from forks get no secrets.' >> "$report"
+          exit 0
+        fi
+        # In -p mode an ANTHROPIC_API_KEY that is set at all wins over the token, so only a non-empty one is passed on.
+        if [ -n "$KEY" ]; then export ANTHROPIC_API_KEY="$KEY"; fi
+        if [ -n "$TOKEN" ]; then export CLAUDE_CODE_OAUTH_TOKEN="$TOKEN"; fi
+        unset TOKEN KEY
+        flags=()
+        if [ "$FAIL_ON_REGRESSION" = "true" ]; then flags+=(--fail-on-regression); fi
+        out="$RUNNER_TEMP/ctxlock-eval.md"
+        set +e
+        node "$GITHUB_ACTION_PATH/dist/cli.js" eval --base "$BASE" --format markdown --cache "$RUNNER_TEMP/ctxlock-cache" "${flags[@]}" "$GITHUB_WORKSPACE" > "$out"
+        code=$?
+        set -e
+        if [ "$code" -ne 0 ] && [ ! -s "$out" ]; then
+          printf '%s\n\n%s\n' '### ctxlock · behavioral check' "Behavioral check could not run (exit $code). The job log has the reason." > "$out"
+        fi
+        printf '\n' >> "$report"
+        cat "$out" >> "$report"
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+
     - name: Job summary
       if: always()
       shell: bash
@@ -80,17 +149,32 @@ runs:
       env:
         CODE: ${{ steps.diff.outputs.exit-code }}
         FAIL_ON_MUST: ${{ inputs.fail-on-must }}
+        EVAL_CODE: ${{ steps.eval.outputs.exit-code }}
+        FAIL_ON_REGRESSION: ${{ inputs.fail-on-regression }}
       run: |
+        status=0
         case "$CODE" in
           0) ;;
           1)
             if [ "$FAIL_ON_MUST" = "true" ]; then
               echo "::error title=ctxlock::must-fix context issues; the job summary lists them"
-              exit 1
+              status=1
             fi
             ;;
           *)
             echo "::error title=ctxlock::ctxlock could not run; the job summary has the reason"
-            exit 1
+            status=1
             ;;
         esac
+        # The behavioral check is advisory: only a gated regression, when asked for, fails the job.
+        case "$EVAL_CODE" in
+          '' | 0) ;;
+          1)
+            if [ "$FAIL_ON_REGRESSION" = "true" ]; then
+              echo "::error title=ctxlock::a probe regressed; the job summary shows which"
+              status=1
+            fi
+            ;;
+          *) echo "::warning title=ctxlock::the behavioral check could not run; the job summary has the reason" ;;
+        esac
+        exit "$status"

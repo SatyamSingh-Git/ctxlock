@@ -230,7 +230,9 @@ describe('ctxlock diff', () => {
     expect(md).toContain('- `.claude/settings.json` — `New or changed: SessionStart hook for startup runs "node setup.js"`');
     // Repository text is shown as code, so an @name in it can never notify a GitHub user.
     expect(md).toContain('- `AGENTS.md` — `Claude Code ignores AGENTS.md because CLAUDE.md exists; add @AGENTS.md to CLAUDE.md`');
-    expect(md).toContain('Static checks only. Behavioral evals come in a later release.');
+    // The behavioral section follows in the Action, so the static report no longer says evals come later.
+    expect(md).not.toContain('Behavioral evals come in a later release');
+    expect(md.trimEnd().endsWith('Resolved: 0 findings no longer present.')).toBe(true);
 
     const clean = await cli('diff', '--base', shas[1]!, '--head', shas[0]!, dir, '--format', 'markdown');
     expect(clean.code).toBe(0);

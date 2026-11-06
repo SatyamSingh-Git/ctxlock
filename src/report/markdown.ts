@@ -54,6 +54,6 @@ export function renderDiffMarkdown(d: DiffResult): string {
   lines.push('', '#### Execution-affecting changes', '');
   lines.push(...(d.execChanges.length === 0 ? ['None.'] : d.execChanges.map(item)));
 
-  lines.push('', `Resolved: ${plural(d.resolvedFindings.length, 'finding')} no longer present.`, '', '---', '', '_Static checks only. Behavioral evals come in a later release._');
+  lines.push('', `Resolved: ${plural(d.resolvedFindings.length, 'finding')} no longer present.`);
   return `${lines.join('\n')}\n`;
 }

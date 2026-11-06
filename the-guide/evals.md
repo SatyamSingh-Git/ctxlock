@@ -133,7 +133,7 @@ A run that fails, because Claude Code is logged out, rate-limited or timed out, 
 
 **The gate** (`--fail-on-regression`). A probe fails it when every base run passed and no head run did, with at least 3 valid runs in each arm. At 3 against 3 that is a one-sided Fisher p of 0.05, the strongest result 3 runs can give. Probes the pull request adds never gate; the base's definition of a probe is the one that runs, and the report says when the pull request edits it.
 
-**The cache.** Results from a git ref are cached by its tree, the probe, the model and Claude Code's version. The base usually repeats from one pull request to the next, so it is run once.
+**The cache.** Results from a git ref are cached by its tree, the probe, the model and Claude Code's version, under `--cache`. On your machine, a base you check against again is not run again. In the Action, the cache lasts for one pull request (see [its page](github-action.md#the-behavioral-check)). The working tree is never cached.
 
 ## On Windows
 
