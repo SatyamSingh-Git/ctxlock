@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { realpathSync, statSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
@@ -32,6 +32,10 @@ function count(value: string): number {
 }
 
 const workdirOf = (flag: string | undefined) => resolve(flag ?? process.env.RUNNER_TEMP ?? tmpdir());
+// The user's own cache folder: in a temp folder that other users share, they could plant results.
+const cacheOf = (flag: string | undefined) =>
+  resolve(flag ?? join(process.env.XDG_CACHE_HOME ?? join(homedir(), process.platform === 'win32' ? 'AppData/Local' : '.cache'), 'ctxlock'));
+const VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 // A path is resolved here, since Claude Code runs with the copy as its working directory.
 const claudeOf = (flag: string | undefined) => (flag === undefined ? ['claude'] : [/[\\/]/.test(flag) ? resolve(flag) : flag]);
 
@@ -122,7 +126,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .option('--model <model>', 'the model Claude Code runs (default: eval.model, or sonnet)')
     .option('--claude <path>', "Claude Code's executable (default: claude on PATH)")
     .option('--workdir <dir>', 'where run folders and the cache go (default: $RUNNER_TEMP, or the system temp folder)')
-    .option('--cache <dir>', 'where results from git refs are cached (default: <workdir>/ctxlock-cache)')
+    .option('--cache <dir>', 'where results from git refs are cached (default: ctxlock under $XDG_CACHE_HOME, else ~/.cache, or ~/AppData/Local on Windows)')
     .option('--all', 'run every probe, not only those on changed units')
     .option('--keep-runs', 'keep the run folders, with what the agent tried, for debugging')
     .option('--fail-on-regression', 'exit 1 when a probe from the base passes every base run and no head run')
@@ -151,7 +155,8 @@ export async function main(argv: string[], io: Io): Promise<number> {
         model: opts.model ?? settings.model,
         claude,
         workdir,
-        cacheDir: resolve(opts.cache ?? join(workdir, 'ctxlock-cache')),
+        cacheDir: cacheOf(opts.cache),
+        ctxlockVersion: VERSION,
         all: opts.all ?? false,
         keepRuns: opts.keepRuns ?? false,
       });

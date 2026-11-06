@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { main } from '../src/cli.js';
@@ -122,6 +122,7 @@ describe('ctxlock eval', { timeout: 120_000 }, () => {
       }),
     );
     process.env.FAKE_CLAUDE_SCENARIO = file;
+    process.env.XDG_CACHE_HOME = tempDir();
   });
 
   async function repo(base: string, head: string, extra: Record<string, string> = {}, headExtra: Record<string, string> = {}) {
@@ -164,6 +165,19 @@ describe('ctxlock eval', { timeout: 120_000 }, () => {
     const { code, stdout } = await cli('eval', await repo('Use npm.\n', 'Use pnpm.\n'), '--base', 'HEAD', '--claude', 'ctxlock-no-such-claude', '--format', 'markdown', '--workdir', join(tempDir(), 'w'));
     expect(code).toBe(2);
     expect(stdout).toMatch(/could not run: `Claude Code not found/);
+  });
+
+  it("caches in the user's own cache folder by default, not in the work folder, which may be a shared temp folder", async () => {
+    const dir = await repo('Use npm.\n', 'Use pnpm.\n');
+    const workdir = join(tempDir(), 'w');
+
+    await cli('eval', dir, '--base', 'HEAD', '--claude', FAKE, '--workdir', workdir);
+    expect(readdirSync(join(process.env.XDG_CACHE_HOME!, 'ctxlock'))).toHaveLength(1);
+    expect(existsSync(join(workdir, 'ctxlock-cache'))).toBe(false);
+
+    const own = join(tempDir(), 'mine');
+    await cli('eval', dir, '--base', 'HEAD', '--claude', FAKE, '--workdir', workdir, '--cache', own);
+    expect(readdirSync(own)).toHaveLength(1);
   });
 
   it("takes eval settings from the base ctxlock.yaml, not the head's, and flags override them", async () => {

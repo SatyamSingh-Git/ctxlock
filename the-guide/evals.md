@@ -84,7 +84,7 @@ ctxlock eval --base origin/main --head HEAD --format markdown
 | `--model <model>` | `eval.model`, or `sonnet` | The model Claude Code runs. The report names the model each run actually used |
 | `--claude <path>` | `claude` on `PATH` | Claude Code's executable |
 | `--workdir <dir>` | `$RUNNER_TEMP`, or the system temp folder | Where the run folders and the cache go |
-| `--cache <dir>` | `<workdir>/ctxlock-cache` | Where results from git refs are cached |
+| `--cache <dir>` | `ctxlock` in your cache folder: `$XDG_CACHE_HOME`, else `~/.cache`, or `~/AppData/Local` on Windows | Where results from git refs are cached. Not a temp folder by default: on a machine other users share, they could plant results there |
 | `--all` | off | Run every probe, not only those on changed units |
 | `--keep-runs` | off | Keep the run folders, with each transcript, to see why a probe failed |
 | `--fail-on-regression` | off | Exit 1 on a gated regression (below) |
@@ -141,7 +141,7 @@ A run that fails, because Claude Code is logged out, rate-limited or timed out, 
 
 **The gate** (`--fail-on-regression`). A probe fails it when every base run passed and no head run did, with at least 3 valid runs in each arm, and the time budget did not cut it short. At 3 against 3 that is a one-sided Fisher p of 0.05, the strongest result 3 runs can give. Probes the pull request adds never gate; the base's definition of a probe is the one that runs, and the report says when the pull request edits it. If the pull request breaks its own probe files, the report says which, and the base's probes still run.
 
-**The cache.** Results from a git ref are cached by its tree, the probe, the model and Claude Code's version, under `--cache`. On your machine, a base you check against again is not run again. Runs that failed are not cached. In the Action, the cache lasts for one pull request (see [its page](github-action.md#the-behavioral-check)). The working tree is never cached.
+**The cache.** Results from a git ref are cached by its tree, the probe, the model, Claude Code's version and ctxlock's, under `--cache`. On your machine, a base you check against again is not run again. Runs that failed are not cached, and a cache file that is torn or not ctxlock's is a miss: the arm runs again and replaces it. In the Action, the cache lasts for one pull request (see [its page](github-action.md#the-behavioral-check)). The working tree is never cached.
 
 ## On Windows
 

@@ -38,7 +38,7 @@ The decisions they led to are D35–D37 in [journey/decisions.md](../../../journ
 - `M1` (fixed): a brace glob such as `{..,x}/*` passed the hook's `climbs` check. Each alternative is now checked.
 - `M2` (fixed): frontmatter ctxlock cannot parse was dropped only for an unquoted `hooks:` or `allowed-tools:` line, and YAML merge keys were not handled.
 - `M3` (fixed): the error when a run changes the copy listed file names, which were written behind the hooks, and could reach the pull request comment. It now gives the count.
-- `M4`: the cache key lacks ctxlock's own version, `<tmpdir>/ctxlock-cache` is shared between users on one Linux machine, and a cache write is not atomic (a torn file exits 2).
+- `M4` (fixed): the cache key lacked ctxlock's own version, the default `<tmpdir>/ctxlock-cache` was shared between users on one Linux machine, and a torn cache file stopped the check with exit 2. The key now includes the version, the default is the user's cache folder, and a torn file is a miss.
 - `M5` (fixed): `probe draft` did not check drafted ids against existing probes, and printed the model's ids and reasons as they were. Taken ids are now discarded, and control characters in the printout are replaced.
 - `M6` (fixed): a working-tree head arm included the gitignored `CLAUDE.local.md`, which the base arm never has; so did `probe draft`'s arms.
 - `M7` (re-graded important, not fixed): on macOS the temp folder is behind a `/var` → `/private/var` symlink, so the hook may deny every read and loads may not join. It fails closed; the fix needs a Mac to check it on.

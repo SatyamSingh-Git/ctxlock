@@ -46,7 +46,7 @@ async function repo(base: Record<string, string>, work: Record<string, string | 
 }
 
 const options = (root: string, extra: Partial<EvalOptions> = {}): EvalOptions => ({
-  root, base: 'HEAD', runs: 3, maxRuns: 24, maxMinutes: 20, model: 'sonnet', claude: [FAKE],
+  root, base: 'HEAD', runs: 3, maxRuns: 24, maxMinutes: 20, model: 'sonnet', claude: [FAKE], ctxlockVersion: '0.1.0',
   workdir: join(tempDir(), 'work'), cacheDir: null, all: false, keepRuns: false, ...extra,
 });
 
@@ -184,6 +184,23 @@ describe('runEval', { timeout: 120_000 }, () => {
     git(root, 'add', 'package.json');
     git(root, 'commit', '-qm', 'package manager', '--', 'package.json');
     expect((await runEval(options(root, { cacheDir }))).outcomes[0]!.base!.cached).toBe(0);
+
+    // Another ctxlock may grade or record runs differently.
+    expect((await runEval(options(root, { cacheDir }))).outcomes[0]!.base!.cached).toBe(3);
+    expect((await runEval(options(root, { cacheDir, ctxlockVersion: '0.2.0' }))).outcomes[0]!.base!.cached).toBe(0);
+  });
+
+  it('treats a torn or foreign cache file as a miss, runs the arm again, and replaces the file', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
+    const cacheDir = join(tempDir(), 'cache');
+    await runEval(options(root, { cacheDir }));
+    const [file] = readdirSync(cacheDir).map((f) => join(cacheDir, f));
+
+    for (const torn of ['{"records":[{"passed":tr', 'null', '{}']) {
+      writeFileSync(file!, torn);
+      expect((await runEval(options(root, { cacheDir }))).outcomes[0]!.base).toMatchObject({ valid: 3, cached: 0 });
+      expect(JSON.parse(readFileSync(file!, 'utf8')).records).toHaveLength(3);
+    }
   });
 
   it('never caches a run that failed, so logging back in runs the arm again', async () => {

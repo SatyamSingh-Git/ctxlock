@@ -106,7 +106,7 @@ describe('no agent text in any output', { timeout: 120_000 }, () => {
 
     const { dir: root } = await gitRepo([{ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': `version: 1\nprobes:\n  - id: deps\n    unit: instructions/AGENTS.md\n    prompt: Add zod.\n    expect:\n      command: '${PNPM}'\n` }]);
     writeTree(root, { 'AGENTS.md': 'Use pnpm.\n' });
-    const r = await runEval({ root, base: 'HEAD', runs: 2, maxRuns: 24, maxMinutes: 20, model: 'sonnet', claude: [fake], workdir: join(tempDir(), 'w'), cacheDir: null, all: false, keepRuns: false });
+    const r = await runEval({ root, base: 'HEAD', runs: 2, maxRuns: 24, maxMinutes: 20, model: 'sonnet', claude: [fake], ctxlockVersion: '0.1.0', workdir: join(tempDir(), 'w'), cacheDir: null, all: false, keepRuns: false });
     expect(r.outcomes).toHaveLength(1);
     for (const format of ['text', 'json', 'markdown'] as const) {
       expect(renderEval(r, format)).not.toMatch(/CANARY/);

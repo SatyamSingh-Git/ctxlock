@@ -22,6 +22,8 @@ export interface EvalOptions {
   maxMinutes: number;
   model: string;
   claude: string[];
+  // Part of the cache key: another ctxlock may grade or record runs differently.
+  ctxlockVersion: string;
   workdir: string;
   cacheDir: string | null;
   all: boolean;
@@ -207,14 +209,22 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     // depend on any file, such as package.json naming the package manager.
     const cacheKey = (arm: ArmName, probe: Probe) => {
       const tree = trees[arm];
-      return tree === null || opts.cacheDir === null ? null : sha256Hex(JSON.stringify([tree, probe.hash, opts.model, version]));
+      return tree === null || opts.cacheDir === null ? null : sha256Hex(JSON.stringify([tree, probe.hash, opts.model, version, opts.ctxlockVersion]));
     };
     const readCache = (key: string | null): RunRecord[] => {
       if (key === null || opts.cacheDir === null) return [];
       const file = join(opts.cacheDir, `${key}.json`);
       if (!existsSync(file)) return [];
+      let records: unknown;
+      try {
+        records = (JSON.parse(readFileSync(file, 'utf8')) as { records?: unknown } | null)?.records;
+      } catch (err) {
+        if (!(err instanceof SyntaxError)) throw err;
+      }
+      // A torn or foreign file is a miss: the arm runs again and its runs replace the file.
+      if (!Array.isArray(records)) return [];
       // A run that failed (logged out, rate-limited) says nothing about the context, so it is never reused.
-      return (JSON.parse(readFileSync(file, 'utf8')) as { records: RunRecord[] }).records.filter((r) => r.error === null).slice(0, opts.runs);
+      return (records as RunRecord[]).filter((r) => r.error === null).slice(0, opts.runs);
     };
 
     let planned = 0;
