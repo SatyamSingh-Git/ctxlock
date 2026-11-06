@@ -2,7 +2,13 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [06 — the second batch: the rules, the commands, and a review that broke two of them](06-second-batch.md).
+**Latest:** [07 — the Action, four real repositories, and a third way past the comment rule](07-action-and-dogfood.md).
+- Tasks 13–14: the GitHub Action, and ctxlock run on four public repositories. No `must` findings, 18 real stale paths in sentry, and 33 false positives fixed by rule.
+- A fresh review of Tasks 11–14 found that inline code was still a regex and could hide a comment, that edits to known hidden comments went unnoticed, that skill hooks were missed, and that the comment could carry injected markdown. All fixed test-first.
+- Spike S2: rulesync works as a library, but ctxlock has to decide what goes where.
+- Spike S1 started: observe-and-deny works, and run copies must stay out of the home folder.
+
+**Earlier:** [06 — the second batch: the rules, the commands, and a review that broke two of them](06-second-batch.md).
 - Tasks 6–12: all lint rules (L0–L11, L13), `ctxlock scan`, `lint`, `budget` and `diff`, runnable from source.
 - Vendor source, not the plan, decided what the config inventory covers; VS Code had renamed the plan's key.
 - `diff` judges a pull request with the base branch's settings, so it cannot switch off its own checks.

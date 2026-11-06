@@ -171,3 +171,25 @@ Several edits this batch went through `sed` and heredocs on Windows. Several of 
 *Cost:* minutes each time, and one mutation run whose pattern was wrong.
 
 *Changed:* multi-line edits go through the Edit tool, or a script that throws when its search text is not found exactly once.
+
+*Since:* it happened again in Task 14. A Node script fed through a heredoc lost the backslashes in its search strings, and its not-found guard stopped it before it wrote anything. The guard is what made this a non-event.
+
+### Half a parser
+
+Batch 2's fix for the comment rule moved code-block detection to markdown-it, a CommonMark parser, and left inline code to a line-based regex. The batch-3 review found the next way past in that half. `` \`<!-- … -->\` `` renders as a hidden comment between two literal backticks, but the regex read it as code. A backtick inside an HTML attribute did the same.
+
+*Cause:* the fix replaced the part the review had shown to be broken, rather than everything that answered the same question.
+
+*Cost:* found by the batch-3 review, graded critical, before any release.
+
+*Changed:* inline spans now come from markdown-it's own `backticks` rule, with their positions mapped back to the file, so one parser answers "is this code?" for blocks and spans alike.
+
+### Counting findings from memory
+
+The first draft of the dogfood report said 132 findings before the fixes, 96 after, ten false positives left, and 13 stale component paths. Recounting from the saved lint output before committing gave 131, 98, seven, and 7 + 4: four of the "component" paths were files deleted from a folder that still exists, not moved.
+
+*Cause:* the summary was written from the analysis as remembered, after an hour of reading findings, rather than from the output files.
+
+*Cost:* none; caught before the commit.
+
+*Changed:* every number in a report is read from the saved output (`grep -c`) and checked before the commit, and each claim about a file is checked against the file list.

@@ -28,9 +28,10 @@
 | Batch-2 review (Tasks 6–10) | Done; fixes in | `abbf135` |
 | 13 | Built and checked locally; a live pull request needs Satyam's OK for a test branch | `feat: GitHub Action posting the static context check on PRs` |
 | 14 | Done on four repositories; not pushed until Satyam says so | `03a342f`, `048ce98` |
-| Batch-3 review (Tasks 11–14) | Running | |
+| Batch-3 review (Tasks 11–14) | Done; fixes in, not pushed | `293499d` |
 | S2 | Done: [memo](../../spikes/S2-rulesync.md) | `docs: spike S2, rulesync as the compile backend` |
-| S1, S3, S4 | Not started | |
+| S1 | Started: harness and one smoke run (1 of 150) | not committed yet |
+| S3, S4 | Not started | |
 
 As built, a task sometimes goes further than its text below, because a vendor's current docs or source said otherwise. Each of those calls is in [journey/decisions.md](../../../journey/decisions.md), and each rule's behaviour as built is in [the-guide/rules.md](../../../the-guide/rules.md). The stack differs in three places: there is no tinyglobby (D17); jsonc-parser 3.3.1 (MIT) reads VS Code's JSONC settings (Task 7); and markdown-it 15 (MIT) finds code blocks the way CommonMark does, after the batch-2 review found two ways past a hand-written fence scanner.
 
