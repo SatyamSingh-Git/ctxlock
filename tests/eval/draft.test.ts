@@ -103,6 +103,16 @@ describe('draftProbes', { timeout: 120_000 }, () => {
     expect(existsSync(join(root, 'evals/probes/agents-md.yaml'))).toBe(false);
   });
 
+  it('stops when a validation run changes the copy, without naming what it wrote', async () => {
+    scenario(CANDIDATES, { touch: 'CANARY-NAME.txt' });
+    const root = await repo();
+
+    const failure = draftProbes(options(root));
+    await expect(failure).rejects.toThrow(/^a run changed 1 file in the copy behind the hooks; stopping/);
+    await expect(failure).rejects.not.toThrow(/CANARY/);
+    expect(existsSync(join(root, 'evals/probes/agents-md.yaml'))).toBe(false);
+  });
+
   it('says so when the reply has no yaml block, and discards an invalid candidate with its reason', async () => {
     scenario('I could not think of any.');
     await expect(draftProbes(options(await repo()))).rejects.toThrow(/no ```yaml block/);

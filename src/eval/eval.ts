@@ -134,8 +134,9 @@ export function status(base: ArmResult | null, head: ArmResult | null): ProbeSta
 
 // The strongest result 3 runs per arm can give: every base run passed and no head run did, a
 // one-sided Fisher p of 0.05 at 3 against 3. Head-only probes never gate: the pull request wrote them.
+// A probe the time budget cut short is inconclusive, and never gates.
 const gated = (o: ProbeOutcome) =>
-  o.source === 'base' && !!o.base && !!o.head && o.base.valid >= 3 && o.head.valid >= 3 && o.base.passed === o.base.valid && o.head.passed === 0;
+  o.source === 'base' && o.status === 'regressed' && o.base!.valid >= 3 && o.head!.valid >= 3 && o.base!.passed === o.base!.valid && o.head!.passed === 0;
 
 const treeOf = async (root: string, ref: string) => (await exec('git', ['-C', root, 'rev-parse', `${ref}^{tree}`])).stdout.trim();
 
@@ -227,22 +228,20 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     });
 
     let n = 0;
-    let timeUp = false;
     const elapsed = () => now() - started > opts.maxMinutes * 60_000;
+    // Once the time is up no run starts, but later probes the cache already holds still count.
     for (const plan of plans) {
       if (!plan.runnable) break;
-      for (let i = 0; i < opts.runs && !timeUp; i++) {
+      for (let i = 0; i < opts.runs; i++) {
         for (const arm of ['base', 'head'] as const) {
           if (plan.records[arm].length > i) continue;
-          if (elapsed()) {
-            timeUp = true;
-            break;
-          }
+          if (elapsed()) break;
           plan.started = true;
           const t: Transcript = await runClaude({ dir: dirs[arm], scratch: join(runRoot, 'scratch', String(++n)), prompt: plan.probe.prompt, model: opts.model, claude: opts.claude });
           if (t.unhooked > 0) throw new EvalError(`${t.error}; stopping before anything else runs`);
           const changed = changedSince(dirs[arm], before[arm]!);
-          if (changed.length > 0) throw new EvalError(`a run changed files in the copy: ${changed.join(', ')}`);
+          // Not the names: they were written behind the hooks, so they are the agent's text (D39).
+          if (changed.length > 0) throw new EvalError(`a run changed ${changed.length} file${changed.length === 1 ? '' : 's'} in the copy behind the hooks; stopping before anything else runs`);
           plan.records[arm].push({
             passed: t.error === null && grade(plan.probe, t),
             error: t.error,
@@ -262,8 +261,8 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
           }
         }
       }
-      plan.complete = !timeUp;
-      if (timeUp) break;
+      plan.complete = plan.records.base.length === opts.runs && plan.records.head.length === opts.runs;
+      if (!plan.complete) continue;
       for (const arm of ['base', 'head'] as const) {
         const key = plan.keys[arm];
         const keep = plan.records[arm].filter((r) => r.error === null);

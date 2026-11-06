@@ -129,6 +129,39 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect(r.totals.runs).toBe(1);
   });
 
+  it('never gates a probe the time budget cut short, though it reached 3 runs an arm', async () => {
+    const root = await repo({ 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use npm.\n' });
+    // The first call is the start; the last run's check finds the budget gone, so the base arm is
+    // complete and the head arm one short.
+    let calls = 0;
+
+    const r = await runEval(options(root, { runs: 4, now: () => (++calls >= 9 ? 21 * 60_000 : 0) }));
+
+    expect(r.outcomes[0]).toMatchObject({ status: 'inconclusive', reason: 'time budget (20 min)', base: { valid: 4, passed: 4 }, head: { valid: 3, passed: 0 } });
+    expect(r.gateFailures).toEqual([]);
+  });
+
+  it('still reports a fully cached probe that comes after the time budget ran out', async () => {
+    const { dir: root } = await gitRepo([{ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'a', prompt: 'Add lodash.' }, { id: 'b' }) }]);
+    writeTree(root, { 'AGENTS.md': 'Use pnpm.\n' });
+    git(root, 'commit', '-qam', 'pnpm');
+    const cacheDir = join(tempDir(), 'cache');
+    const refs = { base: 'HEAD~1', head: 'HEAD', all: true, cacheDir };
+    // a's runs fail, so only b is cached.
+    scenario({ behaviours: [{ when: { promptContains: 'lodash' }, exit: 1, stderr: 'boom' }, { when: { file: 'AGENTS.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] }, { calls: [] }] });
+    await runEval(options(root, refs));
+
+    scenario({});
+    const r = await runEval(options(root, { ...refs, now: (() => { let calls = 0; return () => (++calls > 1 ? 21 * 60_000 : 0); })() }));
+
+    expect(r.outcomes.map((o) => [o.probe.id, o.status, o.reason])).toEqual([
+      ['a', 'not-run', 'time budget (20 min)'],
+      ['b', 'improved', undefined],
+    ]);
+    expect(r.outcomes[1]).toMatchObject({ base: { cached: 3 }, head: { cached: 3 } });
+    expect(r.totals.runs).toBe(0);
+  });
+
   it('caches base runs by git tree, probe, model and Claude Code version', async () => {
     const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
     const cacheDir = join(tempDir(), 'cache');
@@ -250,10 +283,13 @@ describe('runEval', { timeout: 120_000 }, () => {
   });
 
   it('stops when a run changes the copy behind the hooks', async () => {
-    scenario({ touch: 'x.txt' });
+    // The name was written behind the hooks, so it is the agent's text and stays out of the message.
+    scenario({ touch: 'CANARY-NAME.txt' });
     const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
 
-    await expect(runEval(options(root))).rejects.toThrow(/a run changed files in the copy: x\.txt/);
+    const failure = runEval(options(root));
+    await expect(failure).rejects.toThrow(/^a run changed 1 file in the copy behind the hooks; stopping/);
+    await expect(failure).rejects.not.toThrow(/CANARY/);
   });
 
   it('reports execution config stripped from the copies, and the predicted AGENTS.md load', async () => {

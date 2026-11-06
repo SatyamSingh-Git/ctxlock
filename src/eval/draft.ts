@@ -143,7 +143,7 @@ export async function draftProbes(opts: DraftOptions): Promise<DraftResult> {
           runs++;
           if (t.unhooked > 0) throw new DraftError(`${t.error}; stopping before anything else runs`);
           const changed = changedSince(arms[arm], before[arm]);
-          if (changed.length > 0) throw new DraftError(`a run changed files in the copy: ${changed.join(', ')}`);
+          if (changed.length > 0) throw new DraftError(`a run changed ${changed.length} file${changed.length === 1 ? '' : 's'} in the copy behind the hooks; stopping before anything else runs`);
           if (t.error) errors.push(t.error);
           else results[arm].push(grade(probe, t));
         }
