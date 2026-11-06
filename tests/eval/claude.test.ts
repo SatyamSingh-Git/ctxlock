@@ -122,6 +122,22 @@ describe('runClaude', () => {
     expect((await run(arm())).unhooked).toBe(1);
   });
 
+  it("makes a run an error, not a crash, when an entry in the run hook's log cannot be read", async () => {
+    const scratch = join(tempDir(), 'scratch');
+    useScenario({ logAppend: { file: join(scratch, 'events.jsonl'), text: '{"event":"InstructionsLo' } });
+    const torn = await runClaude({ dir: arm(), scratch, prompt: 'Add zod.', model: 'sonnet', claude: [FAKE] });
+    expect(torn.error).toBe("1 entry in the run hook's log could not be read");
+
+    // The run's own failure says more than the log does.
+    useScenario({ apiErrorStatus: 401, logAppend: { file: join(scratch, 'events.jsonl'), text: '{"event":"InstructionsLo' } });
+    expect((await runClaude({ dir: arm(), scratch, prompt: 'Add zod.', model: 'sonnet', claude: [FAKE] })).error).toBe('error_during_execution (API status 401)');
+
+    useScenario({ rawLoads: [{ memory_type: 'Project', load_reason: 'session_start' }, { memory_type: 'Project', load_reason: 'include' }] });
+    const pathless = await run(arm());
+    expect(pathless.error).toBe("2 entries in the run hook's log could not be read");
+    expect(pathless.loads).toEqual([]);
+  });
+
   it('counts a read outside the copy', async () => {
     useScenario({ behaviours: [{ calls: [{ tool: 'Read', input: { file_path: '../outside.txt' } }, { tool: 'Read', input: { file_path: 'inside.txt' } }] }] });
 
@@ -164,6 +180,11 @@ describe('claudeVersion', () => {
   it('reads the version Claude Code reports', async () => {
     useScenario({ version: '2.1.292' });
     expect(await claudeVersion([FAKE])).toBe('2.1.292');
+  });
+
+  it('says so when Claude Code does not report its version in time', async () => {
+    useScenario({ versionSleepMs: 5000 });
+    await expect(claudeVersion([FAKE], 500)).rejects.toThrow('Claude Code did not report its version within 500 ms');
   });
 });
 

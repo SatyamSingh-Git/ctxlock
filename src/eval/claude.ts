@@ -198,8 +198,9 @@ function spawnClaude(claude: string[], args: string[], cwd: string | undefined, 
   });
 }
 
-export async function claudeVersion(claude: string[]): Promise<string> {
-  const { stdout } = await spawnClaude(claude, ['--version'], undefined, 30_000);
+export async function claudeVersion(claude: string[], timeoutMs = 30_000): Promise<string> {
+  const { stdout, timedOut } = await spawnClaude(claude, ['--version'], undefined, timeoutMs);
+  if (timedOut) throw new Error(`Claude Code did not report its version within ${timeoutMs} ms`);
   const version = /^\s*(\d+\.\d+\.\d+)/.exec(stdout)?.[1];
   if (!version) throw new Error(`could not read the Claude Code version from: ${stdout.trim().slice(0, 200)}`);
   return version;
@@ -224,7 +225,18 @@ export async function runClaude(run: ClaudeRun): Promise<Transcript> {
   if (exit.stderr) writeFileSync(join(run.scratch, 'stderr.txt'), exit.stderr);
 
   const { acted, ...facts } = parseStream(exit.stdout, run.dir);
-  const events = readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  // A hook killed mid-write leaves a partial line, and a load needs a path to join to a unit.
+  const lines = readFileSync(log, 'utf8').split('\n').filter(Boolean);
+  const events = lines
+    .flatMap((l) => {
+      try {
+        return [JSON.parse(l)];
+      } catch {
+        return [];
+      }
+    })
+    .filter((e) => e.event !== 'InstructionsLoaded' || typeof e.payload?.file_path === 'string');
+  const unread = lines.length - events.length;
   const loads = events
     .filter((e) => e.event === 'InstructionsLoaded')
     .map(({ payload: p }): ObservedLoad => ({
@@ -243,6 +255,7 @@ export async function runClaude(run: ClaudeRun): Promise<Transcript> {
   else if (exit.failure) error = `claude failed: ${exit.failure}`;
   else if (exit.timedOut) error = `timed out after ${timeoutMs} ms`;
   else if (exit.code !== 0) error = `claude exited ${exit.code}${firstLine ? `: ${firstLine}` : ''}`;
+  else if (error === null && unread > 0) error = `${unread} ${unread === 1 ? 'entry' : 'entries'} in the run hook's log could not be read`;
 
   return { ...facts, wallMs, loads, denied, outsideReads: pre.filter((e) => e.outside).length, unhooked, error };
 }

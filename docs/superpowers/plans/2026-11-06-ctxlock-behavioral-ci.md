@@ -42,7 +42,7 @@ The decisions they led to are D35–D37 in [journey/decisions.md](../../../journ
 - `M5` (fixed): `probe draft` did not check drafted ids against existing probes, and printed the model's ids and reasons as they were. Taken ids are now discarded, and control characters in the printout are replaced.
 - `M6` (fixed): a working-tree head arm included the gitignored `CLAUDE.local.md`, which the base arm never has; so did `probe draft`'s arms.
 - `M7` (re-graded important, not fixed): on macOS the temp folder is behind a `/var` → `/private/var` symlink, so the hook may deny every read and loads may not join. It fails closed; the fix needs a Mac to check it on.
-- `M8`: an `InstructionsLoaded` event without `file_path`, or a torn log line, throws; `readAll` leaves `git cat-file` unread if its callback throws; a `claudeVersion` time-out does not say so.
+- `M8` (fixed): an `InstructionsLoaded` event without `file_path`, or a torn log line, threw; `readAll` left `git cat-file` blocked, and ctxlock unable to exit, if its callback threw; a `claudeVersion` time-out did not say so.
 - `M9` (fixed): with 4 or more runs, a probe the time budget cut short could be inconclusive yet gated, and fully cached probes after a time cut were reported as not run.
 - `M10`: the test that no agent text reaches the output covers `renderEval` only, not the CLI's stdout and stderr.
 

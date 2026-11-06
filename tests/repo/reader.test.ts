@@ -155,4 +155,17 @@ describe('readAll', () => {
       expect(seen.get('c/d.md')!.toString('utf8')).toBe('d');
     }
   });
+
+  it('stops git when the callback throws, so a failed copy cannot leave ctxlock waiting on it', async () => {
+    // More than a pipe holds, so git blocks writing if nobody reads the rest.
+    const big = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`f${i}.md`, 'x'.repeat(100_000)]));
+    const { dir, shas } = await gitRepo([big]);
+    const processes = () => process.getActiveResourcesInfo().filter((r) => r === 'ProcessWrap').length;
+    const before = processes();
+
+    await expect((await gitReader(dir, shas[0]!)).readAll(() => { throw new Error('disk full'); })).rejects.toThrow('disk full');
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(processes()).toBe(before);
+  });
 });

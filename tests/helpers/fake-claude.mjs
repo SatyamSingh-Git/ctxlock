@@ -18,6 +18,7 @@ if (process.env.FAKE_CLAUDE_ARGV_LOG) {
 
 const scenario = JSON.parse(readFileSync(process.env.FAKE_CLAUDE_SCENARIO, 'utf8'));
 if (argv[0] === '--version') {
+  if (scenario.versionSleepMs) await new Promise((r) => setTimeout(r, scenario.versionSleepMs));
   process.stdout.write(`${scenario.version ?? '2.1.292'} (Claude Code)\n`);
   process.exit(0);
 }
@@ -69,6 +70,8 @@ for (const load of scenario.loads ?? []) {
   loadedBytes += statSync(file).size;
   runHooks('InstructionsLoaded', '', { file_path: file, memory_type: 'Project', load_reason: load.reason, ...(load.parent ? { parent_file_path: join(cwd, load.parent) } : {}) });
 }
+// Payloads sent as they are, such as one a later Claude Code might send without file_path.
+for (const payload of scenario.rawLoads ?? []) runHooks('InstructionsLoaded', '', payload);
 
 let id = 0;
 for (const call of behaviour.calls ?? []) {
@@ -82,6 +85,8 @@ for (const call of behaviour.calls ?? []) {
 }
 
 if (scenario.touch) writeFileSync(join(cwd, scenario.touch), 'written behind the hooks');
+// Stands for a hook killed while writing its log line.
+if (scenario.logAppend) appendFileSync(scenario.logAppend.file, scenario.logAppend.text);
 if (scenario.floodMiB) for (let i = 0; i < scenario.floodMiB; i++) process.stdout.write(`${'x'.repeat(1024 * 1024 - 1)}\n`);
 if (scenario.sleepMs) await new Promise((r) => setTimeout(r, scenario.sleepMs));
 

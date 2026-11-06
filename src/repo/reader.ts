@@ -256,7 +256,15 @@ export async function gitReader(root: string, ref: string): Promise<RepoReader> 
       child.stderr.on('data', (chunk) => (stderr += chunk));
       child.stdin.end(files.map((path) => `${objects.get(path)}\n`).join(''));
       let i = 0;
-      for await (const bytes of batchBlobs(child.stdout, files.length)) await onFile(files[i++]!, bytes);
+      try {
+        for await (const bytes of batchBlobs(child.stdout, files.length)) await onFile(files[i++]!, bytes);
+      } catch (err) {
+        // Otherwise git blocks on a pipe nobody reads any more, and ctxlock cannot exit. With the
+        // pipe closed, git's next write fails and it exits.
+        child.stdout.destroy();
+        await closed;
+        throw err;
+      }
       const [code] = await closed;
       if (code !== 0) throw new Error(`git cat-file --batch exited ${code}: ${stderr.trim()}`);
     },
