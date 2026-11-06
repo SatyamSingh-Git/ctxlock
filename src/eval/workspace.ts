@@ -1,0 +1,148 @@
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join, posix } from 'node:path';
+import { stringify } from 'yaml';
+import type { RepoReader } from '../repo/reader.js';
+import { splitFrontmatter } from '../units/frontmatter.js';
+
+export interface Materialized {
+  files: number;
+  stripped: string[];
+  droppedLinks: string[];
+}
+
+// Config that makes Claude Code run commands of its own: project hooks, MCP servers, apiKeyHelper.
+const EXEC_FILES = /(^|\/)\.claude\/settings(\.local)?\.json$|^\.mcp\.json$/;
+const CLAUDE_MARKDOWN = /(^|\/)\.claude\/.*\.md$/;
+const FRONTMATTER = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+
+function write(dir: string, path: string, bytes: Buffer): void {
+  const full = join(dir, path);
+  mkdirSync(dirname(full), { recursive: true });
+  writeFileSync(full, bytes);
+}
+
+// A copy of the arm for an agent to work in. Links become plain files, so nothing in the copy can
+// point outside it, and execution config is removed so that no hook or server from the repository
+// runs during a probe.
+export async function materialize(reader: RepoReader, dir: string): Promise<Materialized> {
+  mkdirSync(dir, { recursive: true });
+  const written: string[] = [];
+  await reader.readAll((path, bytes) => {
+    write(dir, path, bytes);
+    written.push(path);
+  });
+
+  const files = await reader.listFiles();
+  const links = await reader.listSymlinks();
+  const droppedLinks: string[] = [];
+  for (const [link, target] of links) {
+    // A link out of the repository, or to another link, is not followed (D25): neither is listed.
+    if (target === null) {
+      droppedLinks.push(link);
+      continue;
+    }
+    const under = files.filter((f) => f.startsWith(`${target}/`));
+    if (files.includes(target)) {
+      write(dir, link, await reader.readFile(target));
+      written.push(link);
+    } else if (under.length > 0) {
+      for (const f of under) {
+        const path = `${link}${f.slice(target.length)}`;
+        write(dir, path, await reader.readFile(f));
+        written.push(path);
+      }
+    } else {
+      droppedLinks.push(link);
+    }
+  }
+
+  const stripped: string[] = [];
+  let removed = 0;
+  for (const path of written) {
+    if (EXEC_FILES.test(path)) {
+      rmSync(join(dir, path));
+      stripped.push(path);
+      removed++;
+    } else if (CLAUDE_MARKDOWN.test(path)) {
+      const text = readFileSync(join(dir, path), 'utf8');
+      const { frontmatter, body, error } = splitFrontmatter(text);
+      // Frontmatter ctxlock cannot parse might still parse for Claude Code, so a hooks line drops all of it.
+      const unparsedHooks = error !== null && /^hooks\s*:/m.test(FRONTMATTER.exec(text)?.[1] ?? '');
+      if (frontmatter && 'hooks' in frontmatter) {
+        const { hooks: _, ...rest } = frontmatter;
+        writeFileSync(join(dir, path), `---\n${stringify(rest)}---\n${body}`);
+        stripped.push(`${path} (hooks)`);
+      } else if (unparsedHooks) {
+        writeFileSync(join(dir, path), body);
+        stripped.push(`${path} (hooks)`);
+      }
+    }
+  }
+
+  execFileSync('git', ['init', '-q'], { cwd: dir });
+  return { files: written.length - removed, stripped: stripped.sort(), droppedLinks: droppedLinks.sort() };
+}
+
+export type Snapshot = Map<string, string>;
+
+export function snapshot(dir: string): Snapshot {
+  const out: Snapshot = new Map();
+  const visit = (rel: string) => {
+    for (const entry of readdirSync(join(dir, rel), { withFileTypes: true })) {
+      const path = rel ? `${rel}/${entry.name}` : entry.name;
+      if (path === '.git') continue;
+      if (entry.isDirectory()) visit(path);
+      else {
+        const st = statSync(join(dir, path));
+        out.set(path, `${st.size}:${st.mtimeMs}`);
+      }
+    }
+  };
+  visit('');
+  return out;
+}
+
+export function changedSince(dir: string, before: Snapshot): string[] {
+  const after = snapshot(dir);
+  const changed = new Set<string>();
+  for (const [path, stamp] of after) if (before.get(path) !== stamp) changed.add(path);
+  for (const path of before.keys()) if (!after.has(path)) changed.add(path);
+  return [...changed].sort();
+}
+
+function ancestors(dir: string): string[] {
+  const out: string[] = [];
+  let current = posix.dirname(dir.replaceAll('\\', '/'));
+  for (;;) {
+    out.push(current);
+    const parent = posix.dirname(current);
+    if (parent === current || parent === '.') return out;
+    current = parent;
+  }
+}
+
+const slashJoin = (dir: string, name: string) => (dir.endsWith('/') ? `${dir}${name}` : `${dir}/${name}`);
+
+// What Claude Code would load from above the run folder that claudeMdExcludes cannot keep out:
+// AGENTS.md comes through a plugin, and project skills are not memory files. The home folder's own
+// .claude/skills is the user's, which --setting-sources project leaves out (spike S1).
+export function ancestorContext(dir: string, home = homedir()): string[] {
+  const homeDir = home.replaceAll('\\', '/');
+  const found: string[] = [];
+  for (const a of ancestors(dir)) {
+    for (const name of ['AGENTS.md', '.claude/AGENTS.md']) if (existsSync(slashJoin(a, name))) found.push(slashJoin(a, name));
+    if (a !== homeDir && existsSync(slashJoin(a, '.claude/skills'))) found.push(slashJoin(a, '.claude/skills'));
+  }
+  return found.sort();
+}
+
+const escapeGlob = (s: string) => s.replace(/[*?[\]{}()!+@]/g, '\\$&');
+
+// claudeMdExcludes patterns: picomatch over absolute paths with backslashes turned into slashes.
+export function ancestorExcludes(dir: string): string[] {
+  return ancestors(dir).flatMap((a) =>
+    ['CLAUDE.md', '.claude/CLAUDE.md', 'CLAUDE.local.md', '.claude/rules/**'].map((name) => slashJoin(escapeGlob(a), name)),
+  );
+}

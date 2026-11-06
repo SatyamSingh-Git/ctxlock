@@ -1,6 +1,8 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { lstat, readFile, readdir, readlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
+import type { Readable } from 'node:stream';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
@@ -15,6 +17,9 @@ export interface RepoReader {
   readFile(path: string): Promise<Buffer>;
   exists(path: string): Promise<boolean>;
   listSymlinks(): Promise<Map<string, string | null>>;
+  // Every listed file, in listFiles() order. Copying a whole tree file by file through readFile would
+  // start one git process per file.
+  readAll(onFile: (path: string, bytes: Buffer) => void | Promise<void>): Promise<void>;
 }
 
 export class FileNotFound extends Error {
@@ -161,7 +166,39 @@ export function fsReader(root: string): RepoReader {
     async listSymlinks() {
       return (await list()).links;
     },
+    async readAll(onFile) {
+      const { top, files } = await list();
+      for (const path of files) await onFile(path, await readFile(join(top, path)));
+    },
   };
+}
+
+// Parses `git cat-file --batch` output: "<oid> blob <size>\n<bytes>\n" per object asked for.
+async function* batchBlobs(stdout: Readable, count: number): AsyncGenerator<Buffer> {
+  const chunks = stdout[Symbol.asyncIterator]() as AsyncIterator<Buffer>;
+  let buf: Buffer = Buffer.alloc(0);
+  const fill = async (length: number) => {
+    const parts: Buffer[] = [buf];
+    let have = buf.length;
+    while (have < length) {
+      const next = await chunks.next();
+      if (next.done) throw new Error('git cat-file --batch ended early');
+      parts.push(next.value);
+      have += next.value.length;
+    }
+    if (parts.length > 1) buf = Buffer.concat(parts, have);
+  };
+  for (let i = 0; i < count; i++) {
+    let nl: number;
+    while ((nl = buf.indexOf(10)) < 0) await fill(buf.length + 1);
+    const header = buf.subarray(0, nl).toString('utf8');
+    const size = / blob (\d+)$/.exec(header)?.[1];
+    if (size === undefined) throw new Error(`git cat-file --batch: ${header}`);
+    const end = nl + 1 + Number(size);
+    await fill(end + 1);
+    yield buf.subarray(nl + 1, end);
+    buf = buf.subarray(end + 1);
+  }
 }
 
 export async function gitReader(root: string, ref: string): Promise<RepoReader> {
@@ -174,6 +211,7 @@ export async function gitReader(root: string, ref: string): Promise<RepoReader> 
   }
 
   const files: string[] = [];
+  const objects = new Map<string, string>();
   const linkBlobs = new Map<string, string>();
   for (const entry of nulSplit(await git(root, ['ls-tree', '-r', '-z', '--full-tree', sha]))) {
     const tab = entry.indexOf('\t');
@@ -181,7 +219,10 @@ export async function gitReader(root: string, ref: string): Promise<RepoReader> 
     const path = entry.slice(tab + 1);
     if (type !== 'blob' || skipped(path)) continue;
     if (mode === '120000') linkBlobs.set(path, object!);
-    else files.push(path);
+    else {
+      files.push(path);
+      objects.set(path, object!);
+    }
   }
   files.sort();
   const fileSet = new Set(files);
@@ -205,6 +246,17 @@ export async function gitReader(root: string, ref: string): Promise<RepoReader> 
         links.set(path, resolveGitTarget(path, await git(root, ['cat-file', 'blob', object])));
       }
       return links;
+    },
+    async readAll(onFile) {
+      const child = spawn('git', ['-C', root, 'cat-file', '--batch'], { stdio: ['pipe', 'pipe', 'pipe'] });
+      const closed = once(child, 'close');
+      let stderr = '';
+      child.stderr.on('data', (chunk) => (stderr += chunk));
+      child.stdin.end(files.map((path) => `${objects.get(path)}\n`).join(''));
+      let i = 0;
+      for await (const bytes of batchBlobs(child.stdout, files.length)) await onFile(files[i++]!, bytes);
+      const [code] = await closed;
+      if (code !== 0) throw new Error(`git cat-file --batch exited ${code}: ${stderr.trim()}`);
     },
   };
 }

@@ -26,6 +26,9 @@ export function memReader(
     async listSymlinks() {
       return new Map(Object.entries(symlinks));
     },
+    async readAll(onFile) {
+      for (const path of paths) await onFile(path, await reader.readFile(path));
+    },
   };
   return reader;
 }

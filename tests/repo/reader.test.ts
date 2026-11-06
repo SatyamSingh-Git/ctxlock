@@ -141,3 +141,18 @@ describe('gitReader', () => {
     expect(await reader.listFiles()).toEqual(['.agents/skills/x/SKILL.md']);
   });
 });
+
+describe('readAll', () => {
+  it('yields every listed file byte for byte, CRLF and binary included, from a ref and the working tree', async () => {
+    const bin = Buffer.from([0, 255, 13, 10, 0]);
+    const { dir, shas } = await gitRepo([{ 'a.md': 'x\r\ny\r\n', 'b.bin': bin, 'c/d.md': 'd' }]);
+    for (const reader of [await gitReader(dir, shas[0]!), fsReader(dir)]) {
+      const seen = new Map<string, Buffer>();
+      await reader.readAll((path, bytes) => void seen.set(path, bytes));
+      expect([...seen.keys()]).toEqual(await reader.listFiles());
+      expect(seen.get('a.md')!.toString('utf8')).toBe('x\r\ny\r\n');
+      expect(seen.get('b.bin')!.equals(bin)).toBe(true);
+      expect(seen.get('c/d.md')!.toString('utf8')).toBe('d');
+    }
+  });
+});
