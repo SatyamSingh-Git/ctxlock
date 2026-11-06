@@ -10,14 +10,14 @@ ctxlock reads your repository's agent context and reports on it. It never change
 > node dist/cli.js scan /path/to/your/repo
 > ```
 >
-> The GitHub Action that runs `ctxlock diff` on pull requests is being built next.
+> To run `ctxlock diff` on every pull request, use [the GitHub Action](github-action.md).
 
 `scan`, `lint` and `budget` take the directory to check, defaulting to the current one, and these options:
 
 | Option | Meaning |
 |---|---|
 | `--format text` | Readable output (the default) |
-| `--format json` | Machine-readable output. It carries IDs, paths, digests and findings, never the text of your context files |
+| `--format json` | Machine-readable output: IDs, paths, digests and findings. Files are not copied into it, but some finding messages quote a short excerpt: up to 60 characters of a hidden comment or a risky line, or the line a frontmatter error points at |
 | `--agnix` | Also run [agnix](https://github.com/agent-sh/agnix), a linter with several hundred rules for agent config, through `npx`. npx downloads it on first use. Its errors become `should` findings and its warnings `info`, with rules named `agnix:<rule>`. If it cannot run, you get one `agnix:unavailable` finding saying why |
 
 In a git repository ctxlock reads the working tree, including files that are not committed yet, and skips files that `.gitignore` excludes. The exceptions are `CLAUDE.local.md` and `.claude/settings.local.json`, which are read anyway, because Claude Code uses them on your machine. Outside git, it reads every file except those under `.git` and `node_modules`.
@@ -136,12 +136,12 @@ Resolved: 0
 ```
 
 How it decides:
-- **New findings.** A finding is new when the base has no finding with the same rule, file and message. Line numbers and counts in the message are ignored, so a finding that only moved down a few lines is not new. A pull request that adds a second hidden character to a file that already had one does get a new finding.
-- **Execution-affecting changes.** Each item in the `L2-exec-config` inventory (a hook, an MCP server, a command, an environment variable, an auto-approval, a plugin) has a fingerprint of its file, identity and value. Any fingerprint the base does not have is reported as `L2-exec-config-changed`, severity `must`. Reformatting or reordering a settings file changes no fingerprint. If your team reviews these changes another way, set `L2-exec-config-changed: should` (or `"off"`) under `lint.severity`.
+- **New findings.** A finding is new when the base has no finding with the same rule, file and message. Line numbers and counts in the message are ignored, so a finding that only moved down a few lines is not new. A pull request that adds a second hidden character to a file that already had one does get a new finding. A hidden comment or a run of hidden characters is matched by a fingerprint of all of it rather than by its message, which quotes only the start: an edit to an existing hidden comment, or a run that grows, is new.
+- **Execution-affecting changes.** Each item in the `L2-exec-config` inventory (a hook, an MCP server, a command, an environment variable, an auto-approval, a plugin, and a skill's own `hooks` and `allowed-tools`) has a fingerprint of its file, identity and value. Any fingerprint the base does not have is reported as `L2-exec-config-changed`, severity `must`. Reformatting or reordering a settings file changes no fingerprint. If your team reviews these changes another way, set `L2-exec-config-changed: should` (or `"off"`) under `lint.severity`. That is the only setting that changes this check: turning `L2-exec-config` off, or listing the files under `lint.ignore`, quiets `lint` but not `diff`.
 - **Settings come from the base.** The pull request is checked with the base branch's `ctxlock.yaml` settings (`harnesses`, `limits` and `lint`), so it cannot switch off the checks it is judged by. A change to those settings takes effect once it is merged, the way a CODEOWNERS change does. Owners and review dates still come from the pull request.
 - **What fails.** A new `must` finding or an execution-affecting change fails the check. A `must` finding that was already on the base branch is counted and shown, but does not fail it.
 
-In the markdown format, every path and message from your repository is shown as code. As markdown, repository text could notify a GitHub user (an `@name` in a file), hide itself in the comment, or embed links and images.
+In the markdown format, every path and message from your repository is shown as code, with line breaks turned into spaces so the text cannot end the code early. If `diff` cannot run, the markdown says why, in the same way. As markdown, repository text could notify a GitHub user (an `@name` in a file), hide itself in the comment, or embed links and images.
 
 In CI, the base ref must be in the clone. With `actions/checkout`, set `fetch-depth: 0`. Otherwise `diff` stops with:
 
@@ -157,6 +157,6 @@ base ref <sha> not found — in GitHub Actions use actions/checkout with fetch-d
 |---|---|
 | 0 | Done. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
 | 1 | `lint`: at least one `must` finding. `diff`: a new `must` finding or an execution-affecting change |
-| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`), a ref that does not exist, or an invalid `ctxlock.yaml`. The reason is printed on stderr |
+| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`), a ref that does not exist, an invalid `ctxlock.yaml`, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
 
 `scan` and `budget` exit 0 whatever they find, so you can run them anywhere without failing a build.

@@ -6,7 +6,7 @@ import { Command, CommanderError, Option } from 'commander';
 import { diffScans } from './diff.js';
 import { RegistryError } from './registry/registry.js';
 import { fsReader, gitReader, gitTopLevel, RefNotFound } from './repo/reader.js';
-import { renderDiffMarkdown } from './report/markdown.js';
+import { renderDiffMarkdown, renderErrorMarkdown } from './report/markdown.js';
 import { renderDiff, renderScan } from './report/render.js';
 import { scanRepo } from './scan.js';
 
@@ -21,6 +21,8 @@ const isDirectory = (dir: string) => statSync(dir, { throwIfNoEntry: false })?.i
 
 export async function main(argv: string[], io: Io): Promise<number> {
   let code = 0;
+  // Set once diff knows it is writing a pull request comment, so a failure is written as one too.
+  let markdown = false;
   const program = new Command('ctxlock')
     .description('CI, a dependency graph and a feedback loop for AI agent context')
     .exitOverride()
@@ -53,6 +55,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .option('--head <ref>', 'the ref to check (default: the working tree)')
     .addOption(new Option('--format <format>', 'output format').choices(['text', 'json', 'markdown']).default('text'))
     .action(async (dir: string | undefined, opts: { base: string; head?: string; format: 'text' | 'json' | 'markdown' }) => {
+      markdown = opts.format === 'markdown';
       const root = resolve(dir ?? '.');
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
       if ((await gitTopLevel(root)) === null) throw new UsageError(`ctxlock diff: ${dir ?? '.'} is not inside a git repository`);
@@ -76,11 +79,12 @@ export async function main(argv: string[], io: Io): Promise<number> {
   } catch (err) {
     // Commander has already printed its own message; help and version exit 0.
     if (err instanceof CommanderError) return err.exitCode === 0 ? 0 : 2;
-    if (err instanceof UsageError || err instanceof RegistryError || err instanceof RefNotFound) {
-      io.stderr(`${err.message}\n`);
-      return 2;
-    }
-    throw err;
+    // Anything else is a bug or input ctxlock cannot handle. It still exits 2, because 1 means must-fix.
+    const known = err instanceof UsageError || err instanceof RegistryError || err instanceof RefNotFound;
+    const reason = err instanceof Error ? err.message : String(err);
+    io.stderr(known ? `${reason}\n` : `ctxlock could not run: ${reason}\n`);
+    if (markdown) io.stdout(renderErrorMarkdown(reason));
+    return 2;
   }
   return code;
 }

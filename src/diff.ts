@@ -22,8 +22,10 @@ export interface DiffResult {
 const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 // Positions and counts in messages move with unrelated edits ("at 14:7", "is 33902 bytes",
-// "(1 unit)" becoming "(4 units)"), so findings are matched without them.
-const key = (f: Finding) => `${f.rule}|${f.unitId ?? f.path ?? ''}|${f.message.replace(/\b\d+\b/g, '#').replace(/# (\w+?)s\b/g, '# $1')}`;
+// "(1 unit)" becoming "(4 units)"), so findings are matched without them. A finding about hidden
+// content carries a fingerprint of all of it, since its message quotes only the start.
+const key = (f: Finding) =>
+  `${f.rule}|${f.unitId ?? f.path ?? ''}|${f.data?.fingerprint ?? f.message.replace(/\b\d+\b/g, '#').replace(/# (\w+?)s\b/g, '# $1')}`;
 
 // Findings in `from` with no counterpart in `against`, matched one to one, so a second copy of a
 // finding a file already had still counts as new.
@@ -58,13 +60,13 @@ export function diffScans(base: ScanResult, head: ScanResult): DiffResult {
   const baseFindings = base.findings.filter((f) => !isInventory(f));
   const newFindings = unmatched(headFindings, baseFindings);
 
-  const known = new Set(base.findings.filter(isInventory).map((f) => f.data?.fingerprint));
+  const known = new Set(base.inventory.map((f) => f.data?.fingerprint));
   const severity = head.registry.lint.severity['L2-exec-config-changed'] ?? 'must';
   const execChanges =
     severity === 'off'
       ? []
-      : head.findings
-          .filter((f) => isInventory(f) && !known.has(f.data?.fingerprint))
+      : head.inventory
+          .filter((f) => !known.has(f.data?.fingerprint))
           .map((f) => ({ ...f, rule: 'L2-exec-config-changed', severity, message: `New or changed: ${f.message}` }));
 
   const before = new Map(base.budget.map((r) => [`${r.harness}\0${r.site}`, r]));

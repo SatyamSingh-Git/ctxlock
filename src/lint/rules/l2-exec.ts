@@ -204,6 +204,14 @@ function vscodeSettings(config: Json): Item[] {
   });
 }
 
+// Claude Code runs a skill's hooks and grants its allowed-tools without asking while the skill is
+// active. The hooks use the settings format; allowed-tools is a string of tools or a list of them.
+function skillFrontmatter(frontmatter: Json): Item[] {
+  const allowed = frontmatter['allowed-tools'];
+  const tools = typeof allowed === 'string' ? (allowed.match(/[^\s,()]+(?:\([^)]*\))?/g) ?? []) : list(allowed).filter((t) => typeof t === 'string');
+  return [...hooks(frontmatter.hooks), ...tools.map((tool, i) => approval('allowed-tools', `allowed-tools[${i}]`, tool))];
+}
+
 function inventory(unit: Unit, config: unknown): Item[] {
   if (!isObject(config)) return [];
   if (unit.family === 'vscode') return vscodeSettings(config);
@@ -224,16 +232,22 @@ export const execConfig: Rule = {
   id: 'L2-exec-config',
   async check(ctx) {
     const findings: Finding[] = [];
+    const record = (unit: Unit, path: string, items: Item[]) => {
+      for (const { kind, key, message, value } of items) {
+        // A hash rather than the canonical JSON itself: env values can be tokens, and findings reach PR comments.
+        const fingerprint = `sha256:${sha256Hex(canonical({ file: path, kind, value }))}`;
+        findings.push({ rule: 'L2-exec-config', severity: 'info', message, path, unitId: unit.id, data: { file: path, kind, key, fingerprint } });
+      }
+    };
     for await (const { unit, path, text } of textFiles(ctx, (u) => u.kind === 'config')) {
       const parsed = parseConfig(unit, text);
       if (parsed.error !== undefined) {
         findings.push({ rule: 'L2-parse', severity: 'should', message: `could not parse ${path}: ${parsed.error}`, path, unitId: unit.id });
       }
-      for (const { kind, key, message, value } of inventory(unit, parsed.value)) {
-        // A hash rather than the canonical JSON itself: env values can be tokens, and findings reach PR comments.
-        const fingerprint = `sha256:${sha256Hex(canonical({ file: path, kind, value }))}`;
-        findings.push({ rule: 'L2-exec-config', severity: 'info', message, path, unitId: unit.id, data: { file: path, kind, key, fingerprint } });
-      }
+      record(unit, path, inventory(unit, parsed.value));
+    }
+    for (const unit of ctx.units) {
+      if (unit.kind === 'skill' && unit.frontmatter) record(unit, `${unit.path}/SKILL.md`, skillFrontmatter(unit.frontmatter));
     }
     return findings;
   },

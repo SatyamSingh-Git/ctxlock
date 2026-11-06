@@ -29,7 +29,7 @@ Two lines matter:
 - **`fetch-depth: 0`.** `actions/checkout` clones only the latest commit by default, and ctxlock needs the base commit to compare against. Without the history, the check stops with `base ref <sha> not found — in GitHub Actions use actions/checkout with fetch-depth: 0`.
 - **`pull-requests: write`.** This lets the Action post its comment. Without it, the result appears in the job summary only.
 
-The Action builds ctxlock from its own source on the runner (Node 22, `npm ci`, `npm run build`), then reads your checkout. It never writes to your repository, and nothing it reads is sent anywhere. The pull request comment is the only thing it posts.
+The Action builds ctxlock from its own source on the runner (Node 22, `npm ci`, `npm run build`), then reads your checkout. Node 22 stays on the `PATH` for later steps in the same job; a step that needs another version should set it up again. It never writes to your repository, and nothing it reads is sent anywhere. The pull request comment is the only thing it posts.
 
 ## Inputs and output
 
@@ -41,13 +41,13 @@ The Action builds ctxlock from its own source on the runner (Node 22, `npm ci`, 
 
 | Output | Meaning |
 |---|---|
-| `exit-code` | `0` clean, `1` must-fix issues, `2` could not run |
+| `exit-code` | `0` clean, `1` must-fix issues, `2` could not run, including a crash |
 
 ## What fails the check
 
 - **A new `must` finding:** hidden Unicode, a hidden HTML comment, a skill whose frontmatter agents cannot load. See [rules.md](rules.md).
-- **An execution-affecting change:** a hook, MCP server, command setting, environment variable, auto-approval or plugin that is new or changed. Reordering or reformatting a settings file is not a change.
-- **ctxlock could not run:** a missing base ref, or an invalid `ctxlock.yaml`. The job summary says which.
+- **An execution-affecting change:** a hook, MCP server, command setting, environment variable, auto-approval or plugin in agent config, or a hook or `allowed-tools` entry in a skill's frontmatter, that is new or changed. Reordering or reformatting a settings file is not a change. Subagent and command files (`.claude/agents/`, `.claude/commands/`) are not read yet.
+- **ctxlock could not run:** a missing base ref, an invalid `ctxlock.yaml`, or a crash. Any exit code other than 0 and 1 fails the check. The job summary says which.
 
 A `must` finding that was already on the base branch is counted in the comment but does not fail the check.
 
@@ -68,7 +68,7 @@ The comment starts with `### ctxlock · context check` and a status line (`❌ 2
 - the execution-affecting changes;
 - a count of resolved findings.
 
-Every path and message from your repository is shown as code, so a file cannot use the comment to notify someone with `@name`, hide text, or load images.
+Every path and message from your repository is shown as code, so a file cannot use the comment to notify someone with `@name`, hide text, or load images. Line breaks in that text become spaces, so it cannot end the code early. When ctxlock cannot run, the comment gives the reason the same way. If it crashed before writing anything, the comment says so and the reason is in the job log; ctxlock's error output never goes into the comment.
 
 ## Pull requests from forks
 

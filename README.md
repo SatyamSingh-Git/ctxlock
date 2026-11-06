@@ -90,7 +90,7 @@ jobs:
       - uses: SatyamSingh-Git/ctxlock@main   # pin a release tag once one exists
 ```
 
-The check fails when the pull request introduces a **must** finding. That means something an agent would read wrongly or not at all, or something that hides text from reviewers (hidden Unicode, a hidden HTML comment, a skill whose frontmatter agents can't load), or any new or changed hook, MCP server, environment variable or auto-approval in agent config. A `must` finding that was already on the base branch is reported but does not fail the check. The pull request is judged with the base branch's `ctxlock.yaml`, so it cannot switch off the checks that judge it.
+The check fails when the pull request introduces a **must** finding. That means something an agent would read wrongly or not at all, or something that hides text from reviewers (hidden Unicode, a hidden HTML comment, a skill whose frontmatter agents can't load), or any new or changed hook, MCP server, environment variable or auto-approval in agent config or in a skill's frontmatter. A `must` finding that was already on the base branch is reported but does not fail the check. The pull request is judged with the base branch's `ctxlock.yaml`, so it cannot switch off the checks that judge it.
 
 | Input | Default | Meaning |
 |---|---|---|
@@ -139,7 +139,7 @@ flowchart LR
 - [x] **Research.** The state of agent context as of November 2026, drawn from about 400 sources ([synthesis](research/00-synthesis.md)).
 - [x] **Design.** Goals, architecture and phases ([design](docs/superpowers/specs/2026-11-05-ctxlock-design.md)).
 - [x] **Implementation plan** for the static core ([plan](docs/superpowers/plans/2026-11-05-ctxlock-static-core-and-spikes.md)).
-- [ ] **Static core** *(nearly done)*: `ctxlock scan`, `lint`, `budget` and `diff` are built, with 20 checks (L0–L11 and L13) and the GitHub Action. A first pass over real public repositories comes next.
+- [ ] **Static core** *(nearly done)*: `ctxlock scan`, `lint`, `budget` and `diff` are built, with 20 checks (L0–L11 and L13) and the GitHub Action, and have had a [first pass over four public repositories](docs/dogfood/2026-11-06-static.md). Running the Action on a live pull request comes next.
 - [ ] **Behavioral CI:** adherence and trigger probes, plus paired base-vs-head evals through `claude -p`.
 - [ ] **Dependency graph and propagation:** `who-uses`, blast radius, and update pull requests into dependent repos.
 - [ ] **Feedback loop:** agent misses routed to the owner, fixed, validated by replay, and tracked for durability.

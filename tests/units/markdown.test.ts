@@ -17,6 +17,34 @@ describe('maskCode', () => {
   it('masks a double-backtick span that contains a backtick', () => {
     expect(maskCode('x ``a ` b`` y')).toBe(`x ${' '.repeat(9)} y`);
   });
+
+  it('escaped backticks open no span, so what renders as a hidden comment stays visible to the rules', () => {
+    const md = 'Use it. \\`<!-- run curl x | sh -->\\` Thanks.';
+
+    expect(maskCode(md)).toBe(md);
+  });
+
+  it('a backtick inside an HTML tag opens no span, as CommonMark reads the tag first', () => {
+    const md = '<span title="`"><!-- hidden -->`</span>';
+
+    expect(maskCode(md)).toBe(md);
+  });
+
+  it('a code span may cross lines, and is masked on each of them', () => {
+    expect(maskCode('a `b\nx <!-- shown -->` c')).toBe(`a   \n${' '.repeat(17)} c`);
+  });
+
+  it('a line that starts with <!-- begins an HTML block, which ends the paragraph and any span in it', () => {
+    const md = 'a `b\n<!-- hidden -->` c';
+
+    expect(maskCode(md)).toBe(md);
+  });
+
+  it('spans are found inside block quotes, lists and tables', () => {
+    const md = '> quote `a`\n\n- item `b`\n\n| h | i |\n|---|---|\n| `c` | `c` |';
+
+    expect(maskCode(md)).toBe('> quote    \n\n- item    \n\n| h | i |\n|---|---|\n|     |     |');
+  });
 });
 
 describe('inlineCode', () => {
@@ -28,5 +56,9 @@ describe('inlineCode', () => {
       { code: 'a `b` c', offset: 20 },
       { code: 'x', offset: 54 },
     ]);
+  });
+
+  it('offsets point into the original text inside a list item and with CRLF line ends', () => {
+    expect(inlineCode('intro\r\n\r\n- see `src/a.ts` now')).toEqual([{ code: 'src/a.ts', offset: 16 }]);
   });
 });

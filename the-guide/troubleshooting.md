@@ -78,8 +78,9 @@ ctxlock reads context files as UTF-8, as the agents do. A file saved as UTF-16 (
 
 The job summary shows the reason. The usual ones:
 - the base ref is missing (above);
-- `ctxlock.yaml` on the base branch is invalid; the message names the field. `ctxlock lint` on the base branch shows the same error;
-- the step ran on an event other than `pull_request` without a `base` input.
+- `ctxlock.yaml` is invalid, on the base branch or in the pull request; the message names the field. `ctxlock lint` shows the same error;
+- the step ran on an event other than `pull_request` without a `base` input;
+- ctxlock crashed. The summary then says `ctxlock could not run (exit <n>)`, and the reason is in the job log, under the Check context step. Please report it.
 
 ## `agnix:unavailable`
 

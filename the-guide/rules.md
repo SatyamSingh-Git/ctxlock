@@ -102,7 +102,7 @@ A run of hidden characters is reported once, at its first character, with a coun
 
 ### `L1-html-comment` (must, or info for markers)
 
-Flags `<!-- ... -->` comments in markdown files, outside code blocks and inline code. Code blocks are found the way GitHub's renderer finds them (CommonMark, through [markdown-it](https://github.com/markdown-it/markdown-it)). That means a fence inside a list item ends with the item, and a line of backticks with a backtick in its info string is not a fence. A comment can span several lines. An unclosed `<!--` hides everything after it, so it is flagged too. The message quotes up to the first 60 characters.
+Flags `<!-- ... -->` comments in markdown files, outside code blocks and inline code. Code blocks and inline code are found the way GitHub's renderer finds them (CommonMark, through [markdown-it](https://github.com/markdown-it/markdown-it)). That means a fence inside a list item ends with the item, a line of backticks with a backtick in its info string is not a fence, and an escaped backtick (`` \` ``) or a backtick inside an HTML tag does not start inline code. A comment can span several lines. An unclosed `<!--` hides everything after it, so it is flagged too. The message quotes up to the first 60 characters.
 
 One-line comments that are clearly markers, not notes, are `info` instead of `must`:
 - generated-block markers such as Next.js's `<!-- BEGIN:nextjs-agent-rules -->` and `<!-- END:nextjs-agent-rules -->` (a name of up to five parts);
@@ -144,17 +144,19 @@ info   L2-exec-config       .vscode/settings.json  chat.tools.terminal.autoAppro
 
 ### `L2-exec-config` (info)
 
-An inventory of every item in the repo's agent config that runs code, sends traffic elsewhere, or lets the agent act without asking. Each item is `info`: listing it is not an accusation. The point is that it shows up when it changes. `ctxlock diff` (coming with the CLI) flags a pull request that adds or changes an item.
+An inventory of every item in the repo's agent config that runs code, sends traffic elsewhere, or lets the agent act without asking. Each item is `info`: listing it is not an accusation. The point is that it shows up when it changes. [`ctxlock diff`](commands.md#ctxlock-diff) flags a pull request that adds or changes an item.
 
 | File | What is listed |
 |---|---|
 | `.claude/settings.json`, `.claude/settings.local.json` | **hook:** every hook, of every type (`command`, `http`, `mcp_tool`, `prompt`, `agent`).<br>**command:** settings that run a shell command: `apiKeyHelper`, `statusLine`, `fileSuggestion`, `otelHeadersHelper`, `awsAuthRefresh`, `awsCredentialExport` and `gcpAuthRefresh`.<br>**env:** every variable (see below).<br>**auto-approve:** `permissions.allow` entries; `permissions.defaultMode` set to `acceptEdits`, `auto` or `bypassPermissions`; `enableAllProjectMcpServers: true`; and `enabledMcpjsonServers`.<br>**plugin:** `enabledPlugins` that are turned on, and `extraKnownMarketplaces` |
 | `.mcp.json` | **mcp:** each server, with its command, or its URL for a remote server |
 | `.codex/config.toml` (also in subfolders), `.codex/hooks.json` | **mcp:** each `mcp_servers` entry.<br>**hook:** hooks, from `hooks.json` or the `[hooks]` table.<br>**env:** `shell_environment_policy.set`.<br>**auto-approve:** `approval_policy = "never"` and `sandbox_mode = "danger-full-access"` |
+| A skill's `SKILL.md` frontmatter | **hook:** its `hooks`, in the same format as settings. Claude Code runs them while the skill is active.<br>**auto-approve:** each `allowed-tools` entry, such as `Bash(git add:*)`, which Claude Code lets the skill use without asking |
 | `.vscode/settings.json` | **auto-approve:** entries that approve in `chat.tools.terminal.autoApprove`, `chat.agent.terminal.autoApprove` and `chat.tools.urls.autoApprove`; `chat.tools.terminal.ignoreDefaultAutoApproveRules: true`; `chat.permissions.default` set to `autoApprove` or `autopilot`; and `chat.tools.autoApprove` or `chat.tools.global.autoApprove` set to `true` |
 
 Notes on the table:
 - **Environment variables:** every one is listed, because many change what runs: `ANTHROPIC_BASE_URL` sends prompts elsewhere, `NODE_OPTIONS` and `LD_PRELOAD` load code into every process the agent starts, and `PATH` and `BASH_ENV` change which programs and startup files run. A list of risky names would never be complete. Only the name is shown, never the value.
+- **Not read yet:** subagent and command files (`.claude/agents/`, `.claude/commands/`), whose frontmatter can also set hooks and tools.
 - **What is left out:** settings left at a value that still asks, such as `"rm": false` in a terminal rule, `approval_policy = "on-request"`, or VS Code's `enableAutoApprove: true`, which is already the default.
 - **Where the lists come from:**
   - **Claude Code:** its [settings reference](https://code.claude.com/docs/en/settings-reference).

@@ -38,32 +38,25 @@ runs:
       id: diff
       shell: bash
       # Inputs reach the script through env, never through ${{ }} inside it, so they cannot inject shell.
+      # Only ctxlock writes the report, which shows repository text as code; its stderr stays in the job log.
       env:
         BASE: ${{ inputs.base }}
       run: |
         report="$RUNNER_TEMP/ctxlock.md"
-        errors="$RUNNER_TEMP/ctxlock.err"
         if [ -z "$BASE" ]; then
-          echo "ctxlock: no base ref. On pull_request events it is set automatically; otherwise pass the base input." > "$errors"
+          printf '%s\n\n%s\n' '### ctxlock · context check' 'ctxlock could not run: no base ref. On pull_request events it is set automatically; otherwise pass the base input.' > "$report"
           code=2
         else
           set +e
-          node "$GITHUB_ACTION_PATH/dist/cli.js" diff --base "$BASE" --format markdown "$GITHUB_WORKSPACE" > "$report" 2> "$errors"
+          node "$GITHUB_ACTION_PATH/dist/cli.js" diff --base "$BASE" --format markdown "$GITHUB_WORKSPACE" > "$report"
           code=$?
           set -e
+          # A crash, such as running out of memory, leaves no report. Exit 1 then is a crash too, not must-fix.
+          if [ "$code" -ne 0 ] && [ ! -s "$report" ]; then
+            printf '%s\n\n%s\n' '### ctxlock · context check' "ctxlock could not run (exit $code). The job log has the reason." > "$report"
+            code=2
+          fi
         fi
-        if [ "$code" -eq 2 ]; then
-          {
-            echo '### ctxlock · context check'
-            echo
-            echo 'ctxlock could not run:'
-            echo
-            echo '```'
-            cat "$errors"
-            echo '```'
-          } > "$report"
-        fi
-        cat "$errors" >&2
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
 
     - name: Job summary
@@ -88,11 +81,16 @@ runs:
         CODE: ${{ steps.diff.outputs.exit-code }}
         FAIL_ON_MUST: ${{ inputs.fail-on-must }}
       run: |
-        if [ "$CODE" = "2" ]; then
-          echo "::error title=ctxlock::ctxlock could not run; the job summary has the reason"
-          exit 1
-        fi
-        if [ "$CODE" = "1" ] && [ "$FAIL_ON_MUST" = "true" ]; then
-          echo "::error title=ctxlock::must-fix context issues; the job summary lists them"
-          exit 1
-        fi
+        case "$CODE" in
+          0) ;;
+          1)
+            if [ "$FAIL_ON_MUST" = "true" ]; then
+              echo "::error title=ctxlock::must-fix context issues; the job summary lists them"
+              exit 1
+            fi
+            ;;
+          *)
+            echo "::error title=ctxlock::ctxlock could not run; the job summary has the reason"
+            exit 1
+            ;;
+        esac

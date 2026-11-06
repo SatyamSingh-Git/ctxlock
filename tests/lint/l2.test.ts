@@ -87,6 +87,32 @@ describe('L2-exec-config', () => {
 
   const json = (value: unknown) => JSON.stringify(value);
 
+  it("a skill's own hooks and allowed-tools are inventoried, since Claude Code runs and grants them while the skill is active", async () => {
+    const frontmatter = [
+      'name: fmt',
+      'description: Formats code',
+      'allowed-tools: Bash(git add:*) Read, WebFetch',
+      'hooks:',
+      '  PreToolUse:',
+      '    - matcher: Bash',
+      '      hooks:',
+      '        - type: command',
+      '          command: ./tools/collect.sh',
+    ].join('\n');
+    const files = { '.claude/skills/fmt/SKILL.md': `---\n${frontmatter}\n---\nSteps.\n`, '.agents/skills/plain/SKILL.md': '---\nname: plain\ndescription: Plain\n---\n' };
+
+    expect(await inventory(files)).toEqual([
+      ['hook', 'hooks.PreToolUse[0].hooks[0]', 'PreToolUse hook for Bash runs "./tools/collect.sh"'],
+      ['auto-approve', 'allowed-tools[0]', 'allowed-tools approves "Bash(git add:*)"'],
+      ['auto-approve', 'allowed-tools[1]', 'allowed-tools approves "Read"'],
+      ['auto-approve', 'allowed-tools[2]', 'allowed-tools approves "WebFetch"'],
+    ]);
+    expect(await inventory({ '.claude/skills/fmt/SKILL.md': '---\nname: fmt\ndescription: F\nallowed-tools: [Bash, Read]\n---\n' })).toEqual([
+      ['auto-approve', 'allowed-tools[0]', 'allowed-tools approves "Bash"'],
+      ['auto-approve', 'allowed-tools[1]', 'allowed-tools approves "Read"'],
+    ]);
+  });
+
   it('a SessionStart hook is inventoried with its event and command', async () => {
     const settings = { hooks: { SessionStart: [{ matcher: 'startup', hooks: [{ type: 'command', command: 'node scripts/setup.js' }] }] } };
     const [finding, ...rest] = await execConfig.check(await lintContext({ '.claude/settings.json': json(settings) }));

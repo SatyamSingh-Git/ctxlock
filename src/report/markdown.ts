@@ -3,7 +3,10 @@ import type { Finding } from '../model.js';
 
 // Repository text is always shown as code: as markdown it could notify GitHub users (@name), hide
 // itself (<!-- -->), or load images and links into the pull request.
-function code(s: string): string {
+// Repository text, as an inline code span: no @mention, HTML or image in it can render. A line
+// break would end the span (a blank line) or the table row, so each becomes a space.
+function code(text: string): string {
+  const s = text.replace(/\r\n|\r|\n/g, ' ');
   const longest = Math.max(0, ...(s.match(/`+/g) ?? []).map((run) => run.length));
   const fence = '`'.repeat(longest + 1);
   return longest > 0 ? `${fence} ${s} ${fence}` : `${fence}${s}${fence}`;
@@ -15,6 +18,10 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 function item(f: Finding): string {
   if (f.path === undefined) return `- ${code(f.message)}`;
   return `- ${code(f.line ? `${f.path}:${f.line}` : f.path)} — ${code(f.message)}`;
+}
+
+export function renderErrorMarkdown(message: string): string {
+  return `### ctxlock · context check\n\nctxlock could not run: ${code(message)}\n`;
 }
 
 export function renderDiffMarkdown(d: DiffResult): string {
@@ -32,7 +39,7 @@ export function renderDiffMarkdown(d: DiffResult): string {
     lines.push(
       '| Harness | Site | Before → after (bytes) | Limit |',
       '|---|---|---|---|',
-      ...d.budget.map((r) => `| ${r.harness} | ${cell(r.site || '.')} | ${r.baseAlwaysBytes} → ${r.alwaysBytes} | ${r.limitBytes ?? '—'} |`),
+      ...d.budget.map((r) => `| ${r.harness} | ${cell(code(r.site || '.'))} | ${r.baseAlwaysBytes} → ${r.alwaysBytes} | ${r.limitBytes ?? '—'} |`),
     );
   }
 

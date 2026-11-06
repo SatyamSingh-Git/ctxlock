@@ -37,6 +37,17 @@ describe('ctxlock CLI', () => {
     expect(stderr).toMatch(/^ctxlock\.yaml: version: /);
   });
 
+  it('an unexpected error exits 2 with its message and no stack trace, never 1, which means must-fix', async () => {
+    const dir = tempDir();
+    const deep = `${'['.repeat(20000)}${']'.repeat(20000)}`;
+    writeTree(dir, { 'AGENTS.md': 'a', '.claude/settings.json': `{ "env": { "X": ${deep} } }` });
+
+    const { code, stderr } = await cli('lint', dir);
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/^ctxlock could not run: /);
+    expect(stderr).not.toMatch(/\n\s+at /);
+  });
+
   it('bad arguments exit 2', async () => {
     const dir = tempDir();
 

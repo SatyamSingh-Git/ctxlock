@@ -1,4 +1,5 @@
 import type { Finding, Severity } from '../../model.js';
+import { sha256Hex } from '../../units/digest.js';
 import { maskCode } from '../../units/markdown.js';
 import { lineAndColumn, quote, textFiles } from '../files.js';
 import type { Rule } from '../types.js';
@@ -112,7 +113,8 @@ export const hiddenUnicode: Rule = {
           const message =
             (run.length === 1 ? `hidden character ${where}` : `${run.length} hidden characters starting with ${where}`) +
             (spelled ? `, spelling "${quote(spelled)}"` : '');
-          findings.push({ rule: 'L1-hidden-unicode', severity, message, path, line, column, unitId: unit.id });
+          const fingerprint = `sha256:${sha256Hex(run.map((c) => String.fromCodePoint(c)).join(''))}`;
+          findings.push({ rule: 'L1-hidden-unicode', severity, message, path, line, column, unitId: unit.id, data: { fingerprint } });
           column += end - i;
           i = end - 1;
           continue;
@@ -153,6 +155,7 @@ export const htmlComment: Rule = {
           line,
           column,
           unitId: unit.id,
+          data: { fingerprint: `sha256:${sha256Hex(comment)}` },
         });
       }
     }
