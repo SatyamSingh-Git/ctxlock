@@ -19,7 +19,10 @@ export interface Registry {
   units: Record<string, UnitMeta>;
   limits: Partial<Limits>;
   lint: { severity: Record<string, Severity | 'off'>; ignore: string[] };
+  eval: { model: string; runs: number; maxRuns: number; maxMinutes: number };
 }
+
+const EVAL_DEFAULTS = { model: 'sonnet', runs: 3, maxRuns: 24, maxMinutes: 20 };
 
 export class RegistryError extends Error {}
 
@@ -53,6 +56,14 @@ const schema = z.strictObject({
       ignore: z.array(z.string()).default([]),
     })
     .default({ severity: {}, ignore: [] }),
+  eval: z
+    .strictObject({
+      model: z.string().min(1).optional(),
+      runs: z.number().int().min(1).max(20).optional(),
+      'max-runs': z.number().int().min(2).optional(),
+      'max-minutes': z.number().int().min(1).optional(),
+    })
+    .default({}),
 });
 
 export function describeIssue(issue: z.core.$ZodIssue): string {
@@ -65,7 +76,7 @@ export function describeIssue(issue: z.core.$ZodIssue): string {
 
 export async function loadRegistry(reader: RepoReader): Promise<Registry> {
   if (!(await reader.exists(FILE))) {
-    return { present: false, harnesses: ['claude-code', 'codex'], units: {}, limits: {}, lint: { severity: {}, ignore: [] } };
+    return { present: false, harnesses: ['claude-code', 'codex'], units: {}, limits: {}, lint: { severity: {}, ignore: [] }, eval: EVAL_DEFAULTS };
   }
 
   let raw: unknown;
@@ -77,7 +88,7 @@ export async function loadRegistry(reader: RepoReader): Promise<Registry> {
   const result = schema.safeParse(raw ?? {});
   if (!result.success) throw new RegistryError(`${FILE}: ${result.error.issues.map(describeIssue).join('; ')}`);
 
-  const { harnesses, limits, units, lint } = result.data;
+  const { harnesses, limits, units, lint, eval: settings } = result.data;
   return {
     present: true,
     harnesses,
@@ -98,5 +109,11 @@ export async function loadRegistry(reader: RepoReader): Promise<Registry> {
       ]),
     ),
     lint,
+    eval: {
+      model: settings.model ?? EVAL_DEFAULTS.model,
+      runs: settings.runs ?? EVAL_DEFAULTS.runs,
+      maxRuns: settings['max-runs'] ?? EVAL_DEFAULTS.maxRuns,
+      maxMinutes: settings['max-minutes'] ?? EVAL_DEFAULTS.maxMinutes,
+    },
   };
 }

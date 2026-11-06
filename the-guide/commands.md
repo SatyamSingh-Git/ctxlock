@@ -1,4 +1,4 @@
-# Commands: `scan`, `lint`, `budget`, `diff`
+# Commands: `scan`, `lint`, `budget`, `diff`, `eval`
 
 ctxlock reads your repository's agent context and reports on it. It never changes a file in the repository it reads, and nothing it reads leaves your machine.
 
@@ -151,12 +151,24 @@ base ref <sha> not found — in GitHub Actions use actions/checkout with fetch-d
 
 ---
 
+## `ctxlock eval`
+
+Runs the probes in `evals/probes/` against Claude Code, with the base's context and with the head's, and reports which probes changed. Unlike the four commands above, it runs an agent, and sends the repository's context to Anthropic's API through Claude Code to do it. [Evals](evals.md) explains probes, isolation, the options and the result.
+
+```
+ctxlock eval --base <ref> [--head <ref>] [dir] [--format text|json|markdown] [--runs <n>] [--fail-on-regression]
+```
+
+It needs a git repository and Claude Code on `PATH`, or `--claude <path>`. A pull request that changes no unit a probe names runs nothing, so Claude Code is not needed then.
+
+---
+
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
 | 0 | Done. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
-| 1 | `lint`: at least one `must` finding. `diff`: a new `must` finding or an execution-affecting change |
-| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`), a ref that does not exist, an invalid `ctxlock.yaml`, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
+| 1 | `lint`: at least one `must` finding. `diff`: a new `must` finding or an execution-affecting change. `eval`: only with `--fail-on-regression`, a gated regression |
+| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff` and `eval`), a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
 
 `scan` and `budget` exit 0 whatever they find, so you can run them anywhere without failing a build.

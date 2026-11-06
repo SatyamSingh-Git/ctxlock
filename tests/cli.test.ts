@@ -1,7 +1,8 @@
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { main } from '../src/cli.js';
-import { cleanup, tempDir, writeTree } from './helpers/repo.js';
+import { cleanup, gitRepo, tempDir, writeTree } from './helpers/repo.js';
 
 afterAll(cleanup);
 
@@ -101,5 +102,73 @@ describe('ctxlock CLI', () => {
     expect(stdout).toMatch(/claude-code at \.: 2 always/);
     expect(stdout).toMatch(/codex at \.: 1 always/);
     expect(stdout).toMatch(/findings: 0 must, 0 should, \d+ info/);
+  });
+});
+
+describe('ctxlock eval', { timeout: 120_000 }, () => {
+  // Relative on purpose: the CLI resolves --claude against its own working directory, not the copy's.
+  const FAKE = 'tests/helpers/fake-claude.mjs';
+  const PROBES = "version: 1\nprobes:\n  - id: deps\n    unit: instructions/AGENTS.md\n    prompt: Add zod as a dependency.\n    expect:\n      command: 'pnpm add'\n";
+
+  beforeEach(() => {
+    const file = join(tempDir(), 'scenario.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        behaviours: [
+          { when: { file: 'AGENTS.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+          { calls: [{ tool: 'Bash', input: { command: 'npm install zod' } }] },
+        ],
+      }),
+    );
+    process.env.FAKE_CLAUDE_SCENARIO = file;
+  });
+
+  async function repo(base: string, head: string, extra: Record<string, string> = {}, headExtra: Record<string, string> = {}) {
+    const { dir } = await gitRepo([{ 'AGENTS.md': base, 'evals/probes/p.yaml': PROBES, ...extra }]);
+    writeTree(dir, { 'AGENTS.md': head, ...headExtra });
+    return dir;
+  }
+  const evalCli = (dir: string, ...args: string[]) => cli('eval', dir, '--base', 'HEAD', '--claude', FAKE, '--workdir', join(tempDir(), 'w'), ...args);
+
+  it('runs the probes on the changed units and prints a report, exiting 0', async () => {
+    const { code, stdout } = await evalCli(await repo('Use npm.\n', 'Use pnpm.\n'));
+    expect(code).toBe(0);
+    expect(stdout).toMatch(/deps\s+instructions\/AGENTS\.md\s+base 0\/3\s+head 3\/3\s+improved/);
+  });
+
+  it('exits 1 only with --fail-on-regression and a gated regression', async () => {
+    const dir = await repo('Use pnpm.\n', 'Use npm.\n');
+    expect((await evalCli(dir)).code).toBe(0);
+    const gated = await evalCli(dir, '--fail-on-regression');
+    expect(gated.code).toBe(1);
+    expect(gated.stdout).toContain('Gated regressions: deps');
+  });
+
+  it('exits 2 with the reason when Claude Code is missing, outside git, or a probe file is broken', async () => {
+    const dir = await repo('Use npm.\n', 'Use pnpm.\n');
+    const missing = await cli('eval', dir, '--base', 'HEAD', '--claude', 'ctxlock-no-such-claude', '--workdir', join(tempDir(), 'w'));
+    expect(missing.code).toBe(2);
+    expect(missing.stderr).toMatch(/^Claude Code not found/);
+
+    const plain = tempDir();
+    expect((await evalCli(plain)).stderr).toMatch(/not inside a git repository/);
+
+    const broken = await repo('Use npm.\n', 'Use pnpm.\n', { 'evals/probes/q.yaml': 'version: 2\n' });
+    const probeError = await evalCli(broken);
+    expect(probeError.code).toBe(2);
+    expect(probeError.stderr).toMatch(/^evals\/probes\/q\.yaml: /);
+  });
+
+  it('writes a markdown section for a failure when the report is markdown', async () => {
+    const { code, stdout } = await cli('eval', await repo('Use npm.\n', 'Use pnpm.\n'), '--base', 'HEAD', '--claude', 'ctxlock-no-such-claude', '--format', 'markdown', '--workdir', join(tempDir(), 'w'));
+    expect(code).toBe(2);
+    expect(stdout).toMatch(/could not run: `Claude Code not found/);
+  });
+
+  it("takes eval settings from the base ctxlock.yaml, not the head's, and flags override them", async () => {
+    const dir = await repo('Use npm.\n', 'Use pnpm.\n', { 'ctxlock.yaml': 'version: 1\neval:\n  runs: 2\n' }, { 'ctxlock.yaml': 'version: 1\neval:\n  runs: 1\n' });
+    expect(JSON.parse((await evalCli(dir, '--format', 'json')).stdout).runsPerArm).toBe(2);
+    expect(JSON.parse((await evalCli(dir, '--format', 'json', '--runs', '3')).stdout).runsPerArm).toBe(3);
   });
 });

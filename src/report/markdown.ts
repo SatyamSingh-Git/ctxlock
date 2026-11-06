@@ -5,14 +5,14 @@ import type { Finding } from '../model.js';
 // itself (<!-- -->), or load images and links into the pull request.
 // Repository text, as an inline code span: no @mention, HTML or image in it can render. A line
 // break would end the span (a blank line) or the table row, so each becomes a space.
-function code(text: string): string {
+export function code(text: string): string {
   const s = text.replace(/\r\n|\r|\n/g, ' ');
   const longest = Math.max(0, ...(s.match(/`+/g) ?? []).map((run) => run.length));
   const fence = '`'.repeat(longest + 1);
   return longest > 0 ? `${fence} ${s} ${fence}` : `${fence}${s}${fence}`;
 }
 
-const cell = (s: string) => s.replaceAll('|', '\\|');
+export const cell = (s: string) => s.replaceAll('|', '\\|');
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function item(f: Finding): string {

@@ -4,7 +4,7 @@
 
 Agents never read this file. It is for ctxlock and for the people reviewing context changes, the way `CODEOWNERS` is.
 
-> **Status:** the file format and its validation are implemented. The commands that read it (`ctxlock scan`, `lint`, `budget`, `diff`) arrive with the first CLI release.
+> **Status:** the file format and its validation are implemented, and `ctxlock scan`, `lint`, `budget`, `diff` and `eval` read it when built from source. ctxlock is not on npm yet.
 
 ## A complete example
 
@@ -36,6 +36,13 @@ lint:
     L1-html-comment: should    # must | should | info | off
   ignore:
     - "vendor/**"
+
+# How ctxlock eval runs probes. Read from the base branch, like lint settings in diff.
+eval:
+  model: claude-sonnet-5-5
+  runs: 3
+  max-runs: 24
+  max-minutes: 20
 ```
 
 Quote owners that start with `@`; YAML reserves that character.
@@ -55,6 +62,10 @@ Quote owners that start with `@`; YAML reserves that character.
 | `limits.<name>` | no | A non-negative integer overriding a harness limit (see below). `0` is allowed; Codex treats it as "load no AGENTS.md". |
 | `lint.severity.<rule>` | no | Change a rule's severity, or turn it `off` |
 | `lint.ignore` | no | Globs of paths whose findings are dropped |
+| `eval.model` | no | The model [`ctxlock eval`](evals.md) asks Claude Code for. Defaults to `sonnet` |
+| `eval.runs` | no | Runs per arm, 1 to 20. Defaults to 3 |
+| `eval.max-runs` | no | The most runs one check may start, at least 2. Defaults to 24 |
+| `eval.max-minutes` | no | Minutes after which no new run starts. Defaults to 20 |
 
 Unit paths are repo-relative with `/`, e.g. `packages/api/AGENTS.md`. A skill is keyed by its directory (`.agents/skills/release-notes`), not by its `SKILL.md`.
 

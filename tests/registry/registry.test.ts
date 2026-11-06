@@ -18,6 +18,7 @@ describe('loadRegistry', () => {
       units: {},
       limits: {},
       lint: { severity: {}, ignore: [] },
+      eval: { model: 'sonnet', runs: 3, maxRuns: 24, maxMinutes: 20 },
     });
   });
 
@@ -76,6 +77,19 @@ units:
 
     expect(err).toBeInstanceOf(RegistryError);
     expect(err.message).toContain('version');
+  });
+
+  it('eval settings map to camelCase, default when absent, and are checked', async () => {
+    expect((await load('version: 1\neval:\n  model: claude-sonnet-5-5\n  runs: 5\n  max-runs: 30\n  max-minutes: 10\n')).eval).toEqual({
+      model: 'claude-sonnet-5-5',
+      runs: 5,
+      maxRuns: 30,
+      maxMinutes: 10,
+    });
+    expect((await load('version: 1\neval:\n  runs: 2\n')).eval).toEqual({ model: 'sonnet', runs: 2, maxRuns: 24, maxMinutes: 20 });
+    expect((await errorOf('version: 1\neval:\n  x: 1\n')).message).toContain('eval.x: unknown key');
+    expect(await errorOf('version: 1\neval:\n  runs: 0\n')).toBeInstanceOf(RegistryError);
+    expect(await errorOf('version: 1\neval:\n  max-runs: 1\n')).toBeInstanceOf(RegistryError);
   });
 
   it('invalid YAML is a RegistryError, not a raw parser error', async () => {

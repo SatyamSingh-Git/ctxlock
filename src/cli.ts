@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 import { realpathSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Command, CommanderError, Option } from 'commander';
+import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { diffScans } from './diff.js';
-import { RegistryError } from './registry/registry.js';
+import { ClaudeNotFound } from './eval/claude.js';
+import { EvalError, runEval } from './eval/eval.js';
+import { ProbeError } from './eval/probes.js';
+import { loadRegistry, type Registry, RegistryError } from './registry/registry.js';
 import { fsReader, gitReader, gitTopLevel, RefNotFound } from './repo/reader.js';
+import { renderEval } from './report/eval.js';
 import { renderDiffMarkdown, renderErrorMarkdown } from './report/markdown.js';
 import { renderDiff, renderScan } from './report/render.js';
 import { scanRepo } from './scan.js';
@@ -18,6 +23,28 @@ interface Io {
 class UsageError extends Error {}
 
 const isDirectory = (dir: string) => statSync(dir, { throwIfNoEntry: false })?.isDirectory() ?? false;
+
+function count(value: string): number {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1) throw new InvalidArgumentError('expected a whole number of at least 1');
+  return n;
+}
+
+interface EvalFlags {
+  base: string;
+  head?: string;
+  format: 'text' | 'json' | 'markdown';
+  runs?: number;
+  maxRuns?: number;
+  maxMinutes?: number;
+  model?: string;
+  claude?: string;
+  workdir?: string;
+  cache?: string;
+  all?: boolean;
+  keepRuns?: boolean;
+  failOnRegression?: boolean;
+}
 
 export async function main(argv: string[], io: Io): Promise<number> {
   let code = 0;
@@ -74,13 +101,64 @@ export async function main(argv: string[], io: Io): Promise<number> {
       if ([...result.newFindings, ...result.execChanges].some((f) => f.severity === 'must')) code = 1;
     });
 
+  program
+    .command('eval [dir]')
+    .description('run probes against Claude Code with the base and the head context; advisory unless --fail-on-regression')
+    .requiredOption('--base <ref>', 'the ref to compare against, such as origin/main')
+    .option('--head <ref>', 'the ref to check (default: the working tree)')
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json', 'markdown']).default('text'))
+    .option('--runs <n>', 'runs per arm (default: eval.runs in ctxlock.yaml, or 3)', count)
+    .option('--max-runs <n>', 'the most runs this check may start (default: eval.max-runs, or 24)', count)
+    .option('--max-minutes <n>', 'start no run after this many minutes (default: eval.max-minutes, or 20)', count)
+    .option('--model <model>', 'the model Claude Code runs (default: eval.model, or sonnet)')
+    .option('--claude <path>', "Claude Code's executable (default: claude on PATH)")
+    .option('--workdir <dir>', 'where run folders and the cache go (default: $RUNNER_TEMP, or the system temp folder)')
+    .option('--cache <dir>', 'where results from git refs are cached (default: <workdir>/ctxlock-cache)')
+    .option('--all', 'run every probe, not only those on changed units')
+    .option('--keep-runs', 'keep the run folders, with what the agent tried, for debugging')
+    .option('--fail-on-regression', 'exit 1 when a probe from the base passes every base run and no head run')
+    .action(async (dir: string | undefined, opts: EvalFlags) => {
+      markdown = opts.format === 'markdown';
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      if ((await gitTopLevel(root)) === null) throw new UsageError(`ctxlock eval: ${dir ?? '.'} is not inside a git repository`);
+      let settings: Registry['eval'];
+      try {
+        // The base's settings, like diff's (D30): a pull request cannot shrink the check that judges it.
+        settings = (await loadRegistry(await gitReader(root, opts.base))).eval;
+      } catch (err) {
+        if (err instanceof RefNotFound) throw new UsageError(`base ref ${opts.base} not found — in GitHub Actions use actions/checkout with fetch-depth: 0`);
+        throw err;
+      }
+      const workdir = resolve(opts.workdir ?? process.env.RUNNER_TEMP ?? tmpdir());
+      // A path is resolved here, since Claude Code runs with the copy as its working directory.
+      const claude = opts.claude === undefined ? ['claude'] : [/[\\/]/.test(opts.claude) ? resolve(opts.claude) : opts.claude];
+      const result = await runEval({
+        root,
+        base: opts.base,
+        head: opts.head,
+        runs: opts.runs ?? settings.runs,
+        maxRuns: opts.maxRuns ?? settings.maxRuns,
+        maxMinutes: opts.maxMinutes ?? settings.maxMinutes,
+        model: opts.model ?? settings.model,
+        claude,
+        workdir,
+        cacheDir: resolve(opts.cache ?? join(workdir, 'ctxlock-cache')),
+        all: opts.all ?? false,
+        keepRuns: opts.keepRuns ?? false,
+      });
+      io.stdout(renderEval(result, opts.format));
+      if (opts.keepRuns) io.stderr(`ctxlock: run folders kept in ${workdir}\n`);
+      if (opts.failOnRegression && result.gateFailures.length > 0) code = 1;
+    });
+
   try {
     await program.parseAsync(argv, { from: 'user' });
   } catch (err) {
     // Commander has already printed its own message; help and version exit 0.
     if (err instanceof CommanderError) return err.exitCode === 0 ? 0 : 2;
     // Anything else is a bug or input ctxlock cannot handle. It still exits 2, because 1 means must-fix.
-    const known = err instanceof UsageError || err instanceof RegistryError || err instanceof RefNotFound;
+    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound].some((type) => err instanceof type);
     const reason = err instanceof Error ? err.message : String(err);
     io.stderr(known ? `${reason}\n` : `ctxlock could not run: ${reason}\n`);
     if (markdown) io.stdout(renderErrorMarkdown(reason));
