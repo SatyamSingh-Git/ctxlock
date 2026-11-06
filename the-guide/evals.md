@@ -39,6 +39,31 @@ Unit IDs are the ones `ctxlock scan` prints. Every probe needs exactly one of `c
 
 **Choose what the probe checks with care.** If the agent would do the right thing without your context, the probe shows no difference and reads as "this context does nothing". In ctxlock's own checks, naming `ruff` for Python linting changed nothing, because the model already uses ruff; naming `uv`, `pnpm`, `bun` or `just` changed the command in every run. `ctxlock probe draft` (below) throws away probes that pass without the unit.
 
+## Drafting probes
+
+Writing probes by hand works, and so does asking Claude to draft them:
+
+```sh
+ctxlock probe draft --unit instructions/AGENTS.md
+ctxlock probe draft --unit skill/.claude/skills/release --count 4
+```
+
+ctxlock sends the unit's text to Claude with every tool switched off and asks for `--count` candidates: tasks where the unit decides the right command, or, for a skill, tasks that should and should not invoke it. It then runs each candidate itself, `--runs` times (default 2):
+
+- **An adherence probe** runs in a copy of the working tree and in the same copy with the unit deleted. It is kept only if every run with the unit passes and no run without it does. A probe that passes without the unit tests nothing, like the `ruff` example above, and is discarded with `passes without the unit too (D36)`.
+- **A trigger probe** runs in the copy with the unit. It is kept only if every run did what it expects.
+
+The kept probes are written to `evals/probes/<unit>.yaml`, or `--out`, under a comment that names the unit and its digest. ctxlock never writes over an existing file, and writes nothing when no probe was kept. **Review the file before you commit it:** probes are tests, so a drafted one is checked once by a person, like any test.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--unit <id>` | (required) | The unit, as `ctxlock scan` lists it |
+| `--count <n>` | 4 | Candidates to ask for |
+| `--runs <n>` | 2 | Runs per copy when checking each candidate |
+| `--max-runs <n>` | 24 | The most checking runs; candidates past it are discarded with `run budget` |
+| `--model`, `--claude`, `--workdir` | as for `eval` | |
+| `--out <path>` | `evals/probes/<unit>.yaml` | The file to write, relative to the repository |
+
 ## Running it
 
 ```sh

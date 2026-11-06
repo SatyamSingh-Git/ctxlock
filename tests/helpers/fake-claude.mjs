@@ -20,9 +20,19 @@ if (argv[0] === '--version') {
 }
 const arg = (flag) => argv[argv.indexOf(flag) + 1];
 const prompt = arg('-p');
+// Counts this scenario's runs, so a behaviour can apply to odd runs only and results can vary.
+let run = 0;
+if (scenario.counterFile) {
+  run = (existsSync(scenario.counterFile) ? Number(readFileSync(scenario.counterFile, 'utf8')) : 0) + 1;
+  writeFileSync(scenario.counterFile, String(run));
+}
 const matches = (when) =>
   !when ||
-  (when.promptContains !== undefined ? prompt.includes(when.promptContains) : existsSync(join(cwd, when.file)) && readFileSync(join(cwd, when.file), 'utf8').includes(when.contains));
+  (when.oddRun !== undefined
+    ? run % 2 === 1
+    : when.promptContains !== undefined
+      ? prompt.includes(when.promptContains)
+      : existsSync(join(cwd, when.file)) && readFileSync(join(cwd, when.file), 'utf8').includes(when.contains));
 const behaviour = (scenario.behaviours ?? []).find((b) => matches(b.when)) ?? { calls: [] };
 
 // A behaviour can fail on its own, so one arm fails while the other runs.
@@ -82,6 +92,6 @@ if (!scenario.noResult) emit({
   duration_ms: 1200,
   total_cost_usd: 0.01,
   usage: { input_tokens: 1000 + loadedBytes, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 50 },
-  result: scenario.text ?? 'done',
+  result: behaviour.text ?? scenario.text ?? 'done',
 });
 process.stdout.write(`${out.join('\n')}\n`);

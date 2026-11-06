@@ -172,3 +172,42 @@ describe('ctxlock eval', { timeout: 120_000 }, () => {
     expect(JSON.parse((await evalCli(dir, '--format', 'json', '--runs', '3')).stdout).runsPerArm).toBe(3);
   });
 });
+
+describe('ctxlock probe draft', { timeout: 120_000 }, () => {
+  const draftReply = "```yaml\nprobes:\n  - id: deps-use-pnpm\n    prompt: Add zod as a dependency.\n    expect:\n      command: 'pnpm add'\n```\n";
+
+  beforeEach(() => {
+    const file = join(tempDir(), 'scenario.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        behaviours: [
+          { when: { promptContains: 'Draft' }, calls: [], text: draftReply },
+          { when: { file: 'AGENTS.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+          { calls: [{ tool: 'Bash', input: { command: 'npm install zod' } }] },
+        ],
+      }),
+    );
+    process.env.FAKE_CLAUDE_SCENARIO = file;
+  });
+
+  it('writes the probes that tell the copies apart, and says what it kept', async () => {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'Use pnpm.\n' }]);
+
+    const { code, stdout } = await cli('probe', 'draft', dir, '--unit', 'instructions/AGENTS.md', '--claude', 'tests/helpers/fake-claude.mjs', '--workdir', join(tempDir(), 'w'));
+
+    expect(code).toBe(0);
+    expect(stdout).toContain('Wrote evals/probes/agents-md.yaml: 1 kept. Review it before committing.');
+    expect(stdout).toMatch(/kept\s+deps-use-pnpm/);
+    expect(stdout).toContain('Runs: 5');
+  });
+
+  it('exits 2 rather than write over an existing probe file', async () => {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/agents-md.yaml': 'mine\n' }]);
+
+    const { code, stderr } = await cli('probe', 'draft', dir, '--unit', 'instructions/AGENTS.md', '--claude', 'tests/helpers/fake-claude.mjs', '--workdir', join(tempDir(), 'w'));
+
+    expect(code).toBe(2);
+    expect(stderr).toMatch(/^evals\/probes\/agents-md\.yaml already exists/);
+  });
+});

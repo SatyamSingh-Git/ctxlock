@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { diffScans } from './diff.js';
 import { ClaudeNotFound } from './eval/claude.js';
+import { DraftError, draftProbes } from './eval/draft.js';
 import { EvalError, runEval } from './eval/eval.js';
 import { ProbeError } from './eval/probes.js';
 import { loadRegistry, type Registry, RegistryError } from './registry/registry.js';
@@ -29,6 +30,10 @@ function count(value: string): number {
   if (!Number.isInteger(n) || n < 1) throw new InvalidArgumentError('expected a whole number of at least 1');
   return n;
 }
+
+const workdirOf = (flag: string | undefined) => resolve(flag ?? process.env.RUNNER_TEMP ?? tmpdir());
+// A path is resolved here, since Claude Code runs with the copy as its working directory.
+const claudeOf = (flag: string | undefined) => (flag === undefined ? ['claude'] : [/[\\/]/.test(flag) ? resolve(flag) : flag]);
 
 interface EvalFlags {
   base: string;
@@ -130,9 +135,8 @@ export async function main(argv: string[], io: Io): Promise<number> {
         if (err instanceof RefNotFound) throw new UsageError(`base ref ${opts.base} not found — in GitHub Actions use actions/checkout with fetch-depth: 0`);
         throw err;
       }
-      const workdir = resolve(opts.workdir ?? process.env.RUNNER_TEMP ?? tmpdir());
-      // A path is resolved here, since Claude Code runs with the copy as its working directory.
-      const claude = opts.claude === undefined ? ['claude'] : [/[\\/]/.test(opts.claude) ? resolve(opts.claude) : opts.claude];
+      const workdir = workdirOf(opts.workdir);
+      const claude = claudeOf(opts.claude);
       const result = await runEval({
         root,
         base: opts.base,
@@ -152,13 +156,50 @@ export async function main(argv: string[], io: Io): Promise<number> {
       if (opts.failOnRegression && result.gateFailures.length > 0) code = 1;
     });
 
+  program
+    .command('probe')
+    .description('work with the probe files under evals/probes')
+    .command('draft [dir]')
+    .description('draft probes for a unit with Claude, and write the ones that tell a copy with the unit from one without it to a new file')
+    .requiredOption('--unit <id>', 'the unit to draft probes for, as ctxlock scan lists it')
+    .option('--count <n>', 'how many candidates to ask for', count, 4)
+    .option('--runs <n>', 'runs per arm when checking each candidate', count, 2)
+    .option('--max-runs <n>', 'the most runs the checking may start', count, 24)
+    .option('--model <model>', 'the model Claude Code runs (default: eval.model, or sonnet)')
+    .option('--claude <path>', "Claude Code's executable (default: claude on PATH)")
+    .option('--workdir <dir>', 'where run folders go (default: $RUNNER_TEMP, or the system temp folder)')
+    .option('--out <path>', 'the file to write, relative to the repository (default: evals/probes/<unit>.yaml)')
+    .action(async (dir: string | undefined, opts: { unit: string; count: number; runs: number; maxRuns: number; model?: string; claude?: string; workdir?: string; out?: string }) => {
+      const given = resolve(dir ?? '.');
+      if (!isDirectory(given)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      const root = (await gitTopLevel(given)) ?? given;
+      const settings = (await loadRegistry(fsReader(root))).eval;
+      const r = await draftProbes({
+        root,
+        unit: opts.unit,
+        count: opts.count,
+        runs: opts.runs,
+        maxRuns: opts.maxRuns,
+        model: opts.model ?? settings.model,
+        claude: claudeOf(opts.claude),
+        workdir: workdirOf(opts.workdir),
+        out: opts.out,
+      });
+      const lines = [`ctxlock probe draft · ${opts.unit}`];
+      lines.push(r.kept.length > 0 ? `Wrote ${r.path}: ${r.kept.length} kept. Review it before committing.` : 'No probe told the two copies apart, so nothing was written.');
+      for (const id of r.kept) lines.push(`  kept       ${id}`);
+      for (const d of r.discarded) lines.push(`  discarded  ${d.id}: ${d.reason}`);
+      lines.push(`Runs: ${r.runs}`);
+      io.stdout(`${lines.join('\n')}\n`);
+    });
+
   try {
     await program.parseAsync(argv, { from: 'user' });
   } catch (err) {
     // Commander has already printed its own message; help and version exit 0.
     if (err instanceof CommanderError) return err.exitCode === 0 ? 0 : 2;
     // Anything else is a bug or input ctxlock cannot handle. It still exits 2, because 1 means must-fix.
-    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound].some((type) => err instanceof type);
+    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError].some((type) => err instanceof type);
     const reason = err instanceof Error ? err.message : String(err);
     io.stderr(known ? `${reason}\n` : `ctxlock could not run: ${reason}\n`);
     if (markdown) io.stdout(renderErrorMarkdown(reason));
