@@ -157,7 +157,7 @@ export async function planFill(scan: ScanResult, reader: RepoReader, ignored: (p
       const folders = patterns.map((p) => FOLDER_GLOB.exec(p)?.[1]);
       // Only a folder inside the repository, and outside .git, can hold an AGENTS.md for Codex.
       const outside = (f: string) => posix.isAbsolute(f) || /^[A-Za-z]:/.test(f) || f.split('/').some((part) => part === '..' || part === '.git');
-      const bad = patterns.find((_, i) => folders[i] === undefined || outside(folders[i]!));
+      const bad = patterns.length === 0 ? 'paths: []' : patterns.find((_, i) => folders[i] === undefined || outside(folders[i]!));
       if (bad !== undefined) gap(null, `Codex cannot scope ${bad}`);
       else for (const folder of new Set(folders)) want(posix.join(dir, folder!), unit);
     } else {

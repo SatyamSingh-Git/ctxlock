@@ -191,6 +191,9 @@ describe('planFill: agents-md', () => {
     const outside = await plan({ 'AGENTS.md': 'a', '.claude/rules/up.md': '---\npaths: ["../other/**"]\n---\nUp.\n' });
     expect(outside.gaps).toEqual([{ path: '.claude/rules/up.md', harness: 'codex', fill: null, reason: 'Codex cannot scope ../other/**' }]);
 
+    const empty = await plan({ 'AGENTS.md': 'a', '.claude/rules/none.md': '---\npaths: []\n---\nNone.\n' });
+    expect(empty).toEqual({ actions: [], gaps: [{ path: '.claude/rules/none.md', harness: 'codex', fill: null, reason: 'Codex cannot scope paths: []' }] });
+
     // A folder that is absolute, on a drive, or inside .git is no folder of the repository to write in.
     for (const pattern of ['/src/**', 'C:/x/**', '.git/**', 'pkg/.git/**']) {
       const p = await plan({ 'AGENTS.md': 'a', '.claude/rules/r.md': `---\npaths: ["${pattern}"]\n---\nR.\n` });

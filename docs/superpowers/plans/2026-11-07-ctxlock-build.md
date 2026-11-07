@@ -36,7 +36,7 @@
 - `M6`: report wording. "Writes the N fills" counts gaps, not files. After a fill, Budget shows the old budget. A stale copy reads as "does not reach".
 - `M7`: `L7` reports a stale generated copy as diverged copies, on top of `L14`.
 - `M8`: an exception partway through `applyFill` leaves the files written so far unrecorded.
-- `M9`: a rule with `paths: []` gives neither a gap nor an action.
+- `M9` (fixed): a rule with `paths: []` gave neither a gap nor an action. It is now a gap, `Codex cannot scope paths: []`.
 - `M11` (fixed): no test for imports that add up past 32,768 bytes. One now assembles three 12,000-byte imports.
 - `M12` (found in the fix pass; fixed): the preview drops in one pass, so a planned file cut only because an earlier planned file took its room stays dropped after that file is dropped too. The check now repeats until nothing more is dropped, and only the first cut in each chain counts as a cause.
 

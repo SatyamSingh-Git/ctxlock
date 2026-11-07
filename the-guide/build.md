@@ -60,7 +60,7 @@ Only for gaps between Claude Code and Codex, and only these three kinds of file:
 | A `.claude/rules` file whose `paths` are whole folders, such as `src/api/**` | `src/api/AGENTS.md` from the rule, which Codex then loads only when it works in that folder |
 
 Everything else stays a gap, with its reason:
-- a rule scoped by another kind of glob (`Codex cannot scope **/*.ts`);
+- a rule scoped by another kind of glob (`Codex cannot scope **/*.ts`), or by an empty `paths` list;
 - a folder that already has an `AGENTS.md` or `AGENTS.override.md` (`add it to AGENTS.md by hand`);
 - an import a person has to add to an existing `CLAUDE.md`;
 - a file git would ignore (`.claude/skills/release/SKILL.md is gitignored`), by any rule git reads: a `.gitignore`, `.git/info/exclude` or your global excludes. When git ignores `.ctxlock/generated.json` itself, nothing is filled;
