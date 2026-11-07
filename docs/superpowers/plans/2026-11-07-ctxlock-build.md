@@ -34,7 +34,7 @@
 - `M4` (fixed): the depth-first import walk could drop an import near the hop limit that Claude Code's breadth-first walk loads. Hops now come from a breadth-first walk; the depth-first one only orders the text.
 - `M5`: `--suggest-index` reads its folder from the repository's top level, so `.`, `.\docs`, absolute paths and runs from a subfolder fail; folders are ordered by first file, not sorted.
 - `M6`: report wording. "Writes the N fills" counts gaps, not files. After a fill, Budget shows the old budget. A stale copy reads as "does not reach".
-- `M7`: `L7` reports a stale generated copy as diverged copies, on top of `L14`.
+- `M7` (fixed): `L7` reported a stale generated copy as diverged copies, on top of `L14`. It now leaves a copy whose files are all generated to `L14`.
 - `M8` (fixed): an exception partway through `applyFill` left the files written so far unrecorded. The record is now written in a `finally`.
 - `M9` (fixed): a rule with `paths: []` gave neither a gap nor an action. It is now a gap, `Codex cannot scope paths: []`.
 - `M11` (fixed): no test for imports that add up past 32,768 bytes. One now assembles three 12,000-byte imports.

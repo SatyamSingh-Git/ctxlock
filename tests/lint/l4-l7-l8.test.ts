@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { GENERATED_FILE, serializeGenerated } from '../../src/build/generated.js';
 import { discoverable } from '../../src/lint/rules/l4-discoverable.js';
 import { duplicateSkills } from '../../src/lint/rules/l7-duplicates.js';
 import { procedure } from '../../src/lint/rules/l8-procedure.js';
 import type { Rule } from '../../src/lint/types.js';
+import { lfDigest } from '../../src/units/digest.js';
 import { lintContext } from '../helpers/lint.js';
 
 async function run(rule: Rule, files: Record<string, string>, symlinks: Record<string, string> = {}) {
@@ -115,6 +117,28 @@ describe('L7-duplicate-skill', () => {
         '.agents/skills/deploy/SKILL.md': skill('deploy', 'Deploys the app', 'Run make deploy.\n'),
         '.claude/skills/deploy/SKILL.md': skill('deploy', 'Deploys the app', 'Run make release.\n'),
       }),
+    ).toEqual([['should', '.claude/skills/deploy/SKILL.md', 'diverged copies: skill deploy at .agents/skills/deploy and .claude/skills/deploy have different contents']]);
+  });
+
+  it('leaves a copy ctxlock generated to L14, whether its source changed or someone edited it', async () => {
+    const old = skill('deploy', 'Deploys the app', 'Run make deploy.\n');
+    const record = serializeGenerated([
+      { path: '.claude/skills/deploy/SKILL.md', sha256: lfDigest(Buffer.from(old)), from: [{ path: '.agents/skills/deploy/SKILL.md', sha256: lfDigest(Buffer.from(old)) }] },
+    ]);
+    const newer = skill('deploy', 'Deploys the app', 'Run make release.\n');
+
+    expect(await run(duplicateSkills, { '.agents/skills/deploy/SKILL.md': newer, '.claude/skills/deploy/SKILL.md': old, [GENERATED_FILE]: record })).toEqual([]);
+    expect(await run(duplicateSkills, { '.agents/skills/deploy/SKILL.md': old, '.claude/skills/deploy/SKILL.md': newer, [GENERATED_FILE]: record })).toEqual([]);
+
+    // A copy made the other way, into .agents/skills.
+    const back = serializeGenerated([
+      { path: '.agents/skills/deploy/SKILL.md', sha256: lfDigest(Buffer.from(old)), from: [{ path: '.claude/skills/deploy/SKILL.md', sha256: lfDigest(Buffer.from(old)) }] },
+    ]);
+    expect(await run(duplicateSkills, { '.agents/skills/deploy/SKILL.md': old, '.claude/skills/deploy/SKILL.md': newer, [GENERATED_FILE]: back })).toEqual([]);
+
+    // A file a person added to the copy is in no record, so L14 never sees it, and L7 still does.
+    expect(
+      await run(duplicateSkills, { '.agents/skills/deploy/SKILL.md': old, '.claude/skills/deploy/SKILL.md': old, '.claude/skills/deploy/notes.md': 'mine', [GENERATED_FILE]: record }),
     ).toEqual([['should', '.claude/skills/deploy/SKILL.md', 'diverged copies: skill deploy at .agents/skills/deploy and .claude/skills/deploy have different contents']]);
   });
 

@@ -27,8 +27,11 @@ const owner = (unit: Unit) => posix.dirname(posix.dirname(posix.dirname(unit.pat
 
 export const duplicateSkills: Rule = {
   id: 'L7-duplicate-skill',
-  check({ units, contexts }) {
+  check({ units, contexts, generated }) {
     const findings: Finding[] = [];
+    // A copy ctxlock generated that differs from its source is L14's to report, as stale or edited.
+    const outputs = new Set(generated.map((g) => g.path));
+    const isOutput = (unit: Unit) => unit.files.every((f) => outputs.has(f.path));
     const skills = units
       .filter((u) => u.kind === 'skill')
       .map((unit) => ({ unit, contents: contents(unit), words: words(description(unit)), owner: owner(unit) }));
@@ -42,7 +45,7 @@ export const duplicateSkills: Rule = {
           findings.push({ rule: 'L7-duplicate-skill', severity: 'should', message, path: `${b.unit.path}/SKILL.md`, unitId: b.unit.id });
         if (a.contents === b.contents) continue;
         if (a.unit.name === b.unit.name) {
-          if (a.owner === b.owner) report(`diverged copies: skill ${a.unit.name} at ${a.unit.path} and ${b.unit.path} have different contents`);
+          if (a.owner === b.owner && !isOutput(a.unit) && !isOutput(b.unit)) report(`diverged copies: skill ${a.unit.name} at ${a.unit.path} and ${b.unit.path} have different contents`);
           continue;
         }
         if (!listedTogether(a.unit, b.unit)) continue;

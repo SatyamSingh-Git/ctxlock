@@ -283,7 +283,7 @@ Compares pairs of skills:
 - **Near-duplicates:** two skills that one agent lists at the same time, whose descriptions share at least half their words. The test is Jaccard similarity of their word sets ≥ 0.5, over lowercase words of three or more letters, with about 35 common words such as "the", "use" and "when" ignored. Skills that never appear in the same listing, such as a Claude Code skill and a Codex one, or skills in two different packages, do not compete and are not compared.
 - **Diverged copies:** two skills with the same `name` in the same folder's `.claude/skills` and `.agents/skills`, whose files differ. A typical cause is a skill copied into both and later edited in only one place. Same-named skills in different packages are different skills.
 
-Identical copies and symlinks (`.claude/skills/deploy -> ../../.agents/skills/deploy`) are not flagged.
+Identical copies and symlinks (`.claude/skills/deploy -> ../../.agents/skills/deploy`) are not flagged. Nor is a copy `ctxlock build` generated, which [`L14`](#l14-generated-should) reports as stale or edited; a file a person added to such a copy still is.
 
 **Fix:**
 - **Near-duplicates:** merge the two skills, or rewrite the descriptions so each says when to use it and when not to.
