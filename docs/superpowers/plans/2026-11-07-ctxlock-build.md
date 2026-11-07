@@ -26,6 +26,19 @@
 | 6 | Done | `5df7466` |
 | 7 | Done | `b7c3e80` |
 | 8 | Done: three public repositories and the S2 fixture ([report](../../dogfood/2026-11-07-build.md)); one bug fixed (D55) | the fix and the docs commits |
+| Final review | Done: 1 critical and 6 important findings fixed, plus a line-endings minor re-graded important, each with a test that failed first (D56, D57; [chapter 10](../../../journey/10-build.md#what-broke)) | `f1b05c8` |
+
+**Deferred from the final review** (minor, not fixed):
+- `M1`: on a case-insensitive file system, a skill whose name differs only in case from a hand-written one gets part of a copy written into the person's folder. Each action should be all-or-nothing in `applyFill`.
+- `M2`: the report never mentions an invalid `.ctxlock/generated.json` unless `--fill-missing` is given.
+- `M4`: the depth-first import walk can drop an import near the hop limit that Claude Code's breadth-first walk loads.
+- `M5`: `--suggest-index` reads its folder from the repository's top level, so `.`, `.\docs`, absolute paths and runs from a subfolder fail; folders are ordered by first file, not sorted.
+- `M6`: report wording. "Writes the N fills" counts gaps, not files. After a fill, Budget shows the old budget. A stale copy reads as "does not reach".
+- `M7`: `L7` reports a stale generated copy as diverged copies, on top of `L14`.
+- `M8`: an exception partway through `applyFill` leaves the files written so far unrecorded.
+- `M9`: a rule with `paths: []` gives neither a gap nor an action.
+- `M11`: no test for imports that add up past 32,768 bytes.
+- `M12` (found in the fix pass): the preview drops in one pass, so a planned file cut only because an earlier planned file took its room stays dropped after that file is dropped too.
 
 ## Rulings this plan makes
 
