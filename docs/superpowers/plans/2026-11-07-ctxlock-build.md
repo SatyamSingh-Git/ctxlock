@@ -37,7 +37,7 @@
 - `M7`: `L7` reports a stale generated copy as diverged copies, on top of `L14`.
 - `M8`: an exception partway through `applyFill` leaves the files written so far unrecorded.
 - `M9`: a rule with `paths: []` gives neither a gap nor an action.
-- `M11`: no test for imports that add up past 32,768 bytes.
+- `M11` (fixed): no test for imports that add up past 32,768 bytes. One now assembles three 12,000-byte imports.
 - `M12` (found in the fix pass): the preview drops in one pass, so a planned file cut only because an earlier planned file took its room stays dropped after that file is dropped too.
 
 ## Rulings this plan makes

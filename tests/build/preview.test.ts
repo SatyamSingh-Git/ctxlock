@@ -39,6 +39,16 @@ describe('previewFill', () => {
     expect(after.budget.find((r) => r.harness === 'codex' && r.site === '')?.alwaysBytes).toBe(0);
   });
 
+  it('drops an AGENTS.md whose imports add up past what Codex loads, though each file is small', async () => {
+    const part = (c: string) => `${c.repeat(12_000)}\n`;
+    const { plan } = await preview({ 'CLAUDE.md': '@a.md\n@b.md\n@c.md\n', 'a.md': part('a'), 'b.md': part('b'), 'c.md': part('c') });
+
+    expect(plan.actions).toEqual([]);
+    expect(plan.gaps).toEqual([
+      { path: 'CLAUDE.md', harness: 'codex', fill: null, reason: 'would be cut: Codex loads only 32768 of 36024 bytes from AGENTS.md under the 32768-byte project instruction budget' },
+    ]);
+  });
+
   it('drops a fill that would cut a file a person wrote, later in the same chain, and says which', async () => {
     const { plan } = await preview({ 'CLAUDE.md': `${'x'.repeat(30_000)}\n`, 'pkg/AGENTS.md': `${'y'.repeat(5_000)}\n` });
 
