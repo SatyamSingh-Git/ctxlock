@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { GENERATED_FILE, serializeGenerated } from '../../src/build/generated.js';
+import { sha256Hex } from '../../src/units/digest.js';
 import { owners } from '../../src/lint/rules/l10-owner.js';
 import { coverage } from '../../src/lint/rules/l11-coverage.js';
 import { shadowedAgentsMd } from '../../src/lint/rules/l13-shadowed.js';
@@ -252,6 +254,18 @@ describe('L11-coverage', () => {
   it('an AGENTS.md that L13 reports is left to L13', async () => {
     expect(await run(coverage, { 'AGENTS.md': 'a', 'CLAUDE.md': 'c' })).toEqual([['L11-coverage', 'info', 'CLAUDE.md', 'CLAUDE.md reaches claude-code only']]);
   });
+
+  it('a skill and the copy ctxlock build generated from it reach both agents between them', async () => {
+    const skill = '---\nname: r\ndescription: Releases\n---\nRelease it.\n';
+    const files = { '.agents/skills/r/SKILL.md': skill, '.claude/skills/r/SKILL.md': skill };
+    const record = serializeGenerated([{ path: '.claude/skills/r/SKILL.md', sha256: sha256Hex(skill), from: [{ path: '.agents/skills/r/SKILL.md', sha256: sha256Hex(skill) }] }]);
+
+    expect(await run(coverage, { ...files, [GENERATED_FILE]: record })).toEqual([]);
+    expect(await run(coverage, files)).toEqual([
+      ['L11-coverage', 'info', '.agents/skills/r/SKILL.md', '.agents/skills/r/SKILL.md reaches codex only'],
+      ['L11-coverage', 'info', '.claude/skills/r/SKILL.md', '.claude/skills/r/SKILL.md reaches claude-code only'],
+    ]);
+  });
 });
 
 describe('L13-agents-md-shadowed', () => {
@@ -263,6 +277,22 @@ describe('L13-agents-md-shadowed', () => {
 
   it('with the import it is not', async () => {
     expect(await run(shadowedAgentsMd, { 'AGENTS.md': 'a', 'CLAUDE.md': '@AGENTS.md\n' })).toEqual([]);
+  });
+
+  it('an AGENTS.md that ctxlock build generated from CLAUDE.md is not, since Claude Code reads what it says', async () => {
+    const files = { 'CLAUDE.md': 'Use pnpm.\n', 'AGENTS.md': 'Use pnpm.\n' };
+    const record = serializeGenerated([{ path: 'AGENTS.md', sha256: sha256Hex('Use pnpm.\n'), from: [{ path: 'CLAUDE.md', sha256: sha256Hex('Use pnpm.\n') }] }]);
+
+    expect(await run(shadowedAgentsMd, { ...files, [GENERATED_FILE]: record })).toEqual([]);
+    expect(await run(coverage, { ...files, [GENERATED_FILE]: record })).toEqual([]);
+    expect(await run(shadowedAgentsMd, files)).toHaveLength(1);
+
+    // Generated from a file no agent reads, it reaches Codex alone, and L11 still says so.
+    const fromNotes = serializeGenerated([{ path: 'AGENTS.md', sha256: sha256Hex('Use pnpm.\n'), from: [{ path: 'docs/notes.txt', sha256: sha256Hex('n') }] }]);
+    expect(await run(coverage, { ...files, 'docs/notes.txt': 'n', [GENERATED_FILE]: fromNotes })).toEqual([
+      ['L11-coverage', 'info', 'AGENTS.md', 'AGENTS.md reaches codex only'],
+      ['L11-coverage', 'info', 'CLAUDE.md', 'CLAUDE.md reaches claude-code only'],
+    ]);
   });
 
   it('an AGENTS.override.md is Codex-only by design, and an AGENTS.md Claude Code skips for size is not shadowed', async () => {

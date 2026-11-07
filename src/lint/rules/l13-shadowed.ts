@@ -1,4 +1,5 @@
 import { posix } from 'node:path';
+import type { GeneratedFile } from '../../build/generated.js';
 import type { EffectiveContext } from '../../harness/types.js';
 import type { Rule } from '../types.js';
 
@@ -20,7 +21,9 @@ interface Shadowed {
 // CLAUDE file takes its place. It is first seen at its own folder's site, so that is where the fix is
 // chosen: an import from a shared CLAUDE file in the same folder, or else a new CLAUDE.md there. An
 // import higher up would load the file at every site, while Codex loads it only under its folder.
-export function shadowed(contexts: EffectiveContext[]): Shadowed[] {
+// An AGENTS.md that ctxlock build generated is left out: Claude Code reads its sources already.
+export function shadowed(contexts: EffectiveContext[], generated: GeneratedFile[] = []): Shadowed[] {
+  const outputs = new Set(generated.map((g) => g.path));
   const found = new Map<string, Shadowed>();
   for (const codex of contexts) {
     if (codex.harness !== 'codex') continue;
@@ -34,7 +37,7 @@ export function shadowed(contexts: EffectiveContext[]): Shadowed[] {
     // No CLAUDE file means Claude Code fell back to AGENTS.md, and skipped this one for another reason.
     if (!blocker) continue;
     for (const entry of codex.entries) {
-      if (posix.basename(entry.path) !== 'AGENTS.md' || loaded.has(entry.unitId) || found.has(entry.path)) continue;
+      if (posix.basename(entry.path) !== 'AGENTS.md' || loaded.has(entry.unitId) || found.has(entry.path) || outputs.has(entry.path)) continue;
       const dir = home(entry.path);
       const target = shared.find((p) => home(p) === dir);
       const fix = target
@@ -48,8 +51,8 @@ export function shadowed(contexts: EffectiveContext[]): Shadowed[] {
 
 export const shadowedAgentsMd: Rule = {
   id: 'L13-agents-md-shadowed',
-  check({ contexts }) {
-    return shadowed(contexts).map(({ path, unitId, blocker, fix }) => ({
+  check({ contexts, generated }) {
+    return shadowed(contexts, generated).map(({ path, unitId, blocker, fix }) => ({
       rule: 'L13-agents-md-shadowed',
       severity: 'should',
       message: `Claude Code ignores ${path} because ${blocker} exists; ${fix}`,
