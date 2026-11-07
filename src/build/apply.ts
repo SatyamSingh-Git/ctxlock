@@ -36,39 +36,42 @@ export async function applyFill(top: string, plan: FillPlan, previous: Generated
     const outside = rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
     return !outside && !linked(top, path) && (now === null || recorded.get(path)?.sha256 === lfDigest(now));
   };
-  for (const action of plan.actions) {
-    const writes = action.files.map((file) => ({ ...at(file.path), file }));
-    const removes = (action.remove ?? []).map(at);
-    // An action is written whole or not at all. On a case-insensitive file system a person's folder
-    // can stand at a planned path that differs only in case, and only some of its files collide.
-    const taken = [...writes, ...removes].filter((p) => !mine(p));
-    if (taken.length > 0) {
-      refused.push(...taken.map((p) => p.path));
-      continue;
-    }
-    for (const { file, full, now } of writes) {
-      // A checkout may have changed the line endings of a file that is otherwise what would be written.
-      if (now === null || lfDigest(now) !== lfDigest(file.bytes)) {
-        mkdirSync(dirname(full), { recursive: true });
-        writeFileSync(full, file.bytes);
-        written.push(file.path);
+  try {
+    for (const action of plan.actions) {
+      const writes = action.files.map((file) => ({ ...at(file.path), file }));
+      const removes = (action.remove ?? []).map(at);
+      // An action is written whole or not at all. On a case-insensitive file system a person's folder
+      // can stand at a planned path that differs only in case, and only some of its files collide.
+      const taken = [...writes, ...removes].filter((p) => !mine(p));
+      if (taken.length > 0) {
+        refused.push(...taken.map((p) => p.path));
+        continue;
       }
-      entries.set(file.path, { path: file.path, sha256: lfDigest(file.bytes), from: file.from });
-    }
-    for (const { path, full, now } of removes) {
-      if (now !== null) {
-        rmSync(full);
-        removed.push(path);
+      for (const { file, full, now } of writes) {
+        // A checkout may have changed the line endings of a file that is otherwise what would be written.
+        if (now === null || lfDigest(now) !== lfDigest(file.bytes)) {
+          mkdirSync(dirname(full), { recursive: true });
+          writeFileSync(full, file.bytes);
+          written.push(file.path);
+        }
+        entries.set(file.path, { path: file.path, sha256: lfDigest(file.bytes), from: file.from });
       }
-      entries.delete(path);
+      for (const { path, full, now } of removes) {
+        if (now !== null) {
+          rmSync(full);
+          removed.push(path);
+        }
+        entries.delete(path);
+      }
     }
-  }
-
-  // No record is started for a fill that generated nothing.
-  const recordPath = join(top, GENERATED_FILE);
-  if (entries.size > 0) {
-    mkdirSync(dirname(recordPath), { recursive: true });
-    writeFileSync(recordPath, serializeGenerated([...entries.values()]));
+  } finally {
+    // Written even when a write fails partway, so files already written are never taken for a person's;
+    // but no record is started for a fill that generated nothing.
+    const recordPath = join(top, GENERATED_FILE);
+    if (entries.size > 0) {
+      mkdirSync(dirname(recordPath), { recursive: true });
+      writeFileSync(recordPath, serializeGenerated([...entries.values()]));
+    }
   }
   return { written: written.sort(), removed: removed.sort(), refused: refused.sort() };
 }

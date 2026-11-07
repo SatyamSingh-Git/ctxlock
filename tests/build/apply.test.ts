@@ -138,6 +138,16 @@ describe('applyFill', () => {
     expect(read(other, '.claude/skills/release/scripts/run.sh').toString()).toBe('mine');
   });
 
+  it("records what it wrote before a write fails, so those files are never taken for a person's", async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'AGENTS.md': 'a', 'b/x': 'a file where a folder is planned' });
+    const fills = (target: string) => ({ kind: 'agents-md' as const, harness: 'codex' as const, target, files: [{ path: `${target}/AGENTS.md`, bytes: Buffer.from('x\n'), from: [] }] });
+
+    await expect(applyFill(dir, { actions: [fills('a'), fills('b/x')], gaps: [] }, [])).rejects.toThrow();
+    expect(read(dir, 'a/AGENTS.md').toString()).toBe('x\n');
+    expect((await loadGenerated(fsReader(dir))).files.map((f) => f.path)).toEqual(['a/AGENTS.md']);
+  });
+
   it('refuses a path that leaves the repository', async () => {
     const dir = join(tempDir(), 'repo');
     writeTree(dir, { 'AGENTS.md': 'a' });
