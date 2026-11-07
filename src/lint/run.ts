@@ -13,6 +13,7 @@ import { staleReferences } from './rules/l9-stale.js';
 import { owners } from './rules/l10-owner.js';
 import { coverage } from './rules/l11-coverage.js';
 import { shadowedAgentsMd } from './rules/l13-shadowed.js';
+import { generatedDrift } from './rules/l14-generated.js';
 import type { LintContext, Rule } from './types.js';
 
 export const RULES: Rule[] = [
@@ -31,6 +32,7 @@ export const RULES: Rule[] = [
   owners,
   coverage,
   shadowedAgentsMd,
+  generatedDrift,
 ];
 
 const RANK = { must: 0, should: 1, info: 2 };

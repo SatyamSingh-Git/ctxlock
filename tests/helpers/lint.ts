@@ -1,3 +1,4 @@
+import { loadGenerated } from '../../src/build/generated.js';
 import { LIMITS } from '../../src/harness/limits.js';
 import { resolveAll } from '../../src/harness/resolve.js';
 import type { LintContext } from '../../src/lint/types.js';
@@ -14,6 +15,7 @@ export async function lintContext(
   const { units } = await discoverUnits(reader);
   const registry = await loadRegistry(reader);
   const limits = { ...LIMITS, ...registry.limits };
+  const generated = await loadGenerated(reader);
   return {
     reader,
     units,
@@ -22,5 +24,7 @@ export async function lintContext(
     contexts: await resolveAll({ reader, units, limits }, registry.harnesses),
     limits,
     today: '2026-11-05',
+    generated: generated.files,
+    generatedError: generated.error,
   };
 }

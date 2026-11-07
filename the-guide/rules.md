@@ -18,7 +18,7 @@ lint:
     - "vendor/**"
 ```
 
-> **Status:** the rules on this page are implemented and tested: L0–L11 and L13. L12, a model-based contradiction check, is planned for later. The `ctxlock lint` command that runs them arrives with the first CLI release.
+> **Status:** the rules on this page are implemented and tested: L0–L11, L13 and L14. L12, a model-based contradiction check, is planned for later. The `ctxlock lint` command that runs them arrives with the first CLI release.
 
 ## What the findings look like
 
@@ -301,7 +301,7 @@ Five or more gives an `info` finding. It is a heuristic until evals can measure 
 
 ---
 
-## L9, L10, L11, L13: context that drifts from the repository and the team
+## L9, L10, L11, L13, L14: context that drifts from the repository and the team
 
 Context is code that nobody runs. When a file is renamed or a script removed, the instruction that names it keeps telling agents to use it. When nobody owns a file, nobody notices. When two agents read different files, they work to different rules.
 
@@ -371,3 +371,20 @@ Claude Code ignores services/billing/AGENTS.md because CLAUDE.md exists; create 
 A personal `CLAUDE.local.md` is never where the import goes. `AGENTS.override.md` is Codex-only by design and is not reported.
 
 **Fix:** do what the message says. Or, if a `CLAUDE.md` holds nothing of its own, replace it with a symlink to the `AGENTS.md` beside it.
+
+`L11` and `L13` count a file that `ctxlock build` generated as its source: a skill copied into `.claude/skills` and the original in `.agents/skills` reach both agents between them, and an `AGENTS.md` generated from `CLAUDE.md` is not reported as ignored, since Claude Code already reads what it says.
+
+### `L14-generated` (should)
+
+Checks each file listed in `.ctxlock/generated.json`, the record `ctxlock build --fill-missing` keeps of what it wrote and from what ([build.md](build.md)):
+
+```
+.claude/skills/release/SKILL.md is listed in .ctxlock/generated.json but missing; run ctxlock build --fill-missing, or remove the entry
+.claude/skills/release/SKILL.md was edited after ctxlock generated it; edit its source instead, or remove the entry to keep the edit
+.claude/skills/release/SKILL.md was generated from .agents/skills/release/SKILL.md, which no longer exists
+.claude/skills/release/SKILL.md is out of date: .agents/skills/release/SKILL.md changed since it was generated; run ctxlock build --fill-missing
+```
+
+A record that does not parse, or names a path outside the repository, is one finding: `.ctxlock/generated.json is not valid: <reason>`. Since `diff` and the Action run the same rules, a pull request that edits a source and not its copy is reported there too.
+
+**Fix:** do what the message says. `ctxlock build --fill-missing` rewrites a stale file only when nobody edited it since.

@@ -1,3 +1,4 @@
+import { type Generated, loadGenerated } from './build/generated.js';
 import { LIMITS } from './harness/limits.js';
 import { resolveAll } from './harness/resolve.js';
 import type { EffectiveContext } from './harness/types.js';
@@ -19,6 +20,7 @@ export interface ScanResult {
   contexts: EffectiveContext[];
   budget: BudgetRow[];
   findings: Finding[];
+  generated: Generated;
   // The L2-exec-config items before lint settings apply. diff compares these, so quieting the info
   // rule in lint does not switch off the check on new hooks; L2-exec-config-changed controls that.
   inventory: Finding[];
@@ -43,8 +45,9 @@ export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Prom
   const limits = { ...LIMITS, ...registry.limits };
   const contexts = await resolveAll({ reader, units, limits }, registry.harnesses);
   const extra = opts.agnix ? await agnixFindings(reader.root, opts.runAgnix) : [];
-  const ctx = { reader, units, registry, codeowners, contexts, limits, today: opts.today ?? localDate() };
+  const generated = await loadGenerated(reader);
+  const ctx = { reader, units, registry, codeowners, contexts, limits, today: opts.today ?? localDate(), generated: generated.files, generatedError: generated.error };
   const findings = await runLint(ctx, [...problems, ...extra]);
   const inventory = (await execConfig.check(ctx)).filter((f) => f.rule === 'L2-exec-config');
-  return { root: reader.root, ref: reader.ref, units, registry, contexts, budget: budgetReport(contexts, limits), findings, inventory };
+  return { root: reader.root, ref: reader.ref, units, registry, contexts, budget: budgetReport(contexts, limits), findings, generated, inventory };
 }
