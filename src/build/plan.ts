@@ -1,0 +1,185 @@
+import { posix } from 'node:path';
+import { CLAUDE_FILES, at, ownerDir } from '../harness/claude-code.js';
+import { findImports } from '../harness/imports.js';
+import { LIMITS } from '../harness/limits.js';
+import { home, shadowed } from '../lint/rules/l13-shadowed.js';
+import type { HarnessId, Unit } from '../model.js';
+import type { RepoReader } from '../repo/reader.js';
+import type { ScanResult } from '../scan.js';
+import { lfDigest } from '../units/digest.js';
+import type { Source } from './generated.js';
+
+export type FillKind = 'skill-copy' | 'claude-import' | 'agents-md';
+
+export interface PlannedFile {
+  path: string;
+  bytes: Buffer;
+  from: Source[];
+}
+
+export interface FillAction {
+  kind: FillKind;
+  harness: HarnessId;
+  target: string;
+  files: PlannedFile[];
+}
+
+// A unit one agent reaches and the other does not. `harness` is the one it misses.
+export interface Gap {
+  path: string;
+  harness: HarnessId;
+  fill: string | null;
+  reason: string;
+}
+
+export interface FillPlan {
+  actions: FillAction[];
+  gaps: Gap[];
+}
+
+const FILLS: Record<FillKind, string> = {
+  'skill-copy': 'a copy of the skill',
+  'claude-import': 'a CLAUDE.md that imports it',
+  'agents-md': 'an AGENTS.md from what Claude Code loads there',
+};
+
+// F/** or F/**/*: everything under one folder, which Codex scopes with F/AGENTS.md.
+const FOLDER_GLOB = /^([^*?[\]{}!]+?)\/\*\*(?:\/\*)?$/;
+const MIRRORS: Array<[string, string]> = [['.agents/skills', '.claude/skills'], ['.claude/skills', '.agents/skills']];
+const dirOf = (path: string) => (posix.dirname(path) === '.' ? '' : posix.dirname(path));
+const onlyImportsAgentsMd = (text: string) => text.trim().split(/\s+/).every((word) => /^@(?:.*\/)?AGENTS\.md$/.test(word));
+const tidy = (text: string) => text.replace(/^(?:[ \t]*\r?\n)+/, '').replace(/\s+$/, '');
+const byPath = <T extends { path: string }>(a: T, b: T) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
+
+export async function planFill(scan: ScanResult, reader: RepoReader): Promise<FillPlan> {
+  if (!(['claude-code', 'codex'] as const).every((h) => scan.registry.harnesses.includes(h))) return { actions: [], gaps: [] };
+  const limits = { ...LIMITS, ...scan.registry.limits };
+  const listed = await reader.listFiles();
+  const listedSet = new Set(listed);
+  const links = [...(await reader.listSymlinks()).keys()];
+  const recorded = new Map(scan.generated.files.map((g) => [g.path, g.sha256]));
+  const unitAt = new Map(scan.units.map((u) => [u.path, u]));
+
+  // A target ctxlock may write: nothing there, or only files it generated that nobody edited since.
+  async function free(target: string): Promise<boolean> {
+    if (links.some((l) => l === target || target.startsWith(`${l}/`) || l.startsWith(`${target}/`))) return false;
+    for (const path of listed.filter((p) => p === target || p.startsWith(`${target}/`))) {
+      if (recorded.get(path) !== lfDigest(await reader.readFile(path))) return false;
+    }
+    return true;
+  }
+
+  const reach = new Map<string, Set<HarnessId>>();
+  for (const { harness, entries } of scan.contexts) {
+    for (const { unitId } of entries) reach.set(unitId, (reach.get(unitId) ?? new Set()).add(harness));
+  }
+
+  const actions: FillAction[] = [];
+  const gaps: Gap[] = [];
+  const fixes = new Map(shadowed(scan.contexts, scan.generated.files).map((s) => [s.path, s.fix]));
+  // Units Codex misses, by the folder whose AGENTS.md would carry them.
+  const wanted = new Map<string, Unit[]>();
+  const want = (folder: string, unit: Unit) => wanted.set(folder, [...(wanted.get(folder) ?? []), unit]);
+
+  for (const unit of scan.units) {
+    // A copy ctxlock made is covered through its source.
+    if (unit.files.every((f) => recorded.has(f.path))) continue;
+    const harnesses = reach.get(unit.id);
+    if (!harnesses || harnesses.size !== 1) continue;
+    const missing: HarnessId = harnesses.has('claude-code') ? 'codex' : 'claude-code';
+    const gap = (fill: string | null, reason: string) => gaps.push({ path: unit.path, harness: missing, fill, reason });
+
+    if (unit.kind === 'skill') {
+      const [from, to] = MIRRORS.find(([f]) => ownerDir(unit.path, f) !== null) ?? [];
+      if (!from || !to) {
+        gap(null, `no fill for ${unit.kind} files`);
+        continue;
+      }
+      const mirror = unit.path.replace(`${from}/`, `${to}/`);
+      if (!(await free(mirror))) {
+        gap(null, `${mirror} exists`);
+        continue;
+      }
+      const files = await Promise.all(
+        unit.files.map(async (f) => ({ path: `${mirror}${f.path.slice(unit.path.length)}`, bytes: await reader.readFile(f.path), from: [{ path: f.path, sha256: f.sha256 }] })),
+      );
+      actions.push({ kind: 'skill-copy', harness: missing, target: mirror, files });
+      gap(mirror, FILLS['skill-copy']);
+    } else if (missing === 'claude-code') {
+      const fix = fixes.get(unit.path);
+      const create = fix ? /^create (\S+) containing/.exec(fix)?.[1] : undefined;
+      if (!fix) gap(null, `no fill for ${unit.kind} files`);
+      else if (!create) gap(null, `edit by hand: ${fix}`);
+      else if (!(await free(create))) gap(null, `${create} exists`);
+      else {
+        actions.push({ kind: 'claude-import', harness: missing, target: create, files: [{ path: create, bytes: Buffer.from('@AGENTS.md\n'), from: [] }] });
+        gap(create, FILLS['claude-import']);
+      }
+    } else if (unit.kind === 'instructions') {
+      if (posix.basename(unit.path) === 'CLAUDE.local.md' || onlyImportsAgentsMd(unit.text)) continue;
+      want(home(unit.path), unit);
+    } else if (unit.kind === 'rule') {
+      const dir = ownerDir(unit.path, '.claude/rules');
+      const paths = unit.frontmatter?.paths;
+      if (dir === null) {
+        gap(null, `no fill for ${unit.kind} files`);
+        continue;
+      }
+      if (paths === undefined) {
+        want(dir, unit);
+        continue;
+      }
+      const patterns = (Array.isArray(paths) ? paths : [paths]).map(String);
+      const folders = patterns.map((p) => FOLDER_GLOB.exec(p)?.[1]);
+      const bad = patterns.find((_, i) => folders[i] === undefined || folders[i]!.split('/').includes('..'));
+      if (bad !== undefined) gap(null, `Codex cannot scope ${bad}`);
+      else for (const folder of new Set(folders)) want(posix.join(dir, folder!), unit);
+    } else {
+      gap(null, `no fill for ${unit.kind} files`);
+    }
+  }
+
+  for (const [folder, units] of wanted) {
+    const target = at(folder, 'AGENTS.md');
+    const override = at(folder, 'AGENTS.override.md');
+    const taken = listedSet.has(override) ? override : (await free(target)) ? null : target;
+    if (taken) {
+      for (const unit of units) gaps.push({ path: unit.path, harness: 'codex', fill: null, reason: `add it to ${taken} by hand` });
+      continue;
+    }
+    // CLAUDE files first, then rules without paths, then scoped rules; each followed by what it imports.
+    const rank = (u: Unit) => (u.kind === 'instructions' ? CLAUDE_FILES.indexOf(posix.basename(u.path)) : u.frontmatter?.paths === undefined ? 10 : 20);
+    const ordered = [...units].sort((a, b) => rank(a) - rank(b) || byPath(a, b));
+    const parts: PlannedFile['from'] = [];
+    const texts: string[] = [];
+    const seen = new Set<string>();
+    const visit = async (path: string, hop: number): Promise<void> => {
+      if (seen.has(path)) return;
+      seen.add(path);
+      const bytes = await reader.readFile(path);
+      const unit = unitAt.get(path);
+      parts.push({ path, sha256: lfDigest(bytes) });
+      texts.push(unit?.kind === 'rule' ? unit.body : bytes.toString('utf8'));
+      if (hop >= limits.claudeImportHops) return;
+      for (const imported of findImports(bytes.toString('utf8'))) {
+        if (imported.startsWith('~/') || posix.isAbsolute(imported)) continue;
+        const resolved = posix.normalize(posix.join(dirOf(path), imported));
+        if (!resolved.startsWith('../') && listedSet.has(resolved)) await visit(resolved, hop + 1);
+      }
+    };
+    for (const unit of ordered) await visit(unit.path, 0);
+    actions.push({ kind: 'agents-md', harness: 'codex', target, files: [{ path: target, bytes: Buffer.from(`${texts.map(tidy).join('\n\n')}\n`), from: parts }] });
+    for (const unit of units) gaps.push({ path: unit.path, harness: 'codex', fill: target, reason: FILLS['agents-md'] });
+  }
+
+  // A target that already holds exactly what would be written needs nothing.
+  const upToDate = new Set<string>();
+  for (const action of actions) {
+    const same = await Promise.all(action.files.map(async (f) => listedSet.has(f.path) && (await reader.readFile(f.path)).equals(f.bytes)));
+    if (same.every(Boolean)) upToDate.add(action.target);
+  }
+  return {
+    actions: actions.filter((a) => !upToDate.has(a.target)).sort((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0)),
+    gaps: gaps.filter((g) => g.fill === null || !upToDate.has(g.fill)).sort(byPath),
+  };
+}

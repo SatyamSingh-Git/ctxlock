@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { describeIssue } from '../registry/registry.js';
 import type { RepoReader } from '../repo/reader.js';
-import { sha256Hex } from '../units/digest.js';
+import { lfDigest } from '../units/digest.js';
 
 // What ctxlock build generated, and from what. Generated files carry no marker of their own.
 export const GENERATED_FILE = '.ctxlock/generated.json';
@@ -54,7 +54,8 @@ export function serializeGenerated(files: GeneratedFile[]): string {
   return `${JSON.stringify({ version: 1, files: sorted }, null, 2)}\n`;
 }
 
-const current = async (reader: RepoReader, path: string) => ((await reader.exists(path)) ? sha256Hex(await reader.readFile(path)) : null);
+// The same digest as a unit file's, so a CRLF checkout and an LF one read one record alike.
+const current = async (reader: RepoReader, path: string) => ((await reader.exists(path)) ? lfDigest(await reader.readFile(path)) : null);
 
 export async function generatedStatus(reader: RepoReader, files: GeneratedFile[]): Promise<Array<{ path: string; state: GeneratedState; source?: string }>> {
   const out: Array<{ path: string; state: GeneratedState; source?: string }> = [];

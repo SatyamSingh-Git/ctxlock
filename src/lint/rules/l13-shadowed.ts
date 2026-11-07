@@ -4,7 +4,7 @@ import type { EffectiveContext } from '../../harness/types.js';
 import type { Rule } from '../types.js';
 
 // The folder a CLAUDE file speaks for: .claude/CLAUDE.md belongs to the folder above .claude.
-const home = (path: string) => {
+export const home = (path: string) => {
   const dir = posix.dirname(path).replace(/(^|\/)\.claude$/, '');
   return dir === '.' ? '' : dir;
 };

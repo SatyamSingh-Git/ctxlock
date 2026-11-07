@@ -2,7 +2,7 @@ import { posix } from 'node:path';
 import picomatch from 'picomatch';
 import type { Finding, Unit, UnitFile, UnitKind } from '../model.js';
 import type { RepoReader } from '../repo/reader.js';
-import { sha256Hex, unitDigest } from './digest.js';
+import { lfDigest, unitDigest } from './digest.js';
 import { splitFrontmatter } from './frontmatter.js';
 
 interface Pattern {
@@ -27,9 +27,6 @@ const PATTERNS: Pattern[] = [
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 
-// Hashed with CRLF read as LF, so a core.autocrlf checkout and its git ref agree on a unit's identity.
-// bytes stays raw, because that is what an agent reads from disk.
-const lfDigest = (buf: Buffer) => sha256Hex(buf.includes(0x0d) ? Buffer.from(buf.toString('latin1').replaceAll('\r\n', '\n'), 'latin1') : buf);
 
 // Every path an agent can open, mapped to the listed file behind it. A link to a file adds the
 // link's own path; a link to a directory adds the link path of every listed file under it.

@@ -18,7 +18,7 @@ export function ancestry(site: string): string[] {
 const dirOf = (path: string) => (posix.dirname(path) === '.' ? '' : posix.dirname(path));
 
 // The directory a .claude/rules or .claude/skills path belongs to, or null if it is not under one.
-function ownerDir(path: string, folder: string): string | null {
+export function ownerDir(path: string, folder: string): string | null {
   if (path.startsWith(`${folder}/`)) return '';
   const i = path.indexOf(`/${folder}/`);
   return i === -1 ? null : path.slice(0, i);

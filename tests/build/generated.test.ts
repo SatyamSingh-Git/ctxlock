@@ -49,6 +49,13 @@ describe('generatedStatus', () => {
     expect(await state({ [SOURCE]: 'changed', [OUTPUT]: 'skill' })).toEqual([{ path: OUTPUT, state: 'stale', source: SOURCE }]);
   });
 
+  it('agrees across an LF checkout and a CRLF one, as unit digests do, so Windows and Linux read one record alike', async () => {
+    const lf = { path: OUTPUT, sha256: sha256Hex('a\nb\n'), from: [{ path: SOURCE, sha256: sha256Hex('a\nb\n') }] };
+    expect(await state({ [SOURCE]: 'a\r\nb\r\n', [OUTPUT]: 'a\r\nb\r\n' }, lf)).toEqual([{ path: OUTPUT, state: 'ok' }]);
+    expect(await state({ [SOURCE]: 'a\nb\n', [OUTPUT]: 'a\r\nb\r\n' }, lf)).toEqual([{ path: OUTPUT, state: 'ok' }]);
+    expect(await state({ [SOURCE]: 'a\nc\n', [OUTPUT]: 'a\r\nb\r\n' }, lf)).toEqual([{ path: OUTPUT, state: 'stale', source: SOURCE }]);
+  });
+
   it('never calls a file stale that was made from no source', async () => {
     const stub = { path: 'pkg/CLAUDE.md', sha256: sha256Hex('@AGENTS.md\n'), from: [] };
     expect(await state({ 'pkg/CLAUDE.md': '@AGENTS.md\n' }, stub)).toEqual([{ path: 'pkg/CLAUDE.md', state: 'ok' }]);
