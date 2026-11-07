@@ -60,9 +60,16 @@ describe('previewFill', () => {
       reason: 'would cut pkg/AGENTS.md: Codex loads only 2767 of 5001 bytes from pkg/AGENTS.md under the 32768-byte project instruction budget',
     });
 
-    // A planned file after the cut one is cut itself, and blamed for nothing.
+    // A planned file after the cut one, cut only because the root took the room, fits once the root is
+    // dropped, and stays.
     const deeper = await preview({ 'CLAUDE.md': `${'x'.repeat(30_000)}\n`, 'pkg/AGENTS.md': `${'y'.repeat(5_000)}\n`, '.claude/rules/sub.md': '---\npaths: ["pkg/sub/**"]\n---\nSub.\n' });
-    expect(deeper.plan.gaps.find((g) => g.path === '.claude/rules/sub.md')?.reason).toMatch(/^would be cut: Codex skips pkg\/sub\/AGENTS\.md/);
+    expect(deeper.plan.actions.map((a) => a.target)).toEqual(['pkg/CLAUDE.md', 'pkg/sub/AGENTS.md']);
+    expect(deeper.plan.gaps.find((g) => g.path === 'CLAUDE.md')?.reason).toMatch(/^would cut pkg\/AGENTS\.md: /);
+    expect(deeper.after.contexts.find((c) => c.harness === 'codex' && c.site === 'pkg/sub')?.notes).toEqual([]);
+
+    // The same when the planned file ahead was cut itself.
+    const both = await preview({ 'CLAUDE.md': `${'x'.repeat(40_000)}\n`, '.claude/rules/pkg.md': '---\npaths: ["pkg/**"]\n---\nPkg.\n' });
+    expect(both.plan.actions.map((a) => a.target)).toEqual(['pkg/AGENTS.md']);
   });
 
   it('keeps a fill when the file it comes before was cut already', async () => {
