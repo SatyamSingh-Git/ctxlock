@@ -68,7 +68,7 @@ Everything else stays a gap, with its reason:
 
 ## What it never does
 
-- **Write over a file a person wrote, or edited since ctxlock wrote it.** A file is ctxlock's to rewrite only if `.ctxlock/generated.json` lists it and its contents still match the record. That is checked again as each file is written, and anything else is listed under "Left as it is".
+- **Write over a file a person wrote, or edited since ctxlock wrote it.** A file is ctxlock's to rewrite only if `.ctxlock/generated.json` lists it and its contents still match the record. That is checked again just before writing, and anything else is listed under "Left as it is". A fill's files are written together or not at all, so a copy never lands in part in a folder a person has, such as one whose name differs only in case.
 - **Write a file an agent would cut, or one that makes an agent cut a file it loads in full today.** Each planned file is checked against the agents' limits before anything is written. An `AGENTS.md` that would take Codex over its 32,768 bytes stays a gap, and its reason quotes the limit. So does a root `AGENTS.md` that would leave Codex no room for a folder's own: `would cut pkg/AGENTS.md: ...`.
 - **Copy execution config** (settings, MCP files), or read your gitignored `CLAUDE.local.md`. Generated files are meant to be committed, and personal files should not decide what goes in them.
 - **Write outside the repository,** or through a symlink or a Windows junction, including one git does not list. Each part of each path is checked as the file is written.

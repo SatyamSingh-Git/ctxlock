@@ -73,6 +73,18 @@ describe('applyFill', () => {
     expect(read(other, 'AGENTS.md').toString()).toBe('Edited.\n');
   });
 
+  it('writes an action whole or not at all, so a copy never lands in part in a folder a person has', async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': SKILL, '.agents/skills/release/scripts/run.sh': RUN });
+    const { scan, plan } = await planned(dir);
+    // As a case-insensitive file system shows a person's .claude/skills/Release/SKILL.md at the planned path.
+    writeTree(dir, { '.claude/skills/release/SKILL.md': 'Mine.\n' });
+
+    expect(await applyFill(dir, plan, scan.generated.files)).toEqual({ written: [], removed: [], refused: ['.claude/skills/release/SKILL.md'] });
+    expect(existsSync(join(dir, '.claude/skills/release/scripts'))).toBe(false);
+    expect(existsSync(join(dir, GENERATED_FILE))).toBe(false);
+  });
+
   it('never writes through a link the file listing does not show, such as an excluded symlink or a Windows junction', async () => {
     const outside = tempDir();
     const dir = tempDir();

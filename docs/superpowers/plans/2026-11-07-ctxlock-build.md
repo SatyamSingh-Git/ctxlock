@@ -29,7 +29,7 @@
 | Final review | Done: 1 critical and 6 important findings fixed, plus a line-endings minor re-graded important, each with a test that failed first (D56, D57; [chapter 10](../../../journey/10-build.md#what-broke)) | `f1b05c8` |
 
 **Deferred from the final review** (minor, not fixed):
-- `M1`: on a case-insensitive file system, a skill whose name differs only in case from a hand-written one gets part of a copy written into the person's folder. Each action should be all-or-nothing in `applyFill`.
+- `M1` (fixed): on a case-insensitive file system, a skill whose name differs only in case from a hand-written one got part of a copy written into the person's folder. Each action is now written whole or not at all.
 - `M2`: the report never mentions an invalid `.ctxlock/generated.json` unless `--fill-missing` is given.
 - `M4` (fixed): the depth-first import walk could drop an import near the hop limit that Claude Code's breadth-first walk loads. Hops now come from a breadth-first walk; the depth-first one only orders the text.
 - `M5`: `--suggest-index` reads its folder from the repository's top level, so `.`, `.\docs`, absolute paths and runs from a subfolder fail; folders are ordered by first file, not sorted.

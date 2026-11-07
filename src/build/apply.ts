@@ -25,35 +25,43 @@ export async function applyFill(top: string, plan: FillPlan, previous: Generated
   const written: string[] = [];
   const removed: string[] = [];
   const refused: string[] = [];
-  for (const file of plan.actions.flatMap((a) => a.files)) {
-    const full = resolve(top, file.path);
-    const rel = relative(top, full);
-    const now = existsSync(full) ? readFileSync(full) : null;
-    const outside = rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
-    if (outside || linked(top, file.path) || (now !== null && recorded.get(file.path)?.sha256 !== lfDigest(now))) {
-      refused.push(file.path);
-      continue;
-    }
-    // A checkout may have changed the line endings of a file that is otherwise what would be written.
-    if (now === null || lfDigest(now) !== lfDigest(file.bytes)) {
-      mkdirSync(dirname(full), { recursive: true });
-      writeFileSync(full, file.bytes);
-      written.push(file.path);
-    }
-    entries.set(file.path, { path: file.path, sha256: lfDigest(file.bytes), from: file.from });
-  }
-  for (const path of plan.actions.flatMap((a) => a.remove ?? [])) {
+  const at = (path: string) => {
     const full = resolve(top, path);
-    const now = existsSync(full) ? readFileSync(full) : null;
-    if (linked(top, path) || (now !== null && recorded.get(path)?.sha256 !== lfDigest(now))) {
-      refused.push(path);
+    return { path, full, now: existsSync(full) ? readFileSync(full) : null };
+  };
+  // ctxlock may change a path inside the repository, reached through no link, that holds nothing or
+  // its own unedited output.
+  const mine = ({ path, full, now }: ReturnType<typeof at>) => {
+    const rel = relative(top, full);
+    const outside = rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+    return !outside && !linked(top, path) && (now === null || recorded.get(path)?.sha256 === lfDigest(now));
+  };
+  for (const action of plan.actions) {
+    const writes = action.files.map((file) => ({ ...at(file.path), file }));
+    const removes = (action.remove ?? []).map(at);
+    // An action is written whole or not at all. On a case-insensitive file system a person's folder
+    // can stand at a planned path that differs only in case, and only some of its files collide.
+    const taken = [...writes, ...removes].filter((p) => !mine(p));
+    if (taken.length > 0) {
+      refused.push(...taken.map((p) => p.path));
       continue;
     }
-    if (now !== null) {
-      rmSync(full);
-      removed.push(path);
+    for (const { file, full, now } of writes) {
+      // A checkout may have changed the line endings of a file that is otherwise what would be written.
+      if (now === null || lfDigest(now) !== lfDigest(file.bytes)) {
+        mkdirSync(dirname(full), { recursive: true });
+        writeFileSync(full, file.bytes);
+        written.push(file.path);
+      }
+      entries.set(file.path, { path: file.path, sha256: lfDigest(file.bytes), from: file.from });
     }
-    entries.delete(path);
+    for (const { path, full, now } of removes) {
+      if (now !== null) {
+        rmSync(full);
+        removed.push(path);
+      }
+      entries.delete(path);
+    }
   }
 
   // No record is started for a fill that generated nothing.
