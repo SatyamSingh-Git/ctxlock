@@ -28,7 +28,7 @@
 | 8 | Done: three public repositories and the S2 fixture ([report](../../dogfood/2026-11-07-build.md)); one bug fixed (D55) | the fix and the docs commits |
 | Final review | Done: 1 critical and 6 important findings fixed, plus a line-endings minor re-graded important, each with a test that failed first (D56, D57; [chapter 10](../../../journey/10-build.md#what-broke)) | `f1b05c8` |
 
-**Deferred from the final review** (minor, not fixed):
+**Deferred from the final review** (minor; all fixed afterwards, one commit each):
 - `M1` (fixed): on a case-insensitive file system, a skill whose name differs only in case from a hand-written one got part of a copy written into the person's folder. Each action is now written whole or not at all.
 - `M2` (fixed): the report never mentioned an invalid `.ctxlock/generated.json` unless `--fill-missing` was given. It now says so, and offers no fill.
 - `M4` (fixed): the depth-first import walk could drop an import near the hop limit that Claude Code's breadth-first walk loads. Hops now come from a breadth-first walk; the depth-first one only orders the text.
