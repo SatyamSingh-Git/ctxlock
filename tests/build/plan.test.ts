@@ -40,6 +40,20 @@ describe('planFill: skill-copy', () => {
     expect(await plan({ 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': SKILL }, { '.claude/skills/release': '.agents/skills/release' })).toEqual({ actions: [], gaps: [] });
   });
 
+  it('never fills into a gitignored folder, where the copy could not be committed', async () => {
+    const p = await plan({ '.gitignore': '.agents\n', 'AGENTS.md': 'a', '.claude/skills/release/SKILL.md': SKILL });
+    expect(p.actions).toEqual([]);
+    expect(p.gaps).toEqual([{ path: '.claude/skills/release', harness: 'codex', fill: null, reason: '.agents/skills/release is gitignored' }]);
+
+    const nested = await plan({ 'src/.gitignore': 'api/\n', 'AGENTS.md': 'a', '.claude/rules/api.md': '---\npaths: ["src/api/**"]\n---\nAPI.\n' });
+    expect(nested.gaps).toEqual([{ path: '.claude/rules/api.md', harness: 'codex', fill: null, reason: 'src/api/AGENTS.md is gitignored' }]);
+
+    // Some teams keep CLAUDE.md out of git, apart from the one at the root.
+    const claude = await plan({ '.gitignore': 'pkg/CLAUDE.md\n', 'CLAUDE.md': 'Use pnpm.\n', 'AGENTS.md': 'a', 'pkg/AGENTS.md': 'p' });
+    expect(claude.actions.filter((a) => a.kind === 'claude-import')).toEqual([]);
+    expect(claude.gaps).toContainEqual({ path: 'pkg/AGENTS.md', harness: 'claude-code', fill: null, reason: 'pkg/CLAUDE.md is gitignored' });
+  });
+
   it('never writes through a symlink at the mirror, such as one that leaves the repository', async () => {
     const p = await plan({ 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': SKILL }, { '.claude/skills': null });
     expect(p.actions).toEqual([]);

@@ -4,6 +4,7 @@ import { findImports } from '../harness/imports.js';
 import { LIMITS } from '../harness/limits.js';
 import { home, shadowed } from '../lint/rules/l13-shadowed.js';
 import type { HarnessId, Unit } from '../model.js';
+import { gitignoreMatcher } from '../repo/gitignore.js';
 import type { RepoReader } from '../repo/reader.js';
 import type { ScanResult } from '../scan.js';
 import { lfDigest } from '../units/digest.js';
@@ -60,6 +61,11 @@ export async function planFill(scan: ScanResult, reader: RepoReader): Promise<Fi
   const recorded = new Map(scan.generated.files.map((g) => [g.path, g.sha256]));
   const unitAt = new Map(scan.units.map((u) => [u.path, u]));
 
+  const ignored = gitignoreMatcher(listedSet, (file) => reader.readFile(file));
+  // Why a target cannot be written, or null: generated files are committed, so a gitignored one helps
+  // no one.
+  const blocked = async (target: string) => ((await ignored(target)) ? `${target} is gitignored` : (await free(target)) ? null : `${target} exists`);
+
   // A target ctxlock may write: nothing there, or only files it generated that nobody edited since.
   async function free(target: string): Promise<boolean> {
     if (links.some((l) => l === target || target.startsWith(`${l}/`) || l.startsWith(`${target}/`))) return false;
@@ -96,8 +102,9 @@ export async function planFill(scan: ScanResult, reader: RepoReader): Promise<Fi
         continue;
       }
       const mirror = unit.path.replace(`${from}/`, `${to}/`);
-      if (!(await free(mirror))) {
-        gap(null, `${mirror} exists`);
+      const why = await blocked(mirror);
+      if (why) {
+        gap(null, why);
         continue;
       }
       const files = await Promise.all(
@@ -108,9 +115,10 @@ export async function planFill(scan: ScanResult, reader: RepoReader): Promise<Fi
     } else if (missing === 'claude-code') {
       const fix = fixes.get(unit.path);
       const create = fix ? /^create (\S+) containing/.exec(fix)?.[1] : undefined;
+      const why = create && (await blocked(create));
       if (!fix) gap(null, `no fill for ${unit.kind} files`);
       else if (!create) gap(null, `edit by hand: ${fix}`);
-      else if (!(await free(create))) gap(null, `${create} exists`);
+      else if (why) gap(null, why);
       else {
         actions.push({ kind: 'claude-import', harness: missing, target: create, files: [{ path: create, bytes: Buffer.from('@AGENTS.md\n'), from: [] }] });
         gap(create, FILLS['claude-import']);
@@ -142,9 +150,10 @@ export async function planFill(scan: ScanResult, reader: RepoReader): Promise<Fi
   for (const [folder, units] of wanted) {
     const target = at(folder, 'AGENTS.md');
     const override = at(folder, 'AGENTS.override.md');
-    const taken = listedSet.has(override) ? override : (await free(target)) ? null : target;
-    if (taken) {
-      for (const unit of units) gaps.push({ path: unit.path, harness: 'codex', fill: null, reason: `add it to ${taken} by hand` });
+    const why = listedSet.has(override) ? `add it to ${override} by hand` : await blocked(target);
+    if (why) {
+      const reason = why === `${target} exists` ? `add it to ${target} by hand` : why;
+      for (const unit of units) gaps.push({ path: unit.path, harness: 'codex', fill: null, reason });
       continue;
     }
     // CLAUDE files first, then rules without paths, then scoped rules; each followed by what it imports.

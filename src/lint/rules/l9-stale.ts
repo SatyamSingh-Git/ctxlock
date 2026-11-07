@@ -1,7 +1,7 @@
 import { posix } from 'node:path';
-import ignore, { type Ignore } from 'ignore';
 import { findImports } from '../../harness/imports.js';
 import type { Finding, Unit } from '../../model.js';
+import { gitignoreMatcher } from '../../repo/gitignore.js';
 import { codeOnly, inlineCode } from '../../units/markdown.js';
 import { lineAndColumn, readOnce } from '../files.js';
 import type { Rule } from '../types.js';
@@ -34,20 +34,8 @@ export const staleReferences: Rule = {
     const present = (path: string) =>
       path === '.' || path === '' || paths.has(path) || dirs.has(path) || links.some((l) => path.startsWith(`${l}/`));
     const scripts = new Map<string, Set<string> | null>();
-    const gitignores = new Map<string, Ignore>();
-
     // Build outputs, logs and caches are referenced on purpose and exist only once something runs.
-    async function ignored(path: string): Promise<boolean> {
-      for (let d = posix.dirname(path); ; d = posix.dirname(d)) {
-        const base = d === '.' ? '' : d;
-        const file = base ? `${base}/.gitignore` : '.gitignore';
-        if (paths.has(file)) {
-          if (!gitignores.has(file)) gitignores.set(file, ignore().add((await readOnce(reader, file)).toString('utf8')));
-          if (gitignores.get(file)!.ignores(base ? path.slice(base.length + 1) : path)) return true;
-        }
-        if (base === '') return false;
-      }
-    }
+    const ignored = gitignoreMatcher(paths, (file) => readOnce(reader, file));
 
     async function nearestScripts(dir: string): Promise<{ file: string; names: Set<string> } | null> {
       for (let d = dir; ; d = posix.dirname(d) === '.' ? '' : posix.dirname(d)) {
