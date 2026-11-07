@@ -11,6 +11,7 @@ const report = (extra: Partial<BuildReport> = {}): BuildReport => ({
   ],
   drift: [{ paths: ['CLAUDE.md', 'AGENTS.md'], summary: '1 line only in CLAUDE.md, 1 only in AGENTS.md' }],
   generated: [{ path: 'AGENTS.md', state: 'stale', source: 'CLAUDE.md' }],
+  generatedError: null,
   written: [],
   removed: [],
   refused: [],
@@ -41,6 +42,13 @@ describe('renderBuild', () => {
     expect(text).toContain('.claude/rules/ts.md does not reach codex');
     expect(text).not.toContain('--fill-missing writes');
     expect(text).not.toContain('Budget after');
+  });
+
+  it('says when the record is not valid, and offers no fill, which would stop on it', () => {
+    const text = renderBuild(report({ generated: [], generatedError: 'Unexpected end of JSON input' }), 'text');
+
+    expect(text).toContain('\n.ctxlock/generated.json is not valid: Unexpected end of JSON input; fix it before --fill-missing, which would replace it\n');
+    expect(text).not.toContain('--fill-missing writes');
   });
 
   it('leaves out empty sections, and JSON is the report itself', () => {

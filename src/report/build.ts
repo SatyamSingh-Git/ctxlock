@@ -12,6 +12,7 @@ export interface BuildReport {
   gaps: Gap[];
   drift: Drift[];
   generated: Array<{ path: string; state: GeneratedState; source?: string }>;
+  generatedError: string | null;
   written: string[];
   removed: string[];
   refused: string[];
@@ -42,11 +43,12 @@ export function renderBuild(r: BuildReport, format: 'text' | 'json'): string {
     ...(r.after && !r.filled ? ['', 'Budget after --fill-missing:', budgetTable(r.after)] : []),
     ...(gapRows.length ? ['', 'Gaps:', table(gapRows)] : ['', 'No gaps between the configured agents.']),
     ...list('Drift:', r.drift.map((d) => `${d.paths[0]} and ${d.paths[1]}: ${d.summary}`)),
+    ...(r.generatedError !== null ? ['', `${GENERATED_FILE} is not valid: ${r.generatedError}; fix it before --fill-missing, which would replace it`] : []),
     ...(r.generated.length ? ['', `Generated (${GENERATED_FILE}):`, table(r.generated.map((g) => [`  ${g.path}`, STATES[g.state](g.source)]))] : []),
     ...list('Wrote:', r.written),
     ...list('Removed, since its source is gone:', r.removed),
     ...list('Left as it is, since a person wrote or edited it after the plan:', r.refused),
-    ...(!r.filled && fills > 0 ? ['', `ctxlock build --fill-missing writes the ${fills} fill${fills === 1 ? '' : 's'} above.`] : []),
+    ...(!r.filled && fills > 0 && r.generatedError === null ? ['', `ctxlock build --fill-missing writes the ${fills} fill${fills === 1 ? '' : 's'} above.`] : []),
   ];
   return `${lines.join('\n')}\n`;
 }

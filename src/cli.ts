@@ -134,6 +134,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
             gaps: plan.gaps,
             drift: findDrift(scan),
             generated: await generatedStatus(now, recorded),
+            generatedError: scan.generated.error,
             written,
             removed,
             refused,

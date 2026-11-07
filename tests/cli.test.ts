@@ -274,6 +274,9 @@ describe('ctxlock build', { timeout: 120_000 }, () => {
     const { dir } = await gitRepo([{ 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': SKILL, '.ctxlock/generated.json': '{' }]);
 
     expect((await cli('build', join(dir, 'nope'))).code).toBe(2);
+    const report = await cli('build', dir);
+    expect(report.code).toBe(0);
+    expect(report.stdout).toMatch(/\n\.ctxlock\/generated\.json is not valid: .*; fix it before --fill-missing, which would replace it\n/);
     const noDocs = await cli('build', dir, '--suggest-index', 'docs');
     expect([noDocs.code, noDocs.stderr]).toEqual([2, 'no markdown files under docs\n']);
     const broken = await cli('build', dir, '--fill-missing');

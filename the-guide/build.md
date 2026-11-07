@@ -97,7 +97,7 @@ Digests are taken with CRLF read as LF, as unit digests are, so a Windows checko
 
 To stop generating a file, delete it and its entry. To keep your own edit of a generated file, delete its entry, and the file is yours.
 
-If the record is not valid JSON, or names a path outside the repository, `--fill-missing` stops with exit 2, since it would otherwise replace the record and lose its entries.
+If the record is not valid JSON, or names a path outside the repository, `--fill-missing` stops with exit 2, since it would otherwise replace the record and lose its entries. The report without it says so too.
 
 ## A docs index for `AGENTS.md`
 
