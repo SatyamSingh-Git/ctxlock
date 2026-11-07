@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { main } from '../src/cli.js';
 import { cleanup, gitRepo, tempDir, writeTree } from './helpers/repo.js';
@@ -268,6 +268,19 @@ describe('ctxlock build', { timeout: 120_000 }, () => {
     const { code, stdout } = await cli('build', dir, '--suggest-index', 'docs');
     expect(code).toBe(0);
     expect(stdout).toBe('[docs index]|root: ./docs|IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning|.:{a.md}\n\n108 bytes. Not written. Measure it with a probe before you commit it: see the-guide/build.md.\n');
+  });
+
+  it('takes the index folder from the directory it runs on, as ., a subfolder, or an absolute path inside the repository', async () => {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'a', 'docs/a.md': '# A\n', 'sub/docs/b.md': '# B\n' }]);
+    const index = async (from: string, folder: string) => (await cli('build', from, '--suggest-index', folder)).stdout.split('|')[0];
+
+    expect(await index(dir, '.')).toBe('[. index]');
+    expect(await index(dir, `.${sep}docs${sep}`)).toBe('[docs index]');
+    expect(await index(join(dir, 'sub'), 'docs')).toBe('[sub/docs index]');
+    expect(await index(join(dir, 'sub'), join(dir, 'docs'))).toBe('[docs index]');
+
+    const outside = await cli('build', dir, '--suggest-index', tempDir());
+    expect([outside.code, outside.stderr]).toEqual([2, expect.stringMatching(/ is outside the repository\n$/)]);
   });
 
   it('exits 2 for a path that is no directory, a folder with no markdown, and a fill over an unreadable record', async () => {

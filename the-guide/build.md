@@ -115,4 +115,4 @@ That result came from an index of a framework's own docs, used for tasks about t
 2. Write a [probe](evals.md) for a task that needs a doc the agent would otherwise not find.
 3. Run `ctxlock eval --base main` and see whether the head passes where the base does not.
 
-The index lists file names only, so it stays small; check the bytes it prints against your agents' budgets.
+The index lists file names only, so it stays small; check the bytes it prints against your agents' budgets. The folder is taken from the directory `build` runs on, and the index names it from the repository's top, so `ctxlock build sub --suggest-index docs` gives `root: ./sub/docs`.

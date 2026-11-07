@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { applyFill } from './build/apply.js';
@@ -107,8 +107,12 @@ export async function main(argv: string[], io: Io): Promise<number> {
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
       // Personal, gitignored files never decide what gets committed.
       const reader = fsReader(root, { local: false });
+      const top = await gitTopLevel(root);
       if (opts.suggestIndex !== undefined) {
-        const { text, bytes } = await suggestIndex(reader, opts.suggestIndex);
+        // The folder is given from the directory build runs on, and read from the repository's top.
+        const folder = relative(top ?? root, resolve(root, opts.suggestIndex)).split(sep).join('/');
+        if (folder === '..' || folder.startsWith('../') || isAbsolute(folder)) throw new BuildError(`${opts.suggestIndex} is outside the repository`);
+        const { text, bytes } = await suggestIndex(reader, folder);
         io.stdout(`${text}\n\n${bytes} bytes. Not written. Measure it with a probe before you commit it: see the-guide/build.md.\n`);
         return;
       }
@@ -117,7 +121,6 @@ export async function main(argv: string[], io: Io): Promise<number> {
       if (opts.fillMissing && scan.generated.error !== null) {
         throw new BuildError(`${GENERATED_FILE} is not valid: ${scan.generated.error}; fix it first: --fill-missing would replace it`);
       }
-      const top = await gitTopLevel(root);
       // Outside git, nothing is ignored.
       const ignored = top ? (paths: string[]) => gitIgnored(top, paths) : async () => new Set<string>();
       const { plan, after } = await previewFill(reader, await planFill(scan, reader, ignored), scan);

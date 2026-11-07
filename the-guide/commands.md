@@ -171,7 +171,7 @@ Reports what each agent loads, where one agent misses a file another reads, and 
 ctxlock build [dir] [--fill-missing] [--suggest-index <dir>] [--format text|json]
 ```
 
-`--suggest-index <dir>` prints a compressed index of the markdown under `<dir>` for `AGENTS.md`, and writes nothing.
+`--suggest-index <dir>` prints a compressed index of the markdown under `<dir>` for `AGENTS.md`, and writes nothing. `<dir>` is taken from the directory `build` runs on, and may be `.` or an absolute path inside the repository.
 
 ---
 
@@ -181,6 +181,6 @@ ctxlock build [dir] [--fill-missing] [--suggest-index <dir>] [--format text|json
 |---|---|
 | 0 | Done, including every `build`. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
 | 1 | `lint`: at least one `must` finding. `diff`: a new `must` finding or an execution-affecting change. `eval`: only with `--fail-on-regression`, a gated regression |
-| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff` and `eval`), a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` cannot read, a `--suggest-index` folder with no markdown, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
+| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff` and `eval`), a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` cannot read, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
 
 `scan` and `budget` exit 0 whatever they find, so you can run them anywhere without failing a build.

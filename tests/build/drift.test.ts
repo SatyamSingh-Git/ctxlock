@@ -48,10 +48,18 @@ describe('findDrift', () => {
 describe('suggestIndex', () => {
   it("writes the index in the format of Next.js's agents-md codemod: header, root, the retrieval line, then folder:{files}", async () => {
     const reader = memReader({ 'docs/a.md': '', 'docs/guide/c.mdx': '', 'docs/guide/b.md': '', 'docs/img.png': '', 'other/x.md': '' });
-    const r = await suggestIndex(reader, './docs/');
+    const r = await suggestIndex(reader, 'docs');
 
     expect(r.text).toBe('[docs index]|root: ./docs|IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning|.:{a.md}|guide:{b.md,c.mdx}');
     expect(r.bytes).toBe(Buffer.byteLength(r.text));
+  });
+
+  it('sorts the folders, and indexes the whole repository for an empty path', async () => {
+    const r = await suggestIndex(memReader({ 'README.md': '', 'docs/z.md': '', 'docs/a/y.md': '' }), 'docs');
+    expect(r.text).toBe('[docs index]|root: ./docs|IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning|.:{z.md}|a:{y.md}');
+
+    const all = await suggestIndex(memReader({ 'README.md': '', 'docs/z.md': '' }), '');
+    expect(all.text).toBe('[. index]|root: .|IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning|.:{README.md}|docs:{z.md}');
   });
 
   it('says so when the folder has no markdown', async () => {
