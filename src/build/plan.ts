@@ -177,24 +177,37 @@ export async function planFill(scan: ScanResult, reader: RepoReader, ignored: (p
     // CLAUDE files first, then rules without paths, then scoped rules; each followed by what it imports.
     const rank = (u: Unit) => (u.kind === 'instructions' ? CLAUDE_FILES.indexOf(posix.basename(u.path)) : u.frontmatter?.paths === undefined ? 10 : 20);
     const ordered = [...units].sort((a, b) => rank(a) - rank(b) || byPath(a, b));
+    const read = new Map<string, Buffer>();
+    const importsOf = async (path: string) => {
+      if (!read.has(path)) read.set(path, await reader.readFile(path));
+      const found: string[] = [];
+      for (const imported of findImports(read.get(path)!.toString('utf8'))) {
+        if (imported.startsWith('~/') || posix.isAbsolute(imported)) continue;
+        const resolved = posix.normalize(posix.join(dirOf(path), imported));
+        if (!resolved.startsWith('../') && listedSet.has(resolved)) found.push(resolved);
+      }
+      return found;
+    };
+    // Claude Code follows imports breadth-first, so a file's hop is its shortest import path, however
+    // the depth-first walk below first meets it. A Map visits the entries added while it is iterated.
+    const hops = new Map(ordered.map((u) => [u.path, 0]));
+    for (const [path, hop] of hops) {
+      if (hop < limits.claudeImportHops) for (const next of await importsOf(path)) if (!hops.has(next)) hops.set(next, hop + 1);
+    }
     const parts: PlannedFile['from'] = [];
     const texts: string[] = [];
     const seen = new Set<string>();
-    const visit = async (path: string, hop: number): Promise<void> => {
+    const visit = async (path: string): Promise<void> => {
       if (seen.has(path)) return;
       seen.add(path);
-      const bytes = await reader.readFile(path);
+      const bytes = read.get(path) ?? (await reader.readFile(path));
       const unit = unitAt.get(path);
       parts.push({ path, sha256: lfDigest(bytes) });
       texts.push(unit?.kind === 'rule' ? unit.body : bytes.toString('utf8'));
-      if (hop >= limits.claudeImportHops) return;
-      for (const imported of findImports(bytes.toString('utf8'))) {
-        if (imported.startsWith('~/') || posix.isAbsolute(imported)) continue;
-        const resolved = posix.normalize(posix.join(dirOf(path), imported));
-        if (!resolved.startsWith('../') && listedSet.has(resolved)) await visit(resolved, hop + 1);
-      }
+      if (hops.get(path)! >= limits.claudeImportHops) return;
+      for (const next of await importsOf(path)) await visit(next);
     };
-    for (const unit of ordered) await visit(unit.path, 0);
+    for (const unit of ordered) await visit(unit.path);
     actions.push({ kind: 'agents-md', harness: 'codex', target, files: [{ path: target, bytes: Buffer.from(`${texts.map(tidy).join('\n\n').replaceAll('\r\n', '\n')}\n`), from: parts }] });
     for (const unit of units) gaps.push({ path: unit.path, harness: 'codex', fill: target, reason: FILLS['agents-md'] });
   }

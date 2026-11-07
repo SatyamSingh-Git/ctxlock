@@ -31,7 +31,7 @@
 **Deferred from the final review** (minor, not fixed):
 - `M1`: on a case-insensitive file system, a skill whose name differs only in case from a hand-written one gets part of a copy written into the person's folder. Each action should be all-or-nothing in `applyFill`.
 - `M2`: the report never mentions an invalid `.ctxlock/generated.json` unless `--fill-missing` is given.
-- `M4`: the depth-first import walk can drop an import near the hop limit that Claude Code's breadth-first walk loads.
+- `M4` (fixed): the depth-first import walk could drop an import near the hop limit that Claude Code's breadth-first walk loads. Hops now come from a breadth-first walk; the depth-first one only orders the text.
 - `M5`: `--suggest-index` reads its folder from the repository's top level, so `.`, `.\docs`, absolute paths and runs from a subfolder fail; folders are ordered by first file, not sorted.
 - `M6`: report wording. "Writes the N fills" counts gaps, not files. After a fill, Budget shows the old budget. A stale copy reads as "does not reach".
 - `M7`: `L7` reports a stale generated copy as diverged copies, on top of `L14`.

@@ -163,6 +163,15 @@ describe('planFill: agents-md', () => {
     expect(p.actions[0]!.files[0]!.from.map((s) => s.path)).toEqual(['CLAUDE.md', 'a1.md', 'a2.md', 'a3.md', 'a4.md']);
   });
 
+  it('follows the imports of a file Claude Code reaches in fewer hops along another path, as its breadth-first walk does', async () => {
+    const files = { 'CLAUDE.md': '@a1.md @b.md\n', 'a1.md': '@a2.md\n', 'a2.md': '@a3.md\n', 'a3.md': '@b.md\n', 'b.md': 'B @c.md\n', 'c.md': 'C\n' };
+    const scan = await scanRepo(memReader(files), { today: '2026-11-07' });
+    expect(scan.contexts.find((c) => c.harness === 'claude-code' && c.site === '')!.entries.map((e) => e.path)).toContain('c.md');
+
+    const p = await plan(files);
+    expect(p.actions[0]!.files[0]!.from.map((s) => s.path)).toEqual(['CLAUDE.md', 'a1.md', 'a2.md', 'a3.md', 'b.md', 'c.md']);
+  });
+
   it('leaves a folder with AGENTS.override.md to a person, and never counts CLAUDE.local.md', async () => {
     const override = await plan({ 'CLAUDE.md': 'Use pnpm.\n', 'AGENTS.override.md': 'o' });
     expect(override.actions).toEqual([]);
