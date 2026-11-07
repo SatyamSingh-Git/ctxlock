@@ -2,7 +2,12 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [09 — behavioral CI: the agent runs, nothing it tries does](09-behavioral-ci.md).
+**Latest:** [10 — build: closing the gaps between agents, without touching what people wrote](10-build.md).
+- Plan 3: `ctxlock build` reports each agent's budget, the gaps between Claude Code and Codex, and drift; `--fill-missing` writes skill copies, `CLAUDE.md` imports and `AGENTS.md` files, and records them; `L14-generated` catches drift in what it wrote; 434 tests.
+- On three public repositories and the S2 fixture, every gap ctxlock could close it closed, and lint agreed.
+- Found live: plano gitignores `.agents`, and the first fill wrote skill copies there that could never be committed.
+
+**Earlier:** [09 — behavioral CI: the agent runs, nothing it tries does](09-behavioral-ci.md).
 - Plan 2: `ctxlock eval`, `ctxlock probe draft`, and a behavioral section in the Action, built test-first against a stand-in for Claude Code; 354 tests.
 - Checked live in 73 runs: isolation held against a fixture built to break it, and every planted change to an instruction or a skill description on three public repositories was caught and cleared by its revert.
 - Found live: a drafting prompt too long for a Windows command line, and that real context files mostly repeat the repository (1 of 9 drafted probes kept).

@@ -6,11 +6,12 @@
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)
 ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-339933.svg)
 
-> **Status: pre-alpha.** Two checks work, from source:
+> **Status: pre-alpha.** Two checks and a builder work, from source:
 > - **Static:** `ctxlock scan`, `lint`, `budget` and `diff`.
 > - **Behavioral:** `ctxlock eval` runs probes against Claude Code with the base and the head context, and `ctxlock probe draft` drafts them. On three public repositories it caught every planted edit ([report](docs/dogfood/2026-11-06-behavioral.md)).
+> - **Build:** `ctxlock build` reports the gaps between Claude Code and Codex, and `--fill-missing` writes the files that close them, never over a file a person wrote ([report](docs/dogfood/2026-11-07-build.md)).
 >
-> A GitHub Action posts both on pull requests, but it has not yet run on a live pull request. Nothing is on npm yet, and there is no release tag. `ctxlock build` is next; the dependency graph and the feedback loop are still being designed. Everything below that isn't marked as done is planned.
+> A GitHub Action posts both on pull requests, but it has not yet run on a live pull request. Nothing is on npm yet, and there is no release tag. The dependency graph and the feedback loop are still being designed. Everything below that isn't marked as done is planned.
 
 ---
 
@@ -142,6 +143,7 @@ git clone https://github.com/SatyamSingh-Git/ctxlock.git
 cd ctxlock && npm ci && npm run build
 node dist/cli.js lint /path/to/your/repo
 node dist/cli.js diff --base origin/main /path/to/your/repo
+node dist/cli.js build /path/to/your/repo                  # add --fill-missing to write the gaps
 
 # The behavioral check needs Claude Code, logged in
 node dist/cli.js eval --base origin/main /path/to/your/repo
@@ -169,20 +171,20 @@ flowchart LR
 
 ## Agent support
 
-| Agent | Predicted loading | Observed at runtime | Behavioral evals |
-|---|---|---|---|
-| Claude Code | Done | Collected inside each probe run, and checked by hand against real sessions ([spike S4](docs/spikes/S4-telemetry.md)) | `ctxlock eval` and `ctxlock probe draft` ([evals](the-guide/evals.md)), checked live ([report](docs/dogfood/2026-11-06-behavioral.md)) |
-| Codex | Done, checked by Codex's own loader tests | Not yet: contributors with Codex access welcome | Not yet |
-| Copilot CLI, Cursor, Gemini/Antigravity, others | Later | Later | Later |
+| Agent | Predicted loading | Observed at runtime | Behavioral evals | `build --fill-missing` |
+|---|---|---|---|---|
+| Claude Code | Done | Collected inside each probe run, and checked by hand against real sessions ([spike S4](docs/spikes/S4-telemetry.md)) | `ctxlock eval` and `ctxlock probe draft` ([evals](the-guide/evals.md)), checked live ([report](docs/dogfood/2026-11-06-behavioral.md)) | Skill copies and `CLAUDE.md` imports ([build](the-guide/build.md)) |
+| Codex | Done, checked by Codex's own loader tests | Not yet: contributors with Codex access welcome | Not yet | Skill copies and `AGENTS.md` files |
+| Copilot CLI, Cursor, Gemini/Antigravity, others | Later | Later | Later | Later, through rulesync |
 
 ## Roadmap
 
 - [x] **Research.** The state of agent context as of November 2026, drawn from about 400 sources ([synthesis](research/00-synthesis.md)).
 - [x] **Design.** Goals, architecture and phases ([design](docs/superpowers/specs/2026-11-05-ctxlock-design.md)).
 - [x] **Implementation plan** for the static core ([plan](docs/superpowers/plans/2026-11-05-ctxlock-static-core-and-spikes.md)).
-- [ ] **Static core** *(nearly done)*: `ctxlock scan`, `lint`, `budget` and `diff` are built, with 20 checks (L0–L11 and L13) and the GitHub Action, and have had a [first pass over four public repositories](docs/dogfood/2026-11-06-static.md). Running the Action on a live pull request comes next.
+- [ ] **Static core** *(nearly done)*: `ctxlock scan`, `lint`, `budget` and `diff` are built, with 21 checks (L0–L11, L13 and L14) and the GitHub Action, and have had a [first pass over four public repositories](docs/dogfood/2026-11-06-static.md). Running the Action on a live pull request comes next.
 - [ ] **Behavioral CI** *(built, reviewed and checked live; the Action's first live pull request is next)*: adherence and trigger probes, paired base-vs-head runs through `claude -p` with nothing the agent tries executed, and a behavioral section in the Action ([plan](docs/superpowers/plans/2026-11-06-ctxlock-behavioral-ci.md), [guide](the-guide/evals.md)). On three public repositories it caught every planted change to an instruction or a skill description, and every revert cleared it ([report](docs/dogfood/2026-11-06-behavioral.md)). It stands on four spikes: a [run harness](docs/spikes/S1-eval-runner.md), [rulesync](docs/spikes/S2-rulesync.md) as a generation backend, a [reproduced adherence effect](docs/spikes/S3-reproduction.md), and [load events joined to units](docs/spikes/S4-telemetry.md).
-- [ ] **`ctxlock build`:** a report of each agent's effective context, and `--fill-missing` through rulesync. Plan 3.
+- [x] **`ctxlock build`:** each agent's budget, the gaps between Claude Code and Codex, and drift between hand-written files; `--fill-missing` writes what is missing and records it, and `L14` catches drift in what it wrote ([plan](docs/superpowers/plans/2026-11-07-ctxlock-build.md), [guide](the-guide/build.md), [report](docs/dogfood/2026-11-07-build.md)).
 - [ ] **Dependency graph and propagation:** `who-uses`, blast radius, and update pull requests into dependent repos.
 - [ ] **Feedback loop:** agent misses routed to the owner, fixed, validated by replay, and tracked for durability.
 - [ ] **Business context:** metrics, knowledge docs and procedures, served over MCP.
@@ -196,7 +198,7 @@ flowchart LR
 
 - **No new format.** AGENTS.md, Agent Skills and MCP have won. ctxlock reads them as they are.
 - **Evidence over intuition.** Every lint rule cites the research it comes from. Every behavioral claim is reported with its variance and cost.
-- **Never auto-generate context, never auto-merge it.** The research shows generated context hurts. Fixes are proposals that pass evals and get owner approval.
+- **Never auto-generate context, never auto-merge it.** The research shows generated context hurts. Fixes are proposals that pass evals and get owner approval. `ctxlock build --fill-missing` writes no new context: it copies or assembles what people wrote, so another agent can read it, and only when asked.
 - **Safe by default.** Hidden characters and execution-affecting config such as hooks, base URLs and auto-approve settings are flagged. Nothing in the scanned repo is ever executed: `ctxlock eval` runs the agent on a copy with the repository's hooks and settings removed, and denies every command and edit it tries.
 - **Build on others' work.** ctxlock depends on and credits existing open-source projects rather than rebuilding them.
 
@@ -210,8 +212,9 @@ ctxlock stands on open standards and open-source projects, including:
 - **Code and tests we reuse:**
   - the [Agent Skills reference validator](https://github.com/agentskills/agentskills/tree/main/skills-ref), ported for the skill frontmatter checks (Apache-2.0);
   - [Codex](https://github.com/openai/codex)'s own `AGENTS.md` loader tests, ported to check ctxlock's Codex predictions (Apache-2.0);
-  - [agnix](https://github.com/agent-sh/agnix), run on request with `--agnix`.
-- **Planned:** [rulesync](https://github.com/dyoshikawa/rulesync) as the generation backend for `ctxlock build --fill-missing` ([spike S2](docs/spikes/S2-rulesync.md)).
+  - [agnix](https://github.com/agent-sh/agnix), run on request with `--agnix`;
+  - the docs index format of Next.js's [`agents-md` codemod](https://github.com/vercel/next.js/tree/canary/packages/next-codemod), from Vercel's AGENTS.md result, for `build --suggest-index` (MIT).
+- **Planned:** [rulesync](https://github.com/dyoshikawa/rulesync) as the generation backend for agents ctxlock does not predict yet, such as Cursor and Copilot ([spike S2](docs/spikes/S2-rulesync.md), [D49](journey/decisions.md)).
 - **Studied, not used:**
   - [promptfoo](https://github.com/promptfoo/promptfoo): `eval` got its own runner instead ([D35](journey/decisions.md));
   - [Microsoft APM](https://github.com/microsoft/apm);

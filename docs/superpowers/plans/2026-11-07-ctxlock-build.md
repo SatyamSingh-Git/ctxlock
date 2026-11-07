@@ -18,14 +18,14 @@
 
 | Task | Status | Commits |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
-| 6 | | |
-| 7 | | |
-| 8 | | |
+| 1 | Done | `d9cb885` |
+| 2 | Done | `94a2af8` |
+| 3 | Done | `61434a0` |
+| 4 | Done | `1282f08` |
+| 5 | Done | `55793ea` |
+| 6 | Done | `5df7466` |
+| 7 | Done | `b7c3e80` |
+| 8 | Done: three public repositories and the S2 fixture ([report](../../dogfood/2026-11-07-build.md)); one bug fixed (D55) | the fix and the docs commits |
 
 ## Rulings this plan makes
 
