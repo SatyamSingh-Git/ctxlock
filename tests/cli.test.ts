@@ -210,6 +210,61 @@ describe('ctxlock eval', { timeout: 120_000 }, () => {
   });
 });
 
+describe('ctxlock build', { timeout: 120_000 }, () => {
+  const SKILL = '---\nname: release\ndescription: Releases the project\n---\nRun it.\n';
+
+  it('reports a gap and writes nothing; --fill-missing writes it once; lint then sees no gap', async () => {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'Use pnpm.\n', '.agents/skills/release/SKILL.md': SKILL }]);
+
+    const report = await cli('build', dir);
+    expect(report.code).toBe(0);
+    expect(report.stdout).toMatch(/\.agents\/skills\/release does not reach claude-code\s+fill: \.claude\/skills\/release/);
+    expect(existsSync(join(dir, '.claude/skills/release/SKILL.md'))).toBe(false);
+
+    const filled = await cli('build', dir, '--fill-missing');
+    expect(filled.code).toBe(0);
+    expect(filled.stdout).toContain('Wrote:\n  .claude/skills/release/SKILL.md');
+    expect(filled.stdout).not.toContain('--fill-missing writes');
+    expect(existsSync(join(dir, '.ctxlock/generated.json'))).toBe(true);
+
+    expect((await cli('build', dir, '--fill-missing')).stdout).not.toContain('Wrote:');
+    expect((await cli('lint', dir)).stdout).not.toContain('L11-coverage');
+  });
+
+  it('ignores a personal CLAUDE.local.md, and writes at the top of the repository when run from a folder in it', async () => {
+    const { dir } = await gitRepo([{ '.gitignore': 'CLAUDE.local.md\n', 'AGENTS.md': 'Use pnpm.\n', 'sub/x.ts': '' }]);
+    writeTree(dir, { 'CLAUDE.local.md': 'Mine.\n' });
+    const quiet = await cli('build', dir);
+    expect(quiet.stdout).toContain('No gaps between the configured agents.');
+    expect(quiet.stdout).not.toContain('Budget after');
+
+    writeTree(dir, { '.agents/skills/release/SKILL.md': SKILL });
+    await cli('build', join(dir, 'sub'), '--fill-missing');
+    expect(existsSync(join(dir, '.claude/skills/release/SKILL.md'))).toBe(true);
+    expect(existsSync(join(dir, 'sub/.claude'))).toBe(false);
+  });
+
+  it('prints a suggested docs index and writes nothing', async () => {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'a', 'docs/a.md': '# A\n' }]);
+
+    const { code, stdout } = await cli('build', dir, '--suggest-index', 'docs');
+    expect(code).toBe(0);
+    expect(stdout).toBe('[docs index]|root: ./docs|IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning|.:{a.md}\n\n108 bytes. Not written. Measure it with a probe before you commit it: see the-guide/build.md.\n');
+  });
+
+  it('exits 2 for a path that is no directory, a folder with no markdown, and a fill over an unreadable record', async () => {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': SKILL, '.ctxlock/generated.json': '{' }]);
+
+    expect((await cli('build', join(dir, 'nope'))).code).toBe(2);
+    const noDocs = await cli('build', dir, '--suggest-index', 'docs');
+    expect([noDocs.code, noDocs.stderr]).toEqual([2, 'no markdown files under docs\n']);
+    const broken = await cli('build', dir, '--fill-missing');
+    expect(broken.code).toBe(2);
+    expect(broken.stderr).toMatch(/^\.ctxlock\/generated\.json is not valid: .*; fix it first: --fill-missing would replace it/);
+    expect(existsSync(join(dir, '.claude/skills/release/SKILL.md'))).toBe(false);
+  });
+});
+
 describe('ctxlock probe draft', { timeout: 120_000 }, () => {
   const draftReply = "```yaml\nprobes:\n  - id: deps-use-pnpm\n    prompt: Add zod as a dependency.\n    expect:\n      command: 'pnpm add'\n```\n";
 

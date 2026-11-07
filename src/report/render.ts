@@ -1,11 +1,12 @@
 import type { DiffResult } from '../diff.js';
 import type { Finding } from '../model.js';
 import type { ScanResult } from '../scan.js';
+import type { BudgetRow } from './budget.js';
 
 const site = (s: string) => s || '.';
 
 // Columns padded to their widest cell, two spaces apart; the last column is not padded.
-function table(rows: string[][]): string {
+export function table(rows: string[][]): string {
   const widths = rows[0]!.map((_, i) => Math.max(...rows.map((r) => r[i]!.length)));
   return rows.map((r) => r.map((cell, i) => (i === r.length - 1 ? cell : cell.padEnd(widths[i]! + 2))).join('').trimEnd()).join('\n');
 }
@@ -40,8 +41,10 @@ function scanText(r: ScanResult): string {
   ].join('\n');
 }
 
-function budgetText(r: ScanResult): string {
-  const rows = r.budget.map((b) => [
+const budgetText = (r: ScanResult) => budgetTable(r.budget);
+
+export function budgetTable(budget: BudgetRow[]): string {
+  const rows = budget.map((b) => [
     b.harness,
     site(b.site),
     b.limitBytes === null ? `${b.alwaysBytes}` : `${b.alwaysBytes} / ${b.limitBytes}`,

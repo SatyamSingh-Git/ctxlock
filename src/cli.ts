@@ -4,6 +4,12 @@ import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
+import { applyFill } from './build/apply.js';
+import { findDrift } from './build/drift.js';
+import { GENERATED_FILE, generatedStatus } from './build/generated.js';
+import { BuildError, suggestIndex } from './build/index-suggest.js';
+import { planFill } from './build/plan.js';
+import { previewFill } from './build/preview.js';
 import { diffScans } from './diff.js';
 import { ClaudeNotFound } from './eval/claude.js';
 import { DraftError, draftProbes } from './eval/draft.js';
@@ -11,6 +17,7 @@ import { EvalError, runEval } from './eval/eval.js';
 import { ProbeError } from './eval/probes.js';
 import { loadRegistry, type Registry, RegistryError } from './registry/registry.js';
 import { fsReader, gitReader, gitTopLevel, RefNotFound } from './repo/reader.js';
+import { renderBuild } from './report/build.js';
 import { renderEval } from './report/eval.js';
 import { renderDiffMarkdown, renderErrorMarkdown } from './report/markdown.js';
 import { renderDiff, renderScan } from './report/render.js';
@@ -87,6 +94,48 @@ export async function main(argv: string[], io: Io): Promise<number> {
         if (view === 'lint' && result.findings.some((f) => f.severity === 'must')) code = 1;
       });
   }
+
+  program
+    .command('build [dir]')
+    .description("report what each agent loads, the gaps between them and drift; --fill-missing writes what is missing, never over a person's file")
+    .option('--fill-missing', 'write the missing targets, and record them in .ctxlock/generated.json')
+    .option('--suggest-index <dir>', 'print a compressed index of the markdown under <dir> for AGENTS.md; nothing is written')
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
+    .action(async (dir: string | undefined, opts: { fillMissing?: boolean; suggestIndex?: string; format: 'text' | 'json' }) => {
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      // Personal, gitignored files never decide what gets committed.
+      const reader = fsReader(root, { local: false });
+      if (opts.suggestIndex !== undefined) {
+        const { text, bytes } = await suggestIndex(reader, opts.suggestIndex);
+        io.stdout(`${text}\n\n${bytes} bytes. Not written. Measure it with a probe before you commit it: see the-guide/build.md.\n`);
+        return;
+      }
+      const scan = await scanRepo(reader);
+      // An unreadable record reads as no files, so a fill would replace it and lose its entries.
+      if (opts.fillMissing && scan.generated.error !== null) {
+        throw new BuildError(`${GENERATED_FILE} is not valid: ${scan.generated.error}; fix it first: --fill-missing would replace it`);
+      }
+      const { plan, after } = await previewFill(reader, await planFill(scan, reader), scan.registry);
+      const top = (await gitTopLevel(root)) ?? root;
+      const { written, refused } = opts.fillMissing ? await applyFill(top, plan, scan.generated.files) : { written: [], refused: [] };
+      io.stdout(
+        renderBuild(
+          {
+            root,
+            budget: scan.budget,
+            after: plan.actions.length > 0 ? after.budget : null,
+            gaps: plan.gaps,
+            drift: findDrift(scan),
+            generated: await generatedStatus(reader, scan.generated.files),
+            written,
+            refused,
+            filled: opts.fillMissing ?? false,
+          },
+          opts.format,
+        ),
+      );
+    });
 
   program
     .command('diff [dir]')
@@ -210,7 +259,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     // Commander has already printed its own message; help and version exit 0.
     if (err instanceof CommanderError) return err.exitCode === 0 ? 0 : 2;
     // Anything else is a bug or input ctxlock cannot handle. It still exits 2, because 1 means must-fix.
-    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError].some((type) => err instanceof type);
+    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, BuildError].some((type) => err instanceof type);
     const reason = err instanceof Error ? err.message : String(err);
     io.stderr(known ? `${reason}\n` : `ctxlock could not run: ${reason}\n`);
     if (markdown) io.stdout(renderErrorMarkdown(reason));
