@@ -172,10 +172,14 @@ export async function planFill(scan: ScanResult, reader: RepoReader): Promise<Fi
     for (const unit of units) gaps.push({ path: unit.path, harness: 'codex', fill: target, reason: FILLS['agents-md'] });
   }
 
-  // A target that already holds exactly what would be written needs nothing.
+  // A target that already holds exactly what would be written, recorded from the same sources, needs
+  // nothing. With the same bytes but changed sources, only the record is refreshed.
+  const sources = new Map(scan.generated.files.map((g) => [g.path, JSON.stringify(g.from)]));
   const upToDate = new Set<string>();
   for (const action of actions) {
-    const same = await Promise.all(action.files.map(async (f) => listedSet.has(f.path) && (await reader.readFile(f.path)).equals(f.bytes)));
+    const same = await Promise.all(
+      action.files.map(async (f) => listedSet.has(f.path) && (await reader.readFile(f.path)).equals(f.bytes) && sources.get(f.path) === JSON.stringify(f.from)),
+    );
     if (same.every(Boolean)) upToDate.add(action.target);
   }
   return {
