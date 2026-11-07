@@ -74,7 +74,9 @@ describe('L14-generated', () => {
     expect(await lint({ [SOURCE]: 'skill', [OUTPUT]: 'mine', ...record(copy) })).toEqual([
       ['should', OUTPUT, `${OUTPUT} was edited after ctxlock generated it; edit its source instead, or remove the entry to keep the edit`],
     ]);
-    expect(await lint({ [OUTPUT]: 'skill', ...record(copy) })).toEqual([['should', OUTPUT, `${OUTPUT} was generated from ${SOURCE}, which no longer exists`]]);
+    expect(await lint({ [OUTPUT]: 'skill', ...record(copy) })).toEqual([
+      ['should', OUTPUT, `${OUTPUT} was generated from ${SOURCE}, which no longer exists; run ctxlock build --fill-missing, and if it stays, delete it and its entry`],
+    ]);
     expect(await lint({ [SOURCE]: 'newer', [OUTPUT]: 'skill', ...record(copy) })).toEqual([
       ['should', OUTPUT, `${OUTPUT} is out of date: ${SOURCE} changed since it was generated; run ctxlock build --fill-missing`],
     ]);

@@ -247,3 +247,16 @@ Checking the new no-agent-text test for the CLI, the mutation script reported th
 *Cost:* one debugging round. The earlier mutation runs passed only file paths, so their results stand.
 
 *Changed:* the mutation script now reads how many tests the baseline ran, and refuses to go on when it is 0.
+
+### Trusting the file list as the whole truth about the disk
+
+`ctxlock build` decided where it could write from the same file list it reads context from: what git lists. The final review showed three ways the disk differs from that list:
+- a symlink or Windows junction that `.git/info/exclude` hides is not listed, and `--fill-missing` wrote through one to a folder outside the repository;
+- git ignores files by rules that are not in any listed `.gitignore`: `.git/info/exclude`, global excludes, and a pattern that matches one file of a copy rather than its folder;
+- a skill's file list holds each file's real path, so a file reached through a symlink inside the skill was copied to a path made from the wrong string.
+
+*Cause:* the file list is the right model for reading, since it is what a commit holds and what an agent in CI sees. Writing touches the disk, which also holds what the list leaves out.
+
+*Cost:* pushed to `main` in `b4712d0`; the reviewer reproduced each case on a throwaway repository. No one else had run it.
+
+*Changed:* each write checks the disk itself, every part of the path, for a link. Git says what it ignores, through `git check-ignore`, instead of ctxlock reading `.gitignore` files the way it guesses git does. A skill with linked files is left to a person.

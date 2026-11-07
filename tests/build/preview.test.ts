@@ -25,7 +25,7 @@ describe('previewFill', () => {
   const preview = async (files: Record<string, string>) => {
     const reader = memReader(files);
     const scan = await scanRepo(reader, { today: '2026-11-07' });
-    return previewFill(reader, await planFill(scan, reader), scan.registry);
+    return previewFill(reader, await planFill(scan, reader, async () => new Set()), scan);
   };
 
   it('drops an AGENTS.md that Codex would cut, and says why', async () => {
@@ -37,6 +37,27 @@ describe('previewFill', () => {
     ]);
     // The budget after the fill is the repository without the dropped file.
     expect(after.budget.find((r) => r.harness === 'codex' && r.site === '')?.alwaysBytes).toBe(0);
+  });
+
+  it('drops a fill that would cut a file a person wrote, later in the same chain, and says which', async () => {
+    const { plan } = await preview({ 'CLAUDE.md': `${'x'.repeat(30_000)}\n`, 'pkg/AGENTS.md': `${'y'.repeat(5_000)}\n` });
+
+    expect(plan.actions.map((a) => a.target)).toEqual(['pkg/CLAUDE.md']);
+    expect(plan.gaps).toContainEqual({
+      path: 'CLAUDE.md',
+      harness: 'codex',
+      fill: null,
+      reason: 'would cut pkg/AGENTS.md: Codex loads only 2767 of 5001 bytes from pkg/AGENTS.md under the 32768-byte project instruction budget',
+    });
+
+    // A planned file after the cut one is cut itself, and blamed for nothing.
+    const deeper = await preview({ 'CLAUDE.md': `${'x'.repeat(30_000)}\n`, 'pkg/AGENTS.md': `${'y'.repeat(5_000)}\n`, '.claude/rules/sub.md': '---\npaths: ["pkg/sub/**"]\n---\nSub.\n' });
+    expect(deeper.plan.gaps.find((g) => g.path === '.claude/rules/sub.md')?.reason).toMatch(/^would be cut: Codex skips pkg\/sub\/AGENTS\.md/);
+  });
+
+  it('keeps a fill when the file it comes before was cut already', async () => {
+    const { plan } = await preview({ 'CLAUDE.md': 'Use pnpm.\n', 'pkg/AGENTS.md': `${'y'.repeat(40_000)}\n`, 'pkg/CLAUDE.md': '@AGENTS.md\n' });
+    expect(plan.actions.map((a) => a.target)).toEqual(['AGENTS.md']);
   });
 
   it('keeps a skill copy: a listed skill loads its catalog entry only, which is no cut', async () => {

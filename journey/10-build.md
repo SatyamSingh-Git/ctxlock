@@ -39,6 +39,16 @@ They also found code that tests could never tell apart from its absence, which w
 - **A gitignored folder,** found live on plano. The first fill wrote five skill copies into `.agents`, which plano ignores, so they could never be committed, and ctxlock's own reader reported them missing. A gitignored target is now a gap (D55), using the check `L9` had, now shared.
 - **Two digests for one file.** Discovery hashes files with CRLF read as LF; the first version of the record used raw bytes. A CRLF test fixture showed the mismatch. On a real team, a record written on Windows would have read as edited on Linux CI (D54).
 - **An "up to date" that never was.** A source change that left the output the same, such as trailing whitespace, would have kept `L14` saying "stale" forever, because the planner saw nothing to write. The record is now refreshed in that case.
+- **The final review: one critical finding, six important ones.** A fresh reviewer, on the strongest model, reproduced each on a throwaway repository:
+  - writes through a link git does not list (see [mistakes](mistakes.md));
+  - ignore rules only git knows;
+  - a rule glob such as `/src/**` that hung the planner;
+  - a report that showed what was generated as it stood before the fill;
+  - a fill that could make Codex cut a person's `AGENTS.md` (D57);
+  - a skill with linked files copied to the wrong paths;
+  - a copy that kept files its skill had dropped (D56).
+
+  A seventh was re-graded up from minor: on a checkout with `core.autocrlf`, the first fill wrote mixed line endings and later fills rewrote files that had not changed. Each fix began with a test that failed.
 - **Backslashes through a heredoc, twice more.** The guard that refuses an edit it cannot place exactly once caught both, and the Edit tool did them instead.
 
 ## What was learned

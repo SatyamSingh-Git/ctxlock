@@ -62,17 +62,19 @@ Only for gaps between Claude Code and Codex, and only these three kinds of file:
 Everything else stays a gap, with its reason:
 - a rule scoped by another kind of glob (`Codex cannot scope **/*.ts`);
 - a folder that already has an `AGENTS.md` or `AGENTS.override.md` (`add it to AGENTS.md by hand`);
-- an import a person has to add to an existing `CLAUDE.md`.
+- an import a person has to add to an existing `CLAUDE.md`;
+- a file git would ignore (`.claude/skills/release/SKILL.md is gitignored`), by any rule git reads: a `.gitignore`, `.git/info/exclude` or your global excludes. When git ignores `.ctxlock/generated.json` itself, nothing is filled;
+- a skill with files reached through a symlink (`files reached through a symlink; copy by hand`).
 
 ## What it never does
 
-- **Write over a file a person wrote, or edited since ctxlock wrote it.** A file is ctxlock's to rewrite only if `.ctxlock/generated.json` lists it and its contents still match the record. That is checked again as each file is written, and anything else is listed under "Not written".
-- **Write a file an agent would cut.** Each planned file is checked against the agents' limits before anything is written. An `AGENTS.md` that would take Codex over its 32,768 bytes stays a gap, and its reason quotes the limit.
+- **Write over a file a person wrote, or edited since ctxlock wrote it.** A file is ctxlock's to rewrite only if `.ctxlock/generated.json` lists it and its contents still match the record. That is checked again as each file is written, and anything else is listed under "Left as it is".
+- **Write a file an agent would cut, or one that makes an agent cut a file it loads in full today.** Each planned file is checked against the agents' limits before anything is written. An `AGENTS.md` that would take Codex over its 32,768 bytes stays a gap, and its reason quotes the limit. So does a root `AGENTS.md` that would leave Codex no room for a folder's own: `would cut pkg/AGENTS.md: ...`.
 - **Copy execution config** (settings, MCP files), or read your gitignored `CLAUDE.local.md`. Generated files are meant to be committed, and personal files should not decide what goes in them.
-- **Write outside the repository,** or through a symlink.
+- **Write outside the repository,** or through a symlink or a Windows junction, including one git does not list. Each part of each path is checked as the file is written.
 - **Mark the files themselves.** The record is `.ctxlock/generated.json`, kept beside your other config.
 
-Running it again writes nothing until a source changes. When a source changes, the file made from it is rewritten, as long as nobody edited it.
+Running it again writes nothing until a source changes, including on a checkout that turned LF into CRLF. When a source changes, the file made from it is rewritten, as long as nobody edited it. When a skill no longer has a file, its copy loses that file too, on the same condition, listed under "Removed".
 
 ## `.ctxlock/generated.json`
 

@@ -4,11 +4,10 @@ import { findImports } from '../harness/imports.js';
 import { LIMITS } from '../harness/limits.js';
 import { home, shadowed } from '../lint/rules/l13-shadowed.js';
 import type { HarnessId, Unit } from '../model.js';
-import { gitignoreMatcher } from '../repo/gitignore.js';
 import type { RepoReader } from '../repo/reader.js';
 import type { ScanResult } from '../scan.js';
 import { lfDigest } from '../units/digest.js';
-import type { Source } from './generated.js';
+import { GENERATED_FILE, type Source } from './generated.js';
 
 export type FillKind = 'skill-copy' | 'claude-import' | 'agents-md';
 
@@ -23,6 +22,8 @@ export interface FillAction {
   harness: HarnessId;
   target: string;
   files: PlannedFile[];
+  // Files an earlier copy of a skill has whose source the skill no longer has.
+  remove?: string[];
 }
 
 // A unit one agent reaches and the other does not. `harness` is the one it misses.
@@ -50,9 +51,12 @@ const MIRRORS: Array<[string, string]> = [['.agents/skills', '.claude/skills'], 
 const dirOf = (path: string) => (posix.dirname(path) === '.' ? '' : posix.dirname(path));
 const onlyImportsAgentsMd = (text: string) => text.trim().split(/\s+/).every((word) => /^@(?:.*\/)?AGENTS\.md$/.test(word));
 const tidy = (text: string) => text.replace(/^(?:[ \t]*\r?\n)+/, '').replace(/\s+$/, '');
+// A skill's file reached through a symlink has its real path, outside the skill's folder.
+export const throughLink = (unit: Unit) => unit.files.some((f) => !f.path.startsWith(`${unit.path}/`));
 const byPath = <T extends { path: string }>(a: T, b: T) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 
-export async function planFill(scan: ScanResult, reader: RepoReader): Promise<FillPlan> {
+// `ignored` gives the paths among those asked about that git would not add.
+export async function planFill(scan: ScanResult, reader: RepoReader, ignored: (paths: string[]) => Promise<Set<string>>): Promise<FillPlan> {
   if (!(['claude-code', 'codex'] as const).every((h) => scan.registry.harnesses.includes(h))) return { actions: [], gaps: [] };
   const limits = { ...LIMITS, ...scan.registry.limits };
   const listed = await reader.listFiles();
@@ -61,10 +65,17 @@ export async function planFill(scan: ScanResult, reader: RepoReader): Promise<Fi
   const recorded = new Map(scan.generated.files.map((g) => [g.path, g.sha256]));
   const unitAt = new Map(scan.units.map((u) => [u.path, u]));
 
-  const ignored = gitignoreMatcher(listedSet, (file) => reader.readFile(file));
-  // Why a target cannot be written, or null: generated files are committed, so a gitignored one helps
-  // no one.
-  const blocked = async (target: string) => ((await ignored(target)) ? `${target} is gitignored` : (await free(target)) ? null : `${target} exists`);
+  // Generated files are committed, so one git ignores helps no one; nor does any fill when git ignores
+  // the record of what was generated.
+  const recordIgnored = (await ignored([GENERATED_FILE])).size > 0;
+  // Why the files at a target cannot be written, or null.
+  async function blocked(target: string, paths: string[]): Promise<string | null> {
+    if (recordIgnored) return `${GENERATED_FILE} is gitignored`;
+    const hits = await ignored(paths);
+    const hit = paths.find((p) => hits.has(p));
+    if (hit) return `${hit} is gitignored`;
+    return (await free(target)) ? null : `${target} exists`;
+  }
 
   // A target ctxlock may write: nothing there, or only files it generated that nobody edited since.
   async function free(target: string): Promise<boolean> {
@@ -101,21 +112,26 @@ export async function planFill(scan: ScanResult, reader: RepoReader): Promise<Fi
         gap(null, `no fill for ${unit.kind} files`);
         continue;
       }
+      if (throughLink(unit)) {
+        gap(null, 'files reached through a symlink; copy by hand');
+        continue;
+      }
       const mirror = unit.path.replace(`${from}/`, `${to}/`);
-      const why = await blocked(mirror);
+      const paths = unit.files.map((f) => `${mirror}${f.path.slice(unit.path.length)}`);
+      const why = await blocked(mirror, paths);
       if (why) {
         gap(null, why);
         continue;
       }
-      const files = await Promise.all(
-        unit.files.map(async (f) => ({ path: `${mirror}${f.path.slice(unit.path.length)}`, bytes: await reader.readFile(f.path), from: [{ path: f.path, sha256: f.sha256 }] })),
-      );
-      actions.push({ kind: 'skill-copy', harness: missing, target: mirror, files });
+      const files = await Promise.all(unit.files.map(async (f, i) => ({ path: paths[i]!, bytes: await reader.readFile(f.path), from: [{ path: f.path, sha256: f.sha256 }] })));
+      // The target is free, so every file under it is one ctxlock wrote and nobody edited since.
+      const remove = listed.filter((p) => p.startsWith(`${mirror}/`) && !paths.includes(p));
+      actions.push({ kind: 'skill-copy', harness: missing, target: mirror, files, ...(remove.length > 0 ? { remove } : {}) });
       gap(mirror, FILLS['skill-copy']);
     } else if (missing === 'claude-code') {
       const fix = fixes.get(unit.path);
       const create = fix ? /^create (\S+) containing/.exec(fix)?.[1] : undefined;
-      const why = create && (await blocked(create));
+      const why = create && (await blocked(create, [create]));
       if (!fix) gap(null, `no fill for ${unit.kind} files`);
       else if (!create) gap(null, `edit by hand: ${fix}`);
       else if (why) gap(null, why);
@@ -139,7 +155,9 @@ export async function planFill(scan: ScanResult, reader: RepoReader): Promise<Fi
       }
       const patterns = (Array.isArray(paths) ? paths : [paths]).map(String);
       const folders = patterns.map((p) => FOLDER_GLOB.exec(p)?.[1]);
-      const bad = patterns.find((_, i) => folders[i] === undefined || folders[i]!.split('/').includes('..'));
+      // Only a folder inside the repository, and outside .git, can hold an AGENTS.md for Codex.
+      const outside = (f: string) => posix.isAbsolute(f) || /^[A-Za-z]:/.test(f) || f.split('/').some((part) => part === '..' || part === '.git');
+      const bad = patterns.find((_, i) => folders[i] === undefined || outside(folders[i]!));
       if (bad !== undefined) gap(null, `Codex cannot scope ${bad}`);
       else for (const folder of new Set(folders)) want(posix.join(dir, folder!), unit);
     } else {
@@ -150,7 +168,7 @@ export async function planFill(scan: ScanResult, reader: RepoReader): Promise<Fi
   for (const [folder, units] of wanted) {
     const target = at(folder, 'AGENTS.md');
     const override = at(folder, 'AGENTS.override.md');
-    const why = listedSet.has(override) ? `add it to ${override} by hand` : await blocked(target);
+    const why = listedSet.has(override) ? `add it to ${override} by hand` : await blocked(target, [target]);
     if (why) {
       const reason = why === `${target} exists` ? `add it to ${target} by hand` : why;
       for (const unit of units) gaps.push({ path: unit.path, harness: 'codex', fill: null, reason });
@@ -177,19 +195,20 @@ export async function planFill(scan: ScanResult, reader: RepoReader): Promise<Fi
       }
     };
     for (const unit of ordered) await visit(unit.path, 0);
-    actions.push({ kind: 'agents-md', harness: 'codex', target, files: [{ path: target, bytes: Buffer.from(`${texts.map(tidy).join('\n\n')}\n`), from: parts }] });
+    actions.push({ kind: 'agents-md', harness: 'codex', target, files: [{ path: target, bytes: Buffer.from(`${texts.map(tidy).join('\n\n').replaceAll('\r\n', '\n')}\n`), from: parts }] });
     for (const unit of units) gaps.push({ path: unit.path, harness: 'codex', fill: target, reason: FILLS['agents-md'] });
   }
 
-  // A target that already holds exactly what would be written, recorded from the same sources, needs
-  // nothing. With the same bytes but changed sources, only the record is refreshed.
+  // A target that already holds what would be written, recorded from the same sources, needs nothing;
+  // line endings aside, which a checkout may change. With the same text but changed sources, only the
+  // record is refreshed.
   const sources = new Map(scan.generated.files.map((g) => [g.path, JSON.stringify(g.from)]));
   const upToDate = new Set<string>();
   for (const action of actions) {
     const same = await Promise.all(
-      action.files.map(async (f) => listedSet.has(f.path) && (await reader.readFile(f.path)).equals(f.bytes) && sources.get(f.path) === JSON.stringify(f.from)),
+      action.files.map(async (f) => listedSet.has(f.path) && lfDigest(await reader.readFile(f.path)) === lfDigest(f.bytes) && sources.get(f.path) === JSON.stringify(f.from)),
     );
-    if (same.every(Boolean)) upToDate.add(action.target);
+    if (same.every(Boolean) && !action.remove) upToDate.add(action.target);
   }
   return {
     actions: actions.filter((a) => !upToDate.has(a.target)).sort((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0)),

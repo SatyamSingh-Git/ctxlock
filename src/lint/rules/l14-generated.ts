@@ -5,7 +5,7 @@ import type { Rule } from '../types.js';
 const MESSAGES = {
   missing: (path: string) => `${path} is listed in ${GENERATED_FILE} but missing; run ctxlock build --fill-missing, or remove the entry`,
   edited: (path: string) => `${path} was edited after ctxlock generated it; edit its source instead, or remove the entry to keep the edit`,
-  'source-missing': (path: string, source: string) => `${path} was generated from ${source}, which no longer exists`,
+  'source-missing': (path: string, source: string) => `${path} was generated from ${source}, which no longer exists; run ctxlock build --fill-missing, and if it stays, delete it and its entry`,
   stale: (path: string, source: string) => `${path} is out of date: ${source} changed since it was generated; run ctxlock build --fill-missing`,
 };
 

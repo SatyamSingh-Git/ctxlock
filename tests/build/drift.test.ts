@@ -27,6 +27,14 @@ describe('findDrift', () => {
     expect(await drift({ '.agents/skills/release/SKILL.md': SKILL, '.claude/skills/release/SKILL.md': 'old', [GENERATED_FILE]: record })).toEqual([]);
   });
 
+  it('passes over a skill with files reached through a symlink, which it cannot pair by path', async () => {
+    const reader = memReader(
+      { '.agents/skills/release/SKILL.md': SKILL, '.claude/skills/release/SKILL.md': SKILL, 'tools/a/run.sh': 'a', 'tools/b/run.sh': 'b' },
+      { '.agents/skills/release/scripts': 'tools/a', '.claude/skills/release/scripts': 'tools/b' },
+    );
+    expect(findDrift(await scanRepo(reader, { today: '2026-11-07' }))).toEqual([]);
+  });
+
   it('reports a CLAUDE.md and an AGENTS.md beside it that differ, unless CLAUDE.md imports it', async () => {
     expect(await drift({ 'CLAUDE.md': 'Use pnpm.\nRun tests.\n\nClaude only.\n', 'AGENTS.md': 'Use pnpm.\nRun tests.\nUse npm for scripts.\n' })).toEqual([
       { paths: ['CLAUDE.md', 'AGENTS.md'], summary: '1 line only in CLAUDE.md, 1 only in AGENTS.md' },

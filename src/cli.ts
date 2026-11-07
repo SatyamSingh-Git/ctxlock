@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { applyFill } from './build/apply.js';
 import { findDrift } from './build/drift.js';
-import { GENERATED_FILE, generatedStatus } from './build/generated.js';
+import { GENERATED_FILE, generatedStatus, loadGenerated } from './build/generated.js';
 import { BuildError, suggestIndex } from './build/index-suggest.js';
 import { planFill } from './build/plan.js';
 import { previewFill } from './build/preview.js';
@@ -16,6 +16,7 @@ import { DraftError, draftProbes } from './eval/draft.js';
 import { EvalError, runEval } from './eval/eval.js';
 import { ProbeError } from './eval/probes.js';
 import { loadRegistry, type Registry, RegistryError } from './registry/registry.js';
+import { gitIgnored } from './repo/gitignore.js';
 import { fsReader, gitReader, gitTopLevel, RefNotFound } from './repo/reader.js';
 import { renderBuild } from './report/build.js';
 import { renderEval } from './report/eval.js';
@@ -116,9 +117,14 @@ export async function main(argv: string[], io: Io): Promise<number> {
       if (opts.fillMissing && scan.generated.error !== null) {
         throw new BuildError(`${GENERATED_FILE} is not valid: ${scan.generated.error}; fix it first: --fill-missing would replace it`);
       }
-      const { plan, after } = await previewFill(reader, await planFill(scan, reader), scan.registry);
-      const top = (await gitTopLevel(root)) ?? root;
-      const { written, refused } = opts.fillMissing ? await applyFill(top, plan, scan.generated.files) : { written: [], refused: [] };
+      const top = await gitTopLevel(root);
+      // Outside git, nothing is ignored.
+      const ignored = top ? (paths: string[]) => gitIgnored(top, paths) : async () => new Set<string>();
+      const { plan, after } = await previewFill(reader, await planFill(scan, reader, ignored), scan);
+      const { written, removed, refused } = opts.fillMissing ? await applyFill(top ?? root, plan, scan.generated.files) : { written: [], removed: [], refused: [] };
+      // A fill changes the files and the record, so both are read again.
+      const now = opts.fillMissing ? fsReader(root, { local: false }) : reader;
+      const recorded = opts.fillMissing ? (await loadGenerated(now)).files : scan.generated.files;
       io.stdout(
         renderBuild(
           {
@@ -127,8 +133,9 @@ export async function main(argv: string[], io: Io): Promise<number> {
             after: plan.actions.length > 0 ? after.budget : null,
             gaps: plan.gaps,
             drift: findDrift(scan),
-            generated: await generatedStatus(reader, scan.generated.files),
+            generated: await generatedStatus(now, recorded),
             written,
+            removed,
             refused,
             filled: opts.fillMissing ?? false,
           },

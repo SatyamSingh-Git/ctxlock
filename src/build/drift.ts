@@ -4,6 +4,7 @@ import { findImports } from '../harness/imports.js';
 import { home } from '../lint/rules/l13-shadowed.js';
 import type { Unit } from '../model.js';
 import type { ScanResult } from '../scan.js';
+import { throughLink } from './plan.js';
 
 // Two files written by hand that serve the same folder for different agents, and say different things.
 export interface Drift {
@@ -19,7 +20,7 @@ export function findDrift(scan: ScanResult): Drift[] {
   const handMade = scan.units.filter((u) => !u.files.some((f) => outputs.has(f.path)));
   const found: Drift[] = [];
 
-  const skills = handMade.filter((u) => u.kind === 'skill');
+  const skills = handMade.filter((u) => u.kind === 'skill' && !throughLink(u));
   for (const agents of skills.filter((u) => ownerDir(u.path, '.agents/skills') !== null)) {
     const claude = skills.find((u) => u.path === agents.path.replace(/(^|\/)\.agents\/skills\//, '$1.claude/skills/'));
     if (!claude) continue;

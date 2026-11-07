@@ -381,10 +381,10 @@ Checks each file listed in `.ctxlock/generated.json`, the record `ctxlock build 
 ```
 .claude/skills/release/SKILL.md is listed in .ctxlock/generated.json but missing; run ctxlock build --fill-missing, or remove the entry
 .claude/skills/release/SKILL.md was edited after ctxlock generated it; edit its source instead, or remove the entry to keep the edit
-.claude/skills/release/SKILL.md was generated from .agents/skills/release/SKILL.md, which no longer exists
+.claude/skills/release/SKILL.md was generated from .agents/skills/release/SKILL.md, which no longer exists; run ctxlock build --fill-missing, and if it stays, delete it and its entry
 .claude/skills/release/SKILL.md is out of date: .agents/skills/release/SKILL.md changed since it was generated; run ctxlock build --fill-missing
 ```
 
 A record that does not parse, or names a path outside the repository, is one finding: `.ctxlock/generated.json is not valid: <reason>`. Since `diff` and the Action run the same rules, a pull request that edits a source and not its copy is reported there too.
 
-**Fix:** do what the message says. `ctxlock build --fill-missing` rewrites a stale file only when nobody edited it since.
+**Fix:** do what the message says. `ctxlock build --fill-missing` rewrites a stale file only when nobody edited it since. It also removes a copied skill file whose source the skill no longer has; a file whose whole source is gone, such as an `AGENTS.md` made from a deleted `CLAUDE.md`, is yours to delete.

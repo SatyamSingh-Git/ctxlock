@@ -231,6 +231,24 @@ describe('ctxlock build', { timeout: 120_000 }, () => {
     expect((await cli('lint', dir)).stdout).not.toContain('L11-coverage');
   });
 
+  it('reports what it generated as it stands after the fill, not before', async () => {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'Use pnpm.\n', '.agents/skills/release/SKILL.md': SKILL }]);
+    const upToDate = /Generated \(\.ctxlock\/generated\.json\):\n\s+\.claude\/skills\/release\/SKILL\.md\s+up to date/;
+
+    expect((await cli('build', dir, '--fill-missing')).stdout).toMatch(upToDate);
+
+    writeTree(dir, { '.agents/skills/release/SKILL.md': SKILL.replace('Run it.', 'Run it twice.') });
+    expect((await cli('build', dir)).stdout).toMatch(/\.claude\/skills\/release\/SKILL\.md\s+stale: \.agents\/skills\/release\/SKILL\.md changed/);
+    expect((await cli('build', dir, '--fill-missing')).stdout).toMatch(upToDate);
+
+    writeTree(dir, { '.agents/skills/release/notes.md': 'n' });
+    await cli('build', dir, '--fill-missing');
+    writeTree(dir, { '.agents/skills/release/notes.md': null });
+    const removed = await cli('build', dir, '--fill-missing');
+    expect(removed.stdout).toContain('Removed, since its source is gone:\n  .claude/skills/release/notes.md');
+    expect(removed.stdout).not.toMatch(/notes\.md\s+\.agents/);
+  });
+
   it('ignores a personal CLAUDE.local.md, and writes at the top of the repository when run from a folder in it', async () => {
     const { dir } = await gitRepo([{ '.gitignore': 'CLAUDE.local.md\n', 'AGENTS.md': 'Use pnpm.\n', 'sub/x.ts': '' }]);
     writeTree(dir, { 'CLAUDE.local.md': 'Mine.\n' });

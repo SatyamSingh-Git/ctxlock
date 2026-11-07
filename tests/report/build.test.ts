@@ -12,6 +12,7 @@ const report = (extra: Partial<BuildReport> = {}): BuildReport => ({
   drift: [{ paths: ['CLAUDE.md', 'AGENTS.md'], summary: '1 line only in CLAUDE.md, 1 only in AGENTS.md' }],
   generated: [{ path: 'AGENTS.md', state: 'stale', source: 'CLAUDE.md' }],
   written: [],
+  removed: [],
   refused: [],
   filled: false,
   ...extra,
@@ -31,10 +32,11 @@ describe('renderBuild', () => {
   });
 
   it('after a fill lists what it wrote and refused, and only the gaps still open', () => {
-    const text = renderBuild(report({ filled: true, written: ['.claude/skills/release/SKILL.md'], refused: ['AGENTS.md'] }), 'text');
+    const text = renderBuild(report({ filled: true, written: ['.claude/skills/release/SKILL.md'], removed: ['.claude/skills/release/old.sh'], refused: ['AGENTS.md'] }), 'text');
 
     expect(text).toContain('Wrote:\n  .claude/skills/release/SKILL.md');
-    expect(text).toContain('Not written, since a person wrote or edited it after the plan:\n  AGENTS.md');
+    expect(text).toContain('Removed, since its source is gone:\n  .claude/skills/release/old.sh');
+    expect(text).toContain('Left as it is, since a person wrote or edited it after the plan:\n  AGENTS.md');
     expect(text).not.toContain('.agents/skills/release does not reach');
     expect(text).toContain('.claude/rules/ts.md does not reach codex');
     expect(text).not.toContain('--fill-missing writes');

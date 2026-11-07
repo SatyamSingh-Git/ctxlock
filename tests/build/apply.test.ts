@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { applyFill } from '../../src/build/apply.js';
@@ -18,7 +18,7 @@ const RUN = 'echo one\r\necho two\r\n';
 async function planned(dir: string) {
   const reader = fsReader(dir, { local: false });
   const scan = await scanRepo(reader, { today: '2026-11-07' });
-  return { scan, plan: (await previewFill(reader, await planFill(scan, reader), scan.registry)).plan };
+  return { scan, plan: (await previewFill(reader, await planFill(scan, reader, async () => new Set()), scan)).plan };
 }
 
 async function fill(dir: string) {
@@ -35,7 +35,7 @@ describe('applyFill', () => {
 
     const r = await fill(dir);
 
-    expect(r).toEqual({ written: ['.claude/skills/release/SKILL.md', '.claude/skills/release/scripts/run.sh'], refused: [] });
+    expect(r).toEqual({ written: ['.claude/skills/release/SKILL.md', '.claude/skills/release/scripts/run.sh'], removed: [], refused: [] });
     expect(read(dir, '.claude/skills/release/scripts/run.sh').toString()).toBe(RUN);
     const { files } = await loadGenerated(fsReader(dir));
     expect(files).toEqual([
@@ -50,7 +50,7 @@ describe('applyFill', () => {
     await fill(dir);
     const record = read(dir, GENERATED_FILE);
 
-    expect(await fill(dir)).toEqual({ written: [], refused: [] });
+    expect(await fill(dir)).toEqual({ written: [], removed: [], refused: [] });
     expect(read(dir, GENERATED_FILE).equals(record)).toBe(true);
   });
 
@@ -59,7 +59,7 @@ describe('applyFill', () => {
     writeTree(dir, { 'CLAUDE.md': 'Use pnpm.\n' });
     const first = await planned(dir);
     writeTree(dir, { 'AGENTS.md': 'Mine.\n' });
-    expect(await applyFill(dir, first.plan, first.scan.generated.files)).toEqual({ written: [], refused: ['AGENTS.md'] });
+    expect(await applyFill(dir, first.plan, first.scan.generated.files)).toEqual({ written: [], removed: [], refused: ['AGENTS.md'] });
     expect(read(dir, 'AGENTS.md').toString()).toBe('Mine.\n');
     expect(existsSync(join(dir, GENERATED_FILE))).toBe(false);
 
@@ -69,8 +69,61 @@ describe('applyFill', () => {
     writeTree(other, { 'CLAUDE.md': 'Use npm.\n' });
     const stale = await planned(other);
     writeTree(other, { 'AGENTS.md': 'Edited.\n' });
-    expect(await applyFill(other, stale.plan, stale.scan.generated.files)).toEqual({ written: [], refused: ['AGENTS.md'] });
+    expect(await applyFill(other, stale.plan, stale.scan.generated.files)).toEqual({ written: [], removed: [], refused: ['AGENTS.md'] });
     expect(read(other, 'AGENTS.md').toString()).toBe('Edited.\n');
+  });
+
+  it('never writes through a link the file listing does not show, such as an excluded symlink or a Windows junction', async () => {
+    const outside = tempDir();
+    const dir = tempDir();
+    writeTree(dir, { 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': SKILL });
+    const { scan, plan } = await planned(dir);
+    // Made after planning, as a link git excludes would be: the plan never saw it.
+    symlinkSync(outside, join(dir, '.claude'), process.platform === 'win32' ? 'junction' : 'dir');
+
+    expect(await applyFill(dir, plan, scan.generated.files)).toEqual({ written: [], removed: [], refused: ['.claude/skills/release/SKILL.md'] });
+    expect(readdirSync(outside)).toEqual([]);
+
+    // The record goes through no link either; nothing is written when it would.
+    const other = tempDir();
+    writeTree(other, { 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': SKILL });
+    const second = await planned(other);
+    symlinkSync(outside, join(other, '.ctxlock'), process.platform === 'win32' ? 'junction' : 'dir');
+    await expect(applyFill(other, second.plan, second.scan.generated.files)).rejects.toThrow(/\.ctxlock\/generated\.json is reached through a link/);
+    expect(readdirSync(outside)).toEqual([]);
+    expect(existsSync(join(other, '.claude'))).toBe(false);
+  });
+
+  it('rewrites no file that differs only in CRLF line endings, and still refreshes its record', async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'CLAUDE.md': 'Use npm.\n' });
+    await fill(dir);
+    // As a checkout with core.autocrlf writes them; the extra blank line changes a source, not the output.
+    writeTree(dir, { 'AGENTS.md': 'Use npm.\r\n', 'CLAUDE.md': 'Use npm.\r\n\r\n' });
+
+    expect(await fill(dir)).toEqual({ written: [], removed: [], refused: [] });
+    expect(read(dir, 'AGENTS.md').toString()).toBe('Use npm.\r\n');
+    expect((await loadGenerated(fsReader(dir))).files.find((f) => f.path === 'AGENTS.md')!.from).toEqual([{ path: 'CLAUDE.md', sha256: lfDigest(Buffer.from('Use npm.\r\n\r\n')) }]);
+  });
+
+  it('removes a copied file its source dropped, with its entry, and keeps one a person edited after the plan', async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': SKILL, '.agents/skills/release/scripts/run.sh': RUN });
+    await fill(dir);
+    writeTree(dir, { '.agents/skills/release/scripts/run.sh': null });
+
+    expect(await fill(dir)).toEqual({ written: [], removed: ['.claude/skills/release/scripts/run.sh'], refused: [] });
+    expect(existsSync(join(dir, '.claude/skills/release/scripts/run.sh'))).toBe(false);
+    expect((await loadGenerated(fsReader(dir))).files.map((f) => f.path)).toEqual(['.claude/skills/release/SKILL.md']);
+
+    const other = tempDir();
+    writeTree(other, { 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': SKILL, '.agents/skills/release/scripts/run.sh': RUN });
+    await fill(other);
+    writeTree(other, { '.agents/skills/release/scripts/run.sh': null });
+    const { scan, plan } = await planned(other);
+    writeTree(other, { '.claude/skills/release/scripts/run.sh': 'mine' });
+    expect(await applyFill(other, plan, scan.generated.files)).toEqual({ written: [], removed: [], refused: ['.claude/skills/release/scripts/run.sh'] });
+    expect(read(other, '.claude/skills/release/scripts/run.sh').toString()).toBe('mine');
   });
 
   it('refuses a path that leaves the repository', async () => {
@@ -78,7 +131,7 @@ describe('applyFill', () => {
     writeTree(dir, { 'AGENTS.md': 'a' });
     const plan = { actions: [{ kind: 'agents-md' as const, harness: 'codex' as const, target: '../x', files: [{ path: '../x/AGENTS.md', bytes: Buffer.from('x'), from: [] }] }], gaps: [] };
 
-    expect(await applyFill(dir, plan, [])).toEqual({ written: [], refused: ['../x/AGENTS.md'] });
+    expect(await applyFill(dir, plan, [])).toEqual({ written: [], removed: [], refused: ['../x/AGENTS.md'] });
     expect(existsSync(join(dir, '..', 'x', 'AGENTS.md'))).toBe(false);
   });
 
@@ -88,14 +141,14 @@ describe('applyFill', () => {
     await fill(dir);
 
     writeTree(dir, { 'CLAUDE.md': 'Use npm.\n' });
-    expect(await fill(dir)).toEqual({ written: ['AGENTS.md'], refused: [] });
+    expect(await fill(dir)).toEqual({ written: ['AGENTS.md'], removed: [], refused: [] });
     const { files } = await loadGenerated(fsReader(dir));
     expect(files.map((f) => f.path)).toEqual(['.claude/skills/release/SKILL.md', 'AGENTS.md']);
     expect(files.find((f) => f.path === 'AGENTS.md')!.from).toEqual([{ path: 'CLAUDE.md', sha256: lfDigest(Buffer.from('Use npm.\n')) }]);
 
     // Trailing whitespace changes the source, not the AGENTS.md made from it.
     writeTree(dir, { 'CLAUDE.md': 'Use npm.\n\n\n' });
-    expect(await fill(dir)).toEqual({ written: [], refused: [] });
+    expect(await fill(dir)).toEqual({ written: [], removed: [], refused: [] });
     expect((await loadGenerated(fsReader(dir))).files.find((f) => f.path === 'AGENTS.md')!.from).toEqual([{ path: 'CLAUDE.md', sha256: lfDigest(Buffer.from('Use npm.\n\n\n')) }]);
   });
 });
