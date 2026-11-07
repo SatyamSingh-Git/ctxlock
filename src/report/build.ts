@@ -33,8 +33,9 @@ export function renderBuild(r: BuildReport, format: 'text' | 'json'): string {
   if (format === 'json') return `${JSON.stringify(r, null, 2)}\n`;
   // After a fill, the gaps it closed are the files under Wrote.
   const gaps = r.filled ? r.gaps.filter((g) => g.fill === null) : r.gaps;
-  const fills = r.gaps.filter((g) => g.fill !== null).length;
-  const gapRows = gaps.map((g) => [`  ${g.path} does not reach ${g.harness}`, g.fill ? `fill: ${g.fill} (${g.reason})` : `no fill: ${g.reason}`]);
+  // One AGENTS.md can close several gaps.
+  const fills = new Set(r.gaps.flatMap((g) => g.fill ?? [])).size;
+  const gapRows = gaps.map((g) => [`  ${g.path} ${g.stale ? 'reaches' : 'does not reach'} ${g.harness}${g.stale ? ' out of date' : ''}`, g.fill ? `fill: ${g.fill} (${g.reason})` : `no fill: ${g.reason}`]);
   const lines = [
     `ctxlock build · ${r.root}`,
     '',
@@ -47,7 +48,7 @@ export function renderBuild(r: BuildReport, format: 'text' | 'json'): string {
     ...(r.generated.length ? ['', `Generated (${GENERATED_FILE}):`, table(r.generated.map((g) => [`  ${g.path}`, STATES[g.state](g.source)]))] : []),
     ...list('Wrote:', r.written),
     ...list('Removed, since its source is gone:', r.removed),
-    ...list('Left as it is, since a person wrote or edited it after the plan:', r.refused),
+    ...list('Left as it is, since a person wrote or edited it, or it is reached through a link:', r.refused),
     ...(!r.filled && fills > 0 && r.generatedError === null ? ['', `ctxlock build --fill-missing writes the ${fills} fill${fills === 1 ? '' : 's'} above.`] : []),
   ];
   return `${lines.join('\n')}\n`;

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { applyFill } from './build/apply.js';
 import { findDrift } from './build/drift.js';
-import { GENERATED_FILE, generatedStatus, loadGenerated } from './build/generated.js';
+import { GENERATED_FILE, generatedStatus } from './build/generated.js';
 import { BuildError, suggestIndex } from './build/index-suggest.js';
 import { planFill } from './build/plan.js';
 import { previewFill } from './build/preview.js';
@@ -127,16 +127,16 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const { written, removed, refused } = opts.fillMissing ? await applyFill(top ?? root, plan, scan.generated.files) : { written: [], removed: [], refused: [] };
       // A fill changes the files and the record, so both are read again.
       const now = opts.fillMissing ? fsReader(root, { local: false }) : reader;
-      const recorded = opts.fillMissing ? (await loadGenerated(now)).files : scan.generated.files;
+      const final = opts.fillMissing ? await scanRepo(now) : scan;
       io.stdout(
         renderBuild(
           {
             root,
-            budget: scan.budget,
+            budget: final.budget,
             after: plan.actions.length > 0 ? after.budget : null,
             gaps: plan.gaps,
             drift: findDrift(scan),
-            generated: await generatedStatus(now, recorded),
+            generated: await generatedStatus(now, final.generated.files),
             generatedError: scan.generated.error,
             written,
             removed,

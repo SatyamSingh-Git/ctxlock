@@ -39,8 +39,8 @@ Drift:
 ctxlock build --fill-missing writes the 2 fills above.
 ```
 
-- **Budget** is the same table as [`ctxlock budget`](commands.md#ctxlock-budget). With fills planned, a second table shows it after they are written.
-- **Gaps** are files one agent reads and the other does not, with the file that would close each gap, or the reason there is none.
+- **Budget** is the same table as [`ctxlock budget`](commands.md#ctxlock-budget). With fills planned, a second table shows it after they are written. After `--fill-missing`, the first table is the budget as the fill left it.
+- **Gaps** are files one agent reads and the other does not, with the file that would close each gap, or the reason there is none. A file the agent reads through a generated copy that is out of date `reaches claude-code out of date`. The closing line counts each file to write once, however many gaps it closes.
 - **Drift** is two files written by hand that serve the same folder for different agents and differ:
   - two copies of a skill, one in `.claude/skills` and one in `.agents/skills`, whose files differ;
   - a `CLAUDE.md` and the `AGENTS.md` beside it, when the `CLAUDE.md` does not import it. The counts are of distinct, non-empty lines.

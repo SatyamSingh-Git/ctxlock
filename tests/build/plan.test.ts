@@ -219,6 +219,8 @@ describe('planFill: what is generated already', () => {
   it('regenerates a stale copy nobody edited, and leaves an edited one alone', async () => {
     const stale = await plan({ 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': v2, '.claude/skills/release/SKILL.md': v1, [GENERATED_FILE]: record });
     expect(stale.actions.map((a) => [a.target, a.files[0]!.bytes.toString('utf8')])).toEqual([['.claude/skills/release', v2]]);
+    // The copy reaches Claude Code already, out of date.
+    expect(stale.gaps).toEqual([{ path: '.agents/skills/release', harness: 'claude-code', fill: '.claude/skills/release', reason: 'a copy of the skill', stale: true }]);
 
     const edited = await plan({ 'AGENTS.md': 'a', '.agents/skills/release/SKILL.md': v2, '.claude/skills/release/SKILL.md': 'mine', [GENERATED_FILE]: record });
     expect(edited.actions).toEqual([]);

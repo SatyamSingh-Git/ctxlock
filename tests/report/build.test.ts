@@ -37,11 +37,29 @@ describe('renderBuild', () => {
 
     expect(text).toContain('Wrote:\n  .claude/skills/release/SKILL.md');
     expect(text).toContain('Removed, since its source is gone:\n  .claude/skills/release/old.sh');
-    expect(text).toContain('Left as it is, since a person wrote or edited it after the plan:\n  AGENTS.md');
+    expect(text).toContain('Left as it is, since a person wrote or edited it, or it is reached through a link:\n  AGENTS.md');
     expect(text).not.toContain('.agents/skills/release does not reach');
     expect(text).toContain('.claude/rules/ts.md does not reach codex');
     expect(text).not.toContain('--fill-missing writes');
     expect(text).not.toContain('Budget after');
+  });
+
+  it('counts each fill once, however many gaps it closes, and says a stale copy reaches the agent out of date', () => {
+    const shared = { harness: 'codex' as const, fill: 'AGENTS.md', reason: 'an AGENTS.md from what Claude Code loads there' };
+    const text = renderBuild(
+      report({
+        gaps: [
+          { path: '.agents/skills/release', harness: 'claude-code', fill: '.claude/skills/release', reason: 'a copy of the skill', stale: true },
+          { path: '.claude/rules/style.md', ...shared },
+          { path: 'CLAUDE.md', ...shared },
+        ],
+      }),
+      'text',
+    );
+
+    expect(text).toMatch(/\.agents\/skills\/release reaches claude-code out of date\s+fill: \.claude\/skills\/release/);
+    expect(text).toMatch(/CLAUDE\.md does not reach codex\s+fill: AGENTS\.md/);
+    expect(text.trimEnd().endsWith('ctxlock build --fill-missing writes the 2 fills above.')).toBe(true);
   });
 
   it('says when the record is not valid, and offers no fill, which would stop on it', () => {

@@ -231,6 +231,12 @@ describe('ctxlock build', { timeout: 120_000 }, () => {
     expect((await cli('lint', dir)).stdout).not.toContain('L11-coverage');
   });
 
+  it('shows the budget as it stands after a fill', async () => {
+    const { dir } = await gitRepo([{ 'CLAUDE.md': 'Use pnpm.\n' }]);
+    expect((await cli('build', dir)).stdout).toMatch(/Budget:\n.*\n.*\ncodex\s+\.\s+0 \/ 32768/);
+    expect((await cli('build', dir, '--fill-missing')).stdout).toMatch(/Budget:\n.*\n.*\ncodex\s+\.\s+10 \/ 32768/);
+  });
+
   it('reports what it generated as it stands after the fill, not before', async () => {
     const { dir } = await gitRepo([{ 'AGENTS.md': 'Use pnpm.\n', '.agents/skills/release/SKILL.md': SKILL }]);
     const upToDate = /Generated \(\.ctxlock\/generated\.json\):\n\s+\.claude\/skills\/release\/SKILL\.md\s+up to date/;

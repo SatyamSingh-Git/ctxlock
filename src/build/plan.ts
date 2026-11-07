@@ -32,6 +32,8 @@ export interface Gap {
   harness: HarnessId;
   fill: string | null;
   reason: string;
+  // The fill is there already, out of date: it reaches the harness, with what its sources said before.
+  stale?: true;
 }
 
 export interface FillPlan {
@@ -225,6 +227,10 @@ export async function planFill(scan: ScanResult, reader: RepoReader, ignored: (p
   }
   return {
     actions: actions.filter((a) => !upToDate.has(a.target)).sort((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0)),
-    gaps: gaps.filter((g) => g.fill === null || !upToDate.has(g.fill)).sort(byPath),
+    gaps: gaps
+      .filter((g) => g.fill === null || !upToDate.has(g.fill))
+      // A planned target holds only files ctxlock wrote, so any file there is an earlier fill.
+      .map((g) => (g.fill !== null && listed.some((p) => p === g.fill || p.startsWith(`${g.fill}/`)) ? { ...g, stale: true as const } : g))
+      .sort(byPath),
   };
 }

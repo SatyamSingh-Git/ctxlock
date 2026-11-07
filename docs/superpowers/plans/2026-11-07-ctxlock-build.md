@@ -33,7 +33,7 @@
 - `M2` (fixed): the report never mentioned an invalid `.ctxlock/generated.json` unless `--fill-missing` was given. It now says so, and offers no fill.
 - `M4` (fixed): the depth-first import walk could drop an import near the hop limit that Claude Code's breadth-first walk loads. Hops now come from a breadth-first walk; the depth-first one only orders the text.
 - `M5` (fixed): `--suggest-index` read its folder from the repository's top level, so `.`, `.\docs`, absolute paths and runs from a subfolder failed; folders were ordered by first file, not sorted. The folder is now taken from the directory `build` runs on, and folders are sorted.
-- `M6`: report wording. "Writes the N fills" counts gaps, not files. After a fill, Budget shows the old budget. A stale copy reads as "does not reach".
+- `M6` (fixed): report wording. "Writes the N fills" counted gaps, not fills. After a fill, Budget showed the old budget. A stale copy read as "does not reach". Refusals had one label for two reasons. Each fill is now counted once, the budget is rescanned after a fill, a stale copy "reaches ... out of date", and the label names both reasons.
 - `M7` (fixed): `L7` reported a stale generated copy as diverged copies, on top of `L14`. It now leaves a copy whose files are all generated to `L14`.
 - `M8` (fixed): an exception partway through `applyFill` left the files written so far unrecorded. The record is now written in a `finally`.
 - `M9` (fixed): a rule with `paths: []` gave neither a gap nor an action. It is now a gap, `Codex cannot scope paths: []`.
