@@ -67,6 +67,12 @@ Environment variables matter here: a hook inherits the environment of whatever s
   - A skill Claude Code finds further down, once the agent works there, isn't credited. Its name could be one of Claude Code's own skills, such as `simplify`, so it isn't listed as not loaded either.
 - **Which skills a session was offered.** Claude Code lists skills when a session starts, and no hook reports that list. So for a skill, "not loaded" means never invoked.
   - A skill with `disable-model-invocation: true` is never offered to the model. ctxlock neither predicts it nor reports it as not loaded.
+- **A skill a person invokes by typing `/name`.**
+  - Claude Code runs it without a Skill tool call, so no hook the collector uses reports it. This was checked live: a typed `/release` ran the skill and sent no event.
+  - Claude Code's `UserPromptExpansion` hook names typed commands. The collector doesn't use it yet.
+- **A project skill hidden by one of the same name.**
+  - Claude Code prefers an enterprise skill over a personal one, and a personal one over the project's ([Claude Code's docs](https://code.claude.com/docs/en/skills)).
+  - So when `~/.claude/skills` holds a skill named like one of the project's, Claude Code runs the personal one, while ctxlock credits the call to the project's.
 - **A load Claude Code doesn't report.**
   - In one live session of six, Claude Code sent no load event at all, not even for the user's own `CLAUDE.md` ([report](../docs/dogfood/2026-11-08-collector.md#a-session-that-reported-nothing)).
   - So a count can be one short, and "Not loaded in these sessions" means more after many sessions than after a few.
