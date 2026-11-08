@@ -263,7 +263,7 @@ These sessions match no consumer in ctxlock.yaml. Declare one so impact can name
 - **Loaded** lists each unit with the number of sessions that loaded it, how, and when last.
   - "On another version" counts sessions that loaded different bytes from the file as it is now.
   - A unit Claude Code never reports shows as `(predicted)`. That is an `AGENTS.md` it reads through its fallback, when there is no `CLAUDE.md`.
-- **Not loaded in these sessions** lists what ctxlock predicts Claude Code can load from the top of the repository, but no session did. Over many sessions, these are the units to review or delete.
+- **Not loaded in these sessions** lists what ctxlock predicts Claude Code can load, from the folders the sessions started in, but no session did. It leaves out what Claude Code never reports ([the collector](collector.md#what-it-cant-see)). Over many sessions, these are the units to review or delete.
 - **When no consumer in `ctxlock.yaml` runs on Claude Code,** it says so, because `impact` can only name declared consumers.
 
 **What counts:**

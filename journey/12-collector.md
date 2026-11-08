@@ -50,6 +50,12 @@ Of 75 mutants, 74 were killed. The survivor, the sort of the month files, change
 - **Claude Code dropped a load event.**
   - In one live session of six, no `InstructionsLoaded` fired at all, not even for the user's own `CLAUDE.md`. The dump plugin saw nothing either, and a rerun reported it.
   - It isn't ctxlock's to fix. A session count can be one short, and the guide says so.
+- **The final review found the list of units nobody loaded wrong in two monorepo layouts.**
+  - **What it reproduced:**
+    - In a repository with no `CLAUDE.md`, every `AGENTS.md` below the top showed as not loaded, though Claude Code reads them without reporting it.
+    - Every session was judged as if it had started at the top. So a package's skill, invoked from the package's own folder, showed as never loaded.
+  - **The fix:** each session is now judged by the folder it started in. What Claude Code never reports is left out, and `who-uses` shows "0 of N" only for a unit a session could be seen loading.
+  - **Why it mattered:** the guide calls that list the candidates to delete.
 - **A shell edit ran stray commands.** Markdown with backticks went through `node -e` inside bash double quotes, and bash ran the backticked spans. Nothing shipped ([mistakes](mistakes.md)).
 
 ## What was learned

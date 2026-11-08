@@ -5,7 +5,7 @@ How ctxlock got here: what was tried, what changed, what worked, what broke, and
 **Latest:** [12 — the collector: what Claude Code actually loaded](12-collector.md).
 - Plan 5: a Claude Code plugin that records which units developers' sessions load, as paths and digests only; `ctxlock loads`; observed sessions in `who-uses`; 518 tests.
 - Live on S4's fixture, the loads ctxlock reported matched Claude Code's own load events exactly.
-- Found: eval's digest misread CRLF checkouts, and Claude Code dropped every load event in one session of six.
+- Found: eval's digest misread CRLF checkouts; Claude Code dropped every load event in one session of six; and the final review caught "not loaded" judging every session from the repository's top.
 
 **Earlier:** [11 — the graph: what a change reaches, and who should look](11-graph.md).
 - Plan 4: `depends-on` and consumers in `ctxlock.yaml`, `ctxlock who-uses`, `ctxlock impact` and an Impact section in the pull request comment, `L15-graph`, and `eval` running the probes of everything a change reaches; 486 tests.

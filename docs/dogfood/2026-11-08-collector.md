@@ -74,6 +74,8 @@ ctxlock loads · 1 Claude Code session, 2026-11-08
 
 Loaded:
   AGENTS.md  1 session  session_start (predicted)  last 2026-11-08
+
+These sessions match no consumer in ctxlock.yaml. Declare one so impact can name it.
 ```
 
 **With a rule beside the `AGENTS.md`, the rule's load was reported,** as was the user's `CLAUDE.md`. The `AGENTS.md` still reported nothing, though the agent quoted it: "`AGENTS.md` also says to use pnpm".
@@ -107,6 +109,8 @@ Not loaded in these sessions:
   .claude/skills/build-wasm         listed
   .claude/skills/check              listed
   .claude/skills/test-python        listed
+
+These sessions match no consumer in ctxlock.yaml. Declare one so impact can name it.
 ```
 
 ```
@@ -123,6 +127,20 @@ Loaded in sessions (observed):
 ```
 
 **Three of the eight skills never appear:** `new-provider`, `pr` and `release`. Each sets `disable-model-invocation: true`. Claude Code doesn't offer them to the model, so ctxlock neither predicts them as listed nor reports them as not loaded.
+
+## What the final review found
+
+A fresh review reproduced two cases, which these fixtures did not cover, where "Not loaded in these sessions" was wrong:
+- **In a repository with no `CLAUDE.md`, every `AGENTS.md` below the top was listed as not loaded.** Claude Code reads those through the same fallback, and reports nothing for them either.
+- **Every session was judged as if it had started at the top of the repository.**
+  - A skill that a package offers, invoked from that package's folder, was listed as not loaded.
+  - A root `AGENTS.md` was predicted even for a session under a folder with its own `CLAUDE.md`.
+
+Both are fixed:
+- Each session is now judged by the folder it started in.
+- What Claude Code never reports is left out of the list.
+
+Rerun on the stores above, the output is unchanged, and the S4 comparison still matches exactly.
 
 ## What it cost
 

@@ -33,7 +33,7 @@ The script runs on three Claude Code hooks. Each event becomes one line of JSON 
 | `skill` | The agent invokes a skill | The skill's name |
 | `error` | The collector could not record an event | A message |
 
-Every line also has its time and `"harness": "claude-code"`.
+Every line also has its time. Every line but an `error` also has `"harness": "claude-code"`.
 
 **It never records:**
 - a file's content;
@@ -54,13 +54,17 @@ Environment variables matter here: a hook inherits the environment of whatever s
 - **The events** live in `~/.ctxlock/events`. If `CTXLOCK_HOME` is set, they go in `$CTXLOCK_HOME/events` instead. They are never written into a repository, and they never leave your machine. Delete the folder to forget them.
 - **To pause the collector:** `claude plugin disable ctxlock@ctxlock`.
 - **To remove it:** `claude plugin uninstall ctxlock@ctxlock`.
-- **ctxlock's own eval runs are never recorded.** They start Claude Code with `--setting-sources project`, which loads none of the plugins you installed.
+- **ctxlock's own eval runs are not recorded** when the plugin is installed for your user, as the commands above do. Eval runs start Claude Code with `--setting-sources project`, which loads no plugin installed for the user.
 
 ## What it can't see
 
 - **An `AGENTS.md` read through Claude Code's fallback.**
   - With no `CLAUDE.md`, Claude Code reads `AGENTS.md` through a built-in plugin that reports nothing, though the agent follows the file ([S4](../docs/spikes/S4-telemetry.md)).
-  - ctxlock adds those loads from its own prediction, marked `(predicted)`.
+  - ctxlock adds the loads at a session's start from its own prediction, marked `(predicted)`.
+  - An `AGENTS.md` further down, which Claude Code reads once the agent works in its folder, can't be counted at all. So it is never listed as not loaded.
+- **A skill below the folder a session started in.**
+  - Claude Code offers the skills of the start folder and of every folder above it, and ctxlock credits a call to those.
+  - A skill Claude Code finds further down, once the agent works there, isn't credited. Its name could be one of Claude Code's own skills, such as `simplify`, so it isn't listed as not loaded either.
 - **Which skills a session was offered.** Claude Code lists skills when a session starts, and no hook reports that list. So for a skill, "not loaded" means never invoked.
   - A skill with `disable-model-invocation: true` is never offered to the model. ctxlock neither predicts it nor reports it as not loaded.
 - **A load Claude Code doesn't report.**
