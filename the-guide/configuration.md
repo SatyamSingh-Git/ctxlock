@@ -27,6 +27,20 @@ units:
     owner: "@docs-team"
     tier: reviewed
 
+# The agent configurations that use these units: usually this repository, run with the agents its
+# developers use. ctxlock graph uses them to show who a change reaches.
+consumers:
+  payments-api:
+    owner: "@payments-team"
+    harnesses: [claude-code, codex]
+    models: [claude-opus-5-5]
+    repos: [acme/payments-api]
+    depends-on:
+      - .agents/skills/api-conventions@certified   # @tier: the least tier it must have
+      - .claude/rules/testing.md
+    evals: [evals/probes/payments.yaml]
+    maturity: production       # experimental | production | deprecated
+
 # Override a harness limit if a vendor changes it before ctxlock does.
 limits:
   codexChainBytes: 65536
@@ -58,7 +72,13 @@ Quote owners that start with `@`; YAML reserves that character.
 | `units.<path>.verified-at` | no | When someone last checked it, as `YYYY-MM-DD` |
 | `units.<path>.stale-after` | no | When it needs checking again, as `YYYY-MM-DD` |
 | `units.<path>.sources` | no | Where the content came from |
-| `units.<path>.depends-on` | no | Other units this one relies on |
+| `units.<path>.depends-on` | no | Other units this one relies on: each a unit's path, or its ID as ctxlock prints it, with an optional `@<tier>` it must have at least |
+| `consumers.<name>.owner` | no | The person or team accountable for this consumer |
+| `consumers.<name>.harnesses` | no | The agents it runs with. Defaults to `harnesses` above |
+| `consumers.<name>.depends-on` | no | The units it relies on, written as in `units.<path>.depends-on` |
+| `consumers.<name>.evals` | no | Probe files, or folders of them, under `evals/probes/` |
+| `consumers.<name>.maturity` | no | `experimental`, `production` or `deprecated`. Defaults to `production` |
+| `consumers.<name>.models`, `.repos` | no | The models it pins and the repositories it runs in. Recorded now; the eval and sync work reads them later |
 | `limits.<name>` | no | A non-negative integer overriding a harness limit (see below). `0` is allowed; Codex treats it as "load no AGENTS.md". |
 | `lint.severity.<rule>` | no | Change a rule's severity, or turn it `off` |
 | `lint.ignore` | no | Globs of paths whose findings are dropped |
@@ -68,6 +88,8 @@ Quote owners that start with `@`; YAML reserves that character.
 | `eval.max-minutes` | no | Minutes after which no new run starts. Defaults to 20 |
 
 Unit paths are repo-relative with `/`, e.g. `packages/api/AGENTS.md`. A skill is keyed by its directory (`.agents/skills/release-notes`), not by its `SKILL.md`.
+
+Tiers rank `certified`, `reviewed`, `imported`, then `proposal`. A unit with no `tier` counts as `reviewed`. Only a bare word after the last `@` is read as a tier, so `notes@v2.md` is a path.
 
 ## Validation
 

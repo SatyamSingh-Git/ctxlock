@@ -16,6 +16,7 @@ describe('loadRegistry', () => {
       present: false,
       harnesses: ['claude-code', 'codex'],
       units: {},
+      consumers: [],
       limits: {},
       lint: { severity: {}, ignore: [] },
       eval: { model: 'sonnet', runs: 3, maxRuns: 24, maxMinutes: 20 },
@@ -41,8 +42,13 @@ units:
       verifiedAt: '2026-10-01',
       staleAfter: '2027-01-01',
       sources: ['https://example.com/policy'],
-      dependsOn: ['.agents/skills/release-notes'],
+      dependsOn: [{ ref: '.agents/skills/release-notes' }],
     });
+  });
+
+  it('a depends-on entry may require a tier after its last @', async () => {
+    const registry = await load('version: 1\nunits:\n  b.md:\n    depends-on: [a.md@proposal, docs/@scope/c.md, "@notes", notes@v2.md]\n');
+    expect(registry.units['b.md']!.dependsOn).toEqual([{ ref: 'a.md', tier: 'proposal' }, { ref: 'docs/@scope/c.md' }, { ref: '@notes' }, { ref: 'notes@v2.md' }]);
   });
 
   it('an unknown key throws RegistryError naming units.AGENTS.md.ownr', async () => {
@@ -94,5 +100,55 @@ units:
 
   it('invalid YAML is a RegistryError, not a raw parser error', async () => {
     expect(await errorOf('version: 1\nunits: [unclosed\n')).toBeInstanceOf(RegistryError);
+  });
+});
+
+describe('loadRegistry: consumers', () => {
+  const PAYMENTS = `version: 1
+consumers:
+  payments-api:
+    owner: "@payments-team"
+    harnesses: [claude-code, codex]
+    models: [claude-opus-5-5]
+    repos: [acme/payments-api]
+    depends-on:
+      - .agents/skills/api-conventions@certified
+      - .claude/rules/testing.md
+    evals: [evals/probes/payments.yaml]
+    maturity: production
+`;
+
+  it('reads a consumer, each requirement split into its path and the tier it needs', async () => {
+    expect((await load(PAYMENTS)).consumers).toEqual([
+      {
+        name: 'payments-api',
+        owner: '@payments-team',
+        harnesses: ['claude-code', 'codex'],
+        models: ['claude-opus-5-5'],
+        repos: ['acme/payments-api'],
+        dependsOn: [{ ref: '.agents/skills/api-conventions', tier: 'certified' }, { ref: '.claude/rules/testing.md' }],
+        evals: ['evals/probes/payments.yaml'],
+        maturity: 'production',
+      },
+    ]);
+  });
+
+  it("fills in the registry's harnesses and empty lists, and sorts consumers by name", async () => {
+    const registry = await load('version: 1\nharnesses: [codex]\nconsumers:\n  web:\n    depends-on: [a.md]\n  api: {}\n');
+    expect(registry.consumers).toEqual([
+      { name: 'api', harnesses: ['codex'], models: [], repos: [], dependsOn: [], evals: [], maturity: 'production' },
+      { name: 'web', harnesses: ['codex'], models: [], repos: [], dependsOn: [{ ref: 'a.md' }], evals: [], maturity: 'production' },
+    ]);
+  });
+
+  it('names the key of a tier that is none, an unknown key, an unknown harness and an unknown maturity', async () => {
+    const consumer = (body: string) => errorOf(`version: 1\nconsumers:\n  payments-api:\n${body}`);
+
+    expect((await consumer('    depends-on: [x@latest]\n')).message).toContain(
+      'consumers.payments-api.depends-on.0: "latest" is not a tier (certified, reviewed, imported, proposal)',
+    );
+    expect((await consumer('    foo: 1\n')).message).toContain('consumers.payments-api.foo: unknown key');
+    expect((await consumer('    harnesses: [cursor]\n')).message).toContain('consumers.payments-api.harnesses.0');
+    expect((await consumer('    maturity: retired\n')).message).toContain('consumers.payments-api.maturity');
   });
 });

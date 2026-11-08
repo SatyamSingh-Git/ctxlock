@@ -4,19 +4,42 @@ import { LIMITS, type Limits } from '../harness/limits.js';
 import type { HarnessId, Severity } from '../model.js';
 import type { RepoReader } from '../repo/reader.js';
 
+const TIERS = ['certified', 'reviewed', 'imported', 'proposal'] as const;
+export type Tier = (typeof TIERS)[number];
+
+// A unit's path or ID, and the tier it must have at least.
+export interface Requirement {
+  ref: string;
+  tier?: Tier;
+}
+
 export interface UnitMeta {
   owner?: string;
-  tier?: 'certified' | 'reviewed' | 'imported' | 'proposal';
+  tier?: Tier;
   verifiedAt?: string;
   staleAfter?: string;
   sources?: string[];
-  dependsOn?: string[];
+  dependsOn?: Requirement[];
+}
+
+// An agent configuration that uses units (spec §4.2). Models and repos are recorded for the eval and
+// sync plans; nothing reads them yet.
+export interface Consumer {
+  name: string;
+  owner?: string;
+  harnesses: HarnessId[];
+  models: string[];
+  repos: string[];
+  dependsOn: Requirement[];
+  evals: string[];
+  maturity: 'experimental' | 'production' | 'deprecated';
 }
 
 export interface Registry {
   present: boolean;
   harnesses: HarnessId[];
   units: Record<string, UnitMeta>;
+  consumers: Consumer[];
   limits: Partial<Limits>;
   lint: { severity: Record<string, Severity | 'off'>; ignore: string[] };
   eval: { model: string; runs: number; maxRuns: number; maxMinutes: number };
@@ -28,10 +51,27 @@ export class RegistryError extends Error {}
 
 const FILE = 'ctxlock.yaml';
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected a YYYY-MM-DD date');
+const harness = z.enum(['claude-code', 'codex']);
+
+// "path@tier". Only a bare word after the last @ is read as a tier, so an @ in a file or folder name,
+// as in docs/@scope/a.md or notes@v2.md, stays part of the path.
+const requirement = z
+  .string()
+  .min(1)
+  .transform((text, ctx): Requirement => {
+    const at = text.lastIndexOf('@');
+    const suffix = text.slice(at + 1);
+    if (at <= 0 || !/^[a-z]+$/i.test(suffix)) return { ref: text };
+    if (!(TIERS as readonly string[]).includes(suffix)) {
+      ctx.addIssue({ code: 'custom', message: `"${suffix}" is not a tier (${TIERS.join(', ')})` });
+      return z.NEVER;
+    }
+    return { ref: text.slice(0, at), tier: suffix as Tier };
+  });
 
 const schema = z.strictObject({
   version: z.literal(1),
-  harnesses: z.array(z.enum(['claude-code', 'codex'])).default(['claude-code', 'codex']),
+  harnesses: z.array(harness).default(['claude-code', 'codex']),
   limits: z
     .strictObject(
       Object.fromEntries(Object.keys(LIMITS).map((key) => [key, z.number().int().nonnegative().optional()])),
@@ -42,11 +82,25 @@ const schema = z.strictObject({
       z.string(),
       z.strictObject({
         owner: z.string().optional(),
-        tier: z.enum(['certified', 'reviewed', 'imported', 'proposal']).optional(),
+        tier: z.enum(TIERS).optional(),
         'verified-at': date.optional(),
         'stale-after': date.optional(),
         sources: z.array(z.string()).optional(),
-        'depends-on': z.array(z.string()).optional(),
+        'depends-on': z.array(requirement).optional(),
+      }),
+    )
+    .default({}),
+  consumers: z
+    .record(
+      z.string(),
+      z.strictObject({
+        owner: z.string().optional(),
+        harnesses: z.array(harness).optional(),
+        models: z.array(z.string()).default([]),
+        repos: z.array(z.string()).default([]),
+        'depends-on': z.array(requirement).default([]),
+        evals: z.array(z.string()).default([]),
+        maturity: z.enum(['experimental', 'production', 'deprecated']).default('production'),
       }),
     )
     .default({}),
@@ -76,7 +130,7 @@ export function describeIssue(issue: z.core.$ZodIssue): string {
 
 export async function loadRegistry(reader: RepoReader): Promise<Registry> {
   if (!(await reader.exists(FILE))) {
-    return { present: false, harnesses: ['claude-code', 'codex'], units: {}, limits: {}, lint: { severity: {}, ignore: [] }, eval: EVAL_DEFAULTS };
+    return { present: false, harnesses: ['claude-code', 'codex'], units: {}, consumers: [], limits: {}, lint: { severity: {}, ignore: [] }, eval: EVAL_DEFAULTS };
   }
 
   let raw: unknown;
@@ -88,7 +142,7 @@ export async function loadRegistry(reader: RepoReader): Promise<Registry> {
   const result = schema.safeParse(raw ?? {});
   if (!result.success) throw new RegistryError(`${FILE}: ${result.error.issues.map(describeIssue).join('; ')}`);
 
-  const { harnesses, limits, units, lint, eval: settings } = result.data;
+  const { harnesses, limits, units, consumers, lint, eval: settings } = result.data;
   return {
     present: true,
     harnesses,
@@ -108,6 +162,18 @@ export async function loadRegistry(reader: RepoReader): Promise<Registry> {
         ) as UnitMeta,
       ]),
     ),
+    consumers: Object.entries(consumers)
+      .map(([name, c]): Consumer => ({
+        name,
+        ...(c.owner !== undefined && { owner: c.owner }),
+        harnesses: c.harnesses ?? harnesses,
+        models: c.models,
+        repos: c.repos,
+        dependsOn: c['depends-on'],
+        evals: c.evals,
+        maturity: c.maturity,
+      }))
+      .sort((a, b) => (a.name < b.name ? -1 : 1)),
     lint,
     eval: {
       model: settings.model ?? EVAL_DEFAULTS.model,
