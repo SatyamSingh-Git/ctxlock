@@ -260,3 +260,13 @@ Checking the new no-agent-text test for the CLI, the mutation script reported th
 *Cost:* pushed to `main` in `b4712d0`; the reviewer reproduced each case on a throwaway repository. No one else had run it.
 
 *Changed:* each write checks the disk itself, every part of the path, for a link. Git says what it ignores, through `git check-ignore`, instead of ctxlock reading `.gitignore` files the way it guesses git does. A skill with linked files is left to a person.
+
+### Three pushes on a red CI
+
+M5 made `--suggest-index` compute the folder's path from the repository's top with `path.relative`. GitHub's Windows runner gives its temp folder by its 8.3 short name (`C:\Users\RUNNER~1\...`), and git gives the top by its long one, so every folder looked outside the repository. CI on `main` went red with M5, and M6 and a docs commit were pushed on top of it before anyone looked.
+
+*Cause:* each push was checked by local gates only, on a machine whose temp path has no short name. Nothing looked at the CI run that each push started.
+
+*Cost:* three commits on a red `main`, found when the live pull request test was about to start.
+
+*Changed:* the directory and the folder are compared by real path (`realpathSync.native`, which expands 8.3 names and follows links), with a test that gives the directory by its short name on Windows and by a symlink elsewhere. After each push, the CI run it starts is watched to the end.

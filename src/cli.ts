@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -109,8 +109,12 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const reader = fsReader(root, { local: false });
       const top = await gitTopLevel(root);
       if (opts.suggestIndex !== undefined) {
-        // The folder is given from the directory build runs on, and read from the repository's top.
-        const folder = relative(top ?? root, resolve(root, opts.suggestIndex)).split(sep).join('/');
+        // The folder is given from the directory build runs on, and read from the repository's top. Git
+        // gives the top by its real path; the directory may come by a symlink or an 8.3 short name, as
+        // the temp folder does on GitHub's Windows runners, which realpathSync.native expands.
+        const real = (path: string) => (existsSync(path) ? realpathSync.native(path) : path);
+        const base = real(root);
+        const folder = relative(top ?? base, real(resolve(base, opts.suggestIndex))).split(sep).join('/');
         if (folder === '..' || folder.startsWith('../') || isAbsolute(folder)) throw new BuildError(`${opts.suggestIndex} is outside the repository`);
         const { text, bytes } = await suggestIndex(reader, folder);
         io.stdout(`${text}\n\n${bytes} bytes. Not written. Measure it with a probe before you commit it: see the-guide/build.md.\n`);

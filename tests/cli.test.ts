@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { main } from '../src/cli.js';
@@ -287,6 +288,30 @@ describe('ctxlock build', { timeout: 120_000 }, () => {
 
     const outside = await cli('build', dir, '--suggest-index', tempDir());
     expect([outside.code, outside.stderr]).toEqual([2, expect.stringMatching(/ is outside the repository\n$/)]);
+  });
+
+  it('finds the index folder from a directory given by another name than git gives it: an 8.3 short name, or a symlink', async () => {
+    // GitHub's Windows runners give the temp folder by its 8.3 short name; git gives the long one.
+    const otherName = (dir: string) => {
+      if (process.platform === 'win32') {
+        return execFileSync('powershell', ['-NoProfile', '-Command', `(New-Object -ComObject Scripting.FileSystemObject).GetFolder('${dir}').ShortPath`], { encoding: 'utf8' }).trim();
+      }
+      const link = join(tempDir(), 'link');
+      symlinkSync(dir, link);
+      return link;
+    };
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'a', 'docs/a.md': '# A\n' }]);
+    const other = otherName(dir);
+    expect(other).not.toBe(dir);
+
+    expect((await cli('build', other, '--suggest-index', 'docs')).stdout.split('|')[0]).toBe('[docs index]');
+    expect((await cli('build', other, '--suggest-index', 'nope')).stderr).toBe('no markdown files under nope\n');
+    expect((await cli('build', dir, '--suggest-index', join(other, 'docs'))).stdout.split('|')[0]).toBe('[docs index]');
+
+    // Outside git, the directory itself is where the folder is read from.
+    const plain = tempDir();
+    writeTree(plain, { 'docs/a.md': '# A\n' });
+    expect((await cli('build', otherName(plain), '--suggest-index', 'docs')).stdout.split('|')[0]).toBe('[docs index]');
   });
 
   it('exits 2 for a path that is no directory, a folder with no markdown, and a fill over an unreadable record', async () => {
