@@ -17,7 +17,7 @@ If something here is wrong, out of date, or simply does not work, open an issue 
 | [build.md](build.md) | `ctxlock build`: each agent's context, the gaps between them, drift, and filling what is missing without writing over anything a person wrote | Written |
 | [evals.md](evals.md) | Probes: how to write them, how `ctxlock eval` runs them without letting the agent act, and how to read the result | Written; checked live on three public repositories |
 | [configuration.md](configuration.md) | `ctxlock.yaml`: harnesses, owners, trust tiers, limit overrides, rule severities | Written; format and validation implemented |
-| [rules.md](rules.md) | Every lint rule: what it checks, why (with the research behind it), and how to fix a finding | Written for every rule built so far: L0–L11, L13 and L14 |
+| [rules.md](rules.md) | Every lint rule: what it checks, why (with the research behind it), and how to fix a finding | Written for every rule built so far: L0–L11 and L13–L15 |
 | [agents.md](agents.md) | What ctxlock predicts each agent loads, and how that prediction is checked | Written; Claude Code and Codex predictions implemented |
 | [github-action.md](github-action.md) | Adding the PR check to a repository: permissions, `fetch-depth: 0`, fork PRs | Written; not yet run on a live pull request |
 | [troubleshooting.md](troubleshooting.md) | What goes wrong, why, and the fix | Written from the first dogfood pass |

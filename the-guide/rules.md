@@ -18,7 +18,7 @@ lint:
     - "vendor/**"
 ```
 
-> **Status:** the rules on this page are implemented and tested: L0–L11, L13 and L14. L12, a model-based contradiction check, is planned for later. The `ctxlock lint` command that runs them arrives with the first CLI release.
+> **Status:** the rules on this page are implemented and tested: L0–L11 and L13–L15. L12, a model-based contradiction check, is planned for later. The `ctxlock lint` command that runs them arrives with the first CLI release.
 
 ## What the findings look like
 
@@ -301,7 +301,7 @@ Five or more gives an `info` finding. It is a heuristic until evals can measure 
 
 ---
 
-## L9, L10, L11, L13, L14: context that drifts from the repository and the team
+## L9, L10, L11, L13, L14, L15: context that drifts from the repository and the team
 
 Context is code that nobody runs. When a file is renamed or a script removed, the instruction that names it keeps telling agents to use it. When nobody owns a file, nobody notices. When two agents read different files, they work to different rules.
 
@@ -388,3 +388,19 @@ Checks each file listed in `.ctxlock/generated.json`, the record `ctxlock build 
 A record that does not parse, or names a path outside the repository, is one finding: `.ctxlock/generated.json is not valid: <reason>`. Since `diff` and the Action run the same rules, a pull request that edits a source and not its copy is reported there too.
 
 **Fix:** do what the message says. `ctxlock build --fill-missing` rewrites a stale file only when nobody edited it since. It also removes a copied skill file whose source the skill no longer has; a file whose whole source is gone, such as an `AGENTS.md` made from a deleted `CLAUDE.md`, is yours to delete.
+
+### `L15-graph` (should)
+
+Checks the graph `ctxlock.yaml` declares: each unit's `depends-on`, and each consumer's `depends-on` and `evals` ([graph.md](graph.md)):
+
+```
+ctxlock.yaml lists gone.md, which is no unit
+.claude/rules/b.md depends on missing.md, which is no unit
+consumer payments-api depends on nope.md, which is no unit
+consumer payments-api needs .claude/rules/b.md at certified; it is reviewed
+consumer payments-api lists evals evals/probes/payments.yaml, which holds no probe file
+```
+
+A reference names a unit by its path or its ID, so a renamed or deleted unit leaves its references behind. That is how a pull request that removes a unit is caught still being relied on. A requirement such as `@certified` is met by that tier or a more trusted one, and a unit with no `tier` counts as `reviewed`.
+
+**Fix:** point the reference at the unit's new path, or remove it. For a tier, raise the unit's `tier` once it has been reviewed to that level, or lower the requirement. For `evals`, name a probe file under `evals/probes/`, or a folder of them.

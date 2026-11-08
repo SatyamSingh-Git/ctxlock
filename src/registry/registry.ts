@@ -4,7 +4,8 @@ import { LIMITS, type Limits } from '../harness/limits.js';
 import type { HarnessId, Severity } from '../model.js';
 import type { RepoReader } from '../repo/reader.js';
 
-const TIERS = ['certified', 'reviewed', 'imported', 'proposal'] as const;
+// Most trusted first.
+export const TIERS = ['certified', 'reviewed', 'imported', 'proposal'] as const;
 export type Tier = (typeof TIERS)[number];
 
 // A unit's path or ID, and the tier it must have at least.

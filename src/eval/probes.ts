@@ -65,8 +65,10 @@ export function parseProbeFile(text: string, file: string): Probe[] {
   });
 }
 
+export const isProbeFile = (path: string) => path.startsWith('evals/probes/') && /\.ya?ml$/.test(path);
+
 export async function loadProbes(reader: RepoReader): Promise<Probe[]> {
-  const files = (await reader.listFiles()).filter((p) => p.startsWith('evals/probes/') && /\.ya?ml$/.test(p));
+  const files = (await reader.listFiles()).filter(isProbeFile);
   const probes: Probe[] = [];
   const seen = new Map<string, string>();
   for (const file of files) {
