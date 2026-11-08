@@ -78,6 +78,14 @@ describe('the collector', () => {
     expect(r.text).not.toMatch(/secret/);
   });
 
+  it('records nothing from a call to any other tool, whatever its input holds', () => {
+    const repo = tempDir();
+    const r = collect(
+      JSON.stringify({ ...common(repo), hook_event_name: 'PostToolUse', tool_name: 'mcp__notes__save', tool_input: { skill: 'the whole note body' }, tool_response: {} }),
+    );
+    expect([r.status, r.stdout, r.files]).toEqual([0, '', []]);
+  });
+
   it('records a session start with its source', () => {
     const repo = tempDir();
     const r = collect(JSON.stringify({ ...common(repo), hook_event_name: 'SessionStart', source: 'startup' }));

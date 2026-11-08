@@ -36,8 +36,9 @@ function lineFor(p) {
       return { ...base, event: 'session_start', source: p.source };
     case 'InstructionsLoaded':
       return { ...base, event: 'load', file: p.file_path, sha256: digest(p.file_path), reason: p.load_reason, trigger: p.trigger_file_path, parent: p.parent_file_path };
+    // The hooks only send Skill calls, but what is never recorded should not rest on a matcher.
     case 'PostToolUse':
-      return { ...base, event: 'skill', skill: p.tool_input.skill };
+      return p.tool_name === 'Skill' ? { ...base, event: 'skill', skill: p.tool_input.skill } : null;
     default:
       return null;
   }
