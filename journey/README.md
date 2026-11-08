@@ -2,7 +2,12 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [10 — build: closing the gaps between agents, without touching what people wrote](10-build.md).
+**Latest:** [11 — the graph: what a change reaches, and who should look](11-graph.md).
+- Plan 4: `depends-on` and consumers in `ctxlock.yaml`, `ctxlock who-uses`, `ctxlock impact` and an Impact section in the pull request comment, `L15-graph`, and `eval` running the probes of everything a change reaches; 486 tests.
+- On openai-agents-python, four declared references between its skills were enough to name four dependent skills, a consumer and the owners to ask for a one-line edit.
+- Found: CI on `main` red for three pushes over Windows 8.3 short names, and a plan that let a pull request hide its own reach by deleting an edge.
+
+**Earlier:** [10 — build: closing the gaps between agents, without touching what people wrote](10-build.md).
 - Plan 3: `ctxlock build` reports each agent's budget, the gaps between Claude Code and Codex, and drift; `--fill-missing` writes skill copies, `CLAUDE.md` imports and `AGENTS.md` files, and records them; `L14-generated` catches drift in what it wrote; 434 tests.
 - On three public repositories and the S2 fixture, every gap ctxlock could close it closed, and lint agreed.
 - Found live: plano gitignores `.agents`, and the first fill wrote skill copies there that could never be committed.

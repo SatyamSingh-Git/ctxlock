@@ -27,13 +27,13 @@ This is the first of Phase 2's plans. It covers one repository. Three things com
 
 | Task | Status | Commits |
 |---|---|---|
-| 1 | Not started | |
-| 2 | Not started | |
-| 3 | Not started | |
-| 4 | Not started | |
-| 5 | Not started | |
-| 6 | Not started | |
-| 7 | Not started | |
+| 1 | Done | `fa23a7a` |
+| 2 | Done | `c851011` |
+| 3 | Done | `a410018` |
+| 4 | Done | `824f741` |
+| 5 | Done | `d74675d` |
+| 6 | Done | `f84be8b` |
+| 7 | Done: openai-agents-python, no bug ([report](../../dogfood/2026-11-08-graph.md)) | the docs commit |
 
 ## Rulings this plan makes
 

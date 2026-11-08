@@ -144,6 +144,7 @@ cd ctxlock && npm ci && npm run build
 node dist/cli.js lint /path/to/your/repo
 node dist/cli.js diff --base origin/main /path/to/your/repo
 node dist/cli.js build /path/to/your/repo                  # add --fill-missing to write the gaps
+node dist/cli.js impact --base origin/main /path/to/your/repo   # what a change reaches, from ctxlock.yaml
 
 # The behavioral check needs Claude Code, logged in
 node dist/cli.js eval --base origin/main /path/to/your/repo
@@ -182,10 +183,11 @@ flowchart LR
 - [x] **Research.** The state of agent context as of November 2026, drawn from about 400 sources ([synthesis](research/00-synthesis.md)).
 - [x] **Design.** Goals, architecture and phases ([design](docs/superpowers/specs/2026-11-05-ctxlock-design.md)).
 - [x] **Implementation plan** for the static core ([plan](docs/superpowers/plans/2026-11-05-ctxlock-static-core-and-spikes.md)).
-- [x] **Static core:** `ctxlock scan`, `lint`, `budget` and `diff`, with 21 checks (L0–L11, L13 and L14) and the GitHub Action, after a [first pass over four public repositories](docs/dogfood/2026-11-06-static.md). The Action has run on a [live pull request](https://github.com/SatyamSingh-Git/ctxlock/pull/1): it passed a harmless change and failed one with a hidden character.
+- [x] **Static core:** `ctxlock scan`, `lint`, `budget` and `diff`, with 22 checks (L0–L11 and L13–L15) and the GitHub Action, after a [first pass over four public repositories](docs/dogfood/2026-11-06-static.md). The Action has run on a [live pull request](https://github.com/SatyamSingh-Git/ctxlock/pull/1): it passed a harmless change and failed one with a hidden character.
 - [x] **Behavioral CI:** adherence and trigger probes, paired base-vs-head runs through `claude -p` with nothing the agent tries executed, and a behavioral section in the Action ([plan](docs/superpowers/plans/2026-11-06-ctxlock-behavioral-ci.md), [guide](the-guide/evals.md)). On three public repositories it caught every planted change to an instruction or a skill description, and every revert cleared it ([report](docs/dogfood/2026-11-06-behavioral.md)). In the Action it has run live only without credentials so far, where it says it was skipped. It stands on four spikes: a [run harness](docs/spikes/S1-eval-runner.md), [rulesync](docs/spikes/S2-rulesync.md) as a generation backend, a [reproduced adherence effect](docs/spikes/S3-reproduction.md), and [load events joined to units](docs/spikes/S4-telemetry.md).
 - [x] **`ctxlock build`:** each agent's budget, the gaps between Claude Code and Codex, and drift between hand-written files; `--fill-missing` writes what is missing and records it, and `L14` catches drift in what it wrote ([plan](docs/superpowers/plans/2026-11-07-ctxlock-build.md), [guide](the-guide/build.md), [report](docs/dogfood/2026-11-07-build.md)).
-- [ ] **Dependency graph and propagation:** `who-uses`, blast radius, and update pull requests into dependent repos.
+- [x] **Dependency graph, in one repository:** `depends-on` and consumers in `ctxlock.yaml`, `ctxlock who-uses`, a change's blast radius in `ctxlock impact` and the pull request comment, `L15` for references to no unit, and `eval` running the probes of everything a change reaches ([plan](docs/superpowers/plans/2026-11-08-ctxlock-graph.md), [guide](the-guide/graph.md), [report](docs/dogfood/2026-11-08-graph.md)).
+- [ ] **Propagation:** loads seen in real sessions, and update pull requests from an org context repository into the repositories that use it.
 - [ ] **Feedback loop:** agent misses routed to the owner, fixed, validated by replay, and tracked for durability.
 - [ ] **Business context:** metrics, knowledge docs and procedures, served over MCP.
 

@@ -13,7 +13,8 @@ If something here is wrong, out of date, or simply does not work, open an issue 
 | Page | What it covers | Status |
 |---|---|---|
 | installation.md | Requirements, install, and how to check it works | Arrives with the first CLI release |
-| [commands.md](commands.md) | `ctxlock scan`, `lint`, `budget`, `diff`, `eval`, `build`: every flag, and what the output means | Written |
+| [commands.md](commands.md) | `ctxlock scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`: every flag, and what the output means | Written |
+| [graph.md](graph.md) | What relies on what: `depends-on` and consumers in `ctxlock.yaml`, `who-uses`, a change's impact, and the probes it runs | Written |
 | [build.md](build.md) | `ctxlock build`: each agent's context, the gaps between them, drift, and filling what is missing without writing over anything a person wrote | Written |
 | [evals.md](evals.md) | Probes: how to write them, how `ctxlock eval` runs them without letting the agent act, and how to read the result | Written; checked live on three public repositories |
 | [configuration.md](configuration.md) | `ctxlock.yaml`: harnesses, owners, trust tiers, limit overrides, rule severities | Written; format and validation implemented |
