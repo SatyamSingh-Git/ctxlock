@@ -1,6 +1,7 @@
 import { isAbsolute, relative, sep } from 'node:path';
 import { fallbackLoads, loadReason, unitsByPath } from '../eval/loads.js';
-import type { LoadMode } from '../harness/types.js';
+import { ancestry, ownerDir } from '../harness/claude-code.js';
+import type { LoadEntry, LoadMode } from '../harness/types.js';
 import type { Unit } from '../model.js';
 import type { ScanResult } from '../scan.js';
 import type { RecordedEvent } from './events.js';
@@ -48,8 +49,9 @@ function within(path: string, roots: string[]): string | null {
 export function joinSessions(read: { events: RecordedEvent[]; skipped: number }, scan: ScanResult, roots: string[]): Sessions {
   const byPath = unitsByPath(scan);
   const byId = new Map(scan.units.map((u) => [u.id, u]));
-  const entries = scan.contexts.find((c) => c.harness === 'claude-code' && c.site === '')?.entries ?? [];
-  const listed = new Map(entries.filter((e) => e.mode === 'listed').map((e) => byId.get(e.unitId)!).map((u) => [u.name, u]));
+  const contexts = new Map(scan.contexts.filter((c) => c.harness === 'claude-code').map((c) => [c.site, c.entries]));
+  // What some session could have been seen loading.
+  const seeable = new Map<string, Sessions['unseen'][number]>();
 
   const bySession = new Map<string, Exclude<RecordedEvent, { event: 'error' }>[]>();
   let errors = 0;
@@ -67,18 +69,34 @@ export function joinSessions(read: { events: RecordedEvent[]; skipped: number },
   for (const events of bySession.values()) {
     if (!events.some((e) => within(e.cwd, roots) !== null || (e.event === 'load' && within(e.file, roots) !== null))) continue;
     sessions++;
-    const times = events.map((e) => e.ts).sort();
-    const begun = times[0]!;
-    stamps.push(begun, times.at(-1)!);
+    const ordered = [...events].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
+    const begun = ordered[0]!.ts;
+    stamps.push(begun, ordered.at(-1)!.ts);
+
+    // A session sees what the folder it started in sees. The deepest site above that folder has the
+    // same instruction files above it, and Claude Code offers the skills of the folder and every folder
+    // above. A skill below can share a name with one of Claude Code's own, so no call is credited to it.
+    const folder = within(ordered[0]!.cwd, roots) ?? '';
+    const site = [...contexts.keys()].filter((s) => s === '' || folder === s || folder.startsWith(`${s}/`)).reduce((a, b) => (b.length > a.length ? b : a), '');
+    const above = ancestry(folder);
+    const offered = (e: LoadEntry) => above.includes(ownerDir(e.path, '.claude/skills')!);
+    const skills = new Map<string, Unit>();
+    for (const e of contexts.get(site) ?? []) {
+      const unit = byId.get(e.unitId);
+      // Claude Code reports nothing for an AGENTS.md it reads through its fallback.
+      if (!unit || e.reason === 'nested-agents-md' || (unit.kind === 'skill' && !offered(e))) continue;
+      if (unit.kind === 'skill') skills.set(unit.name, unit);
+      seeable.set(unit.id, { id: unit.id, path: e.path, mode: unit.kind === 'skill' ? 'listed' : e.mode });
+    }
 
     const loads: Load[] = [];
-    for (const e of events) {
-      const unit = e.event === 'load' ? byPath.get(within(e.file, roots) ?? '') : e.event === 'skill' ? listed.get(e.skill) : undefined;
+    for (const e of ordered) {
+      const unit = e.event === 'load' ? byPath.get(within(e.file, roots) ?? '') : e.event === 'skill' ? skills.get(e.skill) : undefined;
       if (!unit) continue;
       const other = e.event === 'load' && e.sha256 !== null && e.sha256 !== unit.files[0]!.sha256;
       loads.push({ unit, ts: e.ts, reason: e.event === 'load' ? loadReason(e.reason) : 'skill_invoked', other, observed: true });
     }
-    for (const { unit, reason } of fallbackLoads(scan, new Set(loads.map((l) => l.unit.id)))) {
+    for (const { unit, reason } of fallbackLoads(scan, new Set(loads.map((l) => l.unit.id)), site)) {
       loads.push({ unit, ts: begun, reason, other: false, observed: false });
     }
 
@@ -99,13 +117,7 @@ export function joinSessions(read: { events: RecordedEvent[]; skipped: number },
   const units = [...tally.values()]
     .map(({ reasons, observed, ...t }): UnitLoads => ({ ...t, reasons: [...reasons].sort(), predicted: !observed }))
     .sort((a, b) => b.sessions - a.sessions || (a.path < b.path ? -1 : 1));
-  const unseen =
-    sessions === 0
-      ? []
-      : entries
-          .filter((e) => byId.has(e.unitId) && !tally.has(e.unitId))
-          .map((e) => ({ id: e.unitId, path: e.path, mode: e.mode }))
-          .sort((a, b) => (a.path < b.path ? -1 : 1));
+  const unseen = [...seeable.values()].filter((u) => !tally.has(u.id)).sort((a, b) => (a.path < b.path ? -1 : 1));
 
   stamps.sort();
   return {

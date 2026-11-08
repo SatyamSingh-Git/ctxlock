@@ -15,7 +15,7 @@ const start = (session: string, ts: string, cwd = ROOT): RecordedEvent => ({ eve
 const load = (session: string, ts: string, file: string, reason: string, sha256: string | null, cwd = ROOT): RecordedEvent => ({
   event: 'load', ts, session, cwd, file, sha256, reason,
 });
-const skill = (session: string, ts: string, name: string): RecordedEvent => ({ event: 'skill', ts, session, cwd: ROOT, skill: name });
+const skill = (session: string, ts: string, name: string, cwd = ROOT): RecordedEvent => ({ event: 'skill', ts, session, cwd, skill: name });
 
 const join_ = async (files: Record<string, string>, events: RecordedEvent[], skipped = 0) => joinSessions({ events, skipped }, await scanRepo(memReader(files)), [ROOT]);
 
@@ -55,6 +55,46 @@ describe('joinSessions', () => {
     expect(s.units).toEqual([
       { id: 'skill/.claude/skills/release', path: '.claude/skills/release', sessions: 1, reasons: ['skill_invoked'], lastSeen: t(2), otherVersion: 0, predicted: false },
     ]);
+  });
+
+  it('credits a skill call to a skill Claude Code offers in the folder the session started in', async () => {
+    const files = {
+      'CLAUDE.md': 'c\n',
+      'pkg/.claude/skills/simplify/SKILL.md': '---\nname: simplify\ndescription: A package skill.\n---\nx\n',
+      'pkg/.claude/skills/other/SKILL.md': '---\nname: other\ndescription: Another package skill.\n---\nx\n',
+    };
+
+    const inPkg = await join_(files, [start('s1', t(1), at('pkg')), skill('s1', t(2), 'simplify', at('pkg'))]);
+    expect(inPkg.units.map((u) => [u.path, u.reasons])).toEqual([['pkg/.claude/skills/simplify', ['skill_invoked']]]);
+    expect(inPkg.unseen).toEqual([
+      { id: 'instructions/CLAUDE.md', path: 'CLAUDE.md', mode: 'always' },
+      { id: 'skill/pkg/.claude/skills/other', path: 'pkg/.claude/skills/other', mode: 'listed' },
+    ]);
+
+    // At the top it is not offered, and a call by that name can be Claude Code's built-in skill.
+    const atTop = await join_(files, [start('s1', t(1)), skill('s1', t(2), 'simplify')]);
+    expect(atTop.units).toEqual([]);
+    expect(atTop.unseen.map((u) => u.path)).toEqual(['CLAUDE.md']);
+  });
+
+  it('predicts the AGENTS.md fallback from the folder a session started in', async () => {
+    const files = { 'AGENTS.md': 'Use pnpm.\n', 'pkg/CLAUDE.md': 'pkg\n' };
+
+    // Started below pkg, which holds the nearest CLAUDE.md.
+    const src = at('pkg/src');
+    const inPkg = await join_(files, [start('s1', t(1), src), load('s1', t(1), at('pkg/CLAUDE.md'), 'session_start', sha('pkg\n'), src)]);
+    expect(inPkg.units.map((u) => [u.path, u.predicted])).toEqual([['pkg/CLAUDE.md', false]]);
+    expect(inPkg.unseen).toEqual([]);
+
+    const atTop = await join_(files, [start('s1', t(1))]);
+    expect(atTop.units.map((u) => [u.path, u.predicted])).toEqual([['AGENTS.md', true]]);
+  });
+
+  it('leaves out of what was not loaded an AGENTS.md below the top, which Claude Code reads without saying so', async () => {
+    const s = await join_({ 'AGENTS.md': 'Use pnpm.\n', 'packages/web/AGENTS.md': 'web\n' }, [start('s1', t(1))]);
+
+    expect(s.units.map((u) => u.path)).toEqual(['AGENTS.md']);
+    expect(s.unseen).toEqual([]);
   });
 
   it('leaves out files outside the repository, but counts a session started in a subfolder', async () => {

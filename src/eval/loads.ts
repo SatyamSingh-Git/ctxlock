@@ -30,9 +30,9 @@ export function unitsByPath(scan: ScanResult): Map<string, Unit> {
 
 // Claude Code reads AGENTS.md through a plugin when a project has no CLAUDE.md, and reports it
 // nowhere, though the agent follows it. Those loads, and what they import, come from the prediction.
-export function fallbackLoads(scan: ScanResult, observed: Set<string>): Array<{ unit: Unit; reason: 'session_start' | 'import' }> {
+export function fallbackLoads(scan: ScanResult, observed: Set<string>, site = ''): Array<{ unit: Unit; reason: 'session_start' | 'import' }> {
   const byId = new Map(scan.units.map((u) => [u.id, u]));
-  const root = scan.contexts.find((c) => c.harness === 'claude-code' && c.site === '');
+  const root = scan.contexts.find((c) => c.harness === 'claude-code' && c.site === site);
   const predicted = new Set<string>();
   const loads: Array<{ unit: Unit; reason: 'session_start' | 'import' }> = [];
   for (const entry of root?.entries ?? []) {

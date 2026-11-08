@@ -206,7 +206,9 @@ export async function main(argv: string[], io: Io): Promise<number> {
       if (!found) throw new UsageError(`no unit at ${unit}`);
       const uses = whoUses(buildGraph({ ...scan, generated: scan.generated.files }), found.id);
       const seen = sessionsAt(root, scan);
-      const observed = seen.sessions ? { sessions: seen.sessions, unit: seen.units.find((u) => u.id === found.id) ?? null } : undefined;
+      const loaded = seen.units.find((u) => u.id === found.id) ?? null;
+      // Only for a unit a session could be seen loading: "0 of N" says nothing about one Claude Code never reports.
+      const observed = loaded || seen.unseen.some((u) => u.id === found.id) ? { sessions: seen.sessions, unit: loaded } : undefined;
       io.stdout(renderWhoUses(observed ? { ...uses, observed } : uses, opts.format));
     });
 

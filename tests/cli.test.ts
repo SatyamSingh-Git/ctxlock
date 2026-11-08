@@ -419,6 +419,21 @@ These sessions match no consumer in ctxlock.yaml. Declare one so impact can name
     expect((await cli('loads', link)).stdout).toContain('ctxlock loads · 2 Claude Code sessions');
   });
 
+  it('who-uses shows recorded sessions only for a unit whose loads Claude Code can report', async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'AGENTS.md': 'Use pnpm.\n', 'packages/web/AGENTS.md': 'web\n', '.claude/settings.json': '{}\n' });
+    const real = realpathSync.native(dir);
+    const home = tempDir();
+    writeTree(home, {
+      'events/2026-11.jsonl': `${JSON.stringify({ v: 1, ts: '2026-11-08T10:00:00.000Z', harness: 'claude-code', session: 's1', cwd: real, event: 'session_start', source: 'startup' })}\n`,
+    });
+    vi.stubEnv('CTXLOCK_HOME', home);
+
+    expect((await cli('who-uses', 'AGENTS.md', dir)).stdout).toContain('Loaded in sessions (observed):\n  claude-code  1 of 1 session  session_start (predicted)');
+    expect((await cli('who-uses', 'packages/web/AGENTS.md', dir)).stdout).not.toContain('observed');
+    expect((await cli('who-uses', '.claude/settings.json', dir)).stdout).not.toContain('observed');
+  });
+
   it('says how to install the collector when nothing was recorded, and exits 2 for a folder that is not one', async () => {
     const dir = tempDir();
     writeTree(dir, { 'CLAUDE.md': 'Use pnpm.\n' });
