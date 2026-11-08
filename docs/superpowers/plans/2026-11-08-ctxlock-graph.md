@@ -34,6 +34,18 @@ This is the first of Phase 2's plans. It covers one repository. Three things com
 | 5 | Done | `d74675d` |
 | 6 | Done | `f84be8b` |
 | 7 | Done: openai-agents-python, no bug ([report](../../dogfood/2026-11-08-graph.md)) | the docs commit |
+| Final review | Done: no critical finding; 2 important ones fixed, plus a minor re-graded important, each with a test that failed first ([chapter 11](../../../journey/11-graph.md#what-broke)) | `aec49dd` |
+
+**Deferred from the final review** (minor, not fixed):
+- `M4`: a `units:` key that is a symlink alias reads as "which is no unit", and its `owner` and `depends-on` go unused.
+- `M5`: the eval report's wording ("Did the agent see the change?", "No probe … covers the changed units") does not fit probes selected by impact.
+- `M6`: with no `ctxlock.yaml` but a CODEOWNERS, `impact` lists owners (and in markdown an Impact heading with only them), while `diff`'s comment hides the section.
+- `M7`: a dependent's `on`, the change that reaches it, is never shown.
+- `M8`: circular imports between `report/markdown.ts`, `report/graph.ts` and `report/render.ts`; `code()` and `cell()` could move to a leaf module.
+- `M9`: the ID-to-path slice is written twice, and `reach` rebuilds the reverse edges on every call.
+- `M10`: `configuration.md` says "ctxlock graph uses them", but there is no such command; `consumers.<name>.harnesses` reads as used, but is only recorded.
+- `M11`: a `depends-on` ending in a bare word that is not a tier (`x@main`) now makes an existing `ctxlock.yaml` invalid; worth a release note.
+- `M12`: the comment shows unit IDs under Changed units, and paths under Impact.
 
 ## Rulings this plan makes
 
