@@ -195,9 +195,6 @@ Consumers:
 
 Loaded by (predicted):
   claude-code  .  always
-
-Loaded in sessions (observed):
-  claude-code  14 of 20 sessions  session_start  last 2026-11-08
 ```
 
 ## `ctxlock impact`
@@ -239,22 +236,28 @@ For each load it records:
 - the file's path and a digest of it;
 - the reason and the time.
 
-The records go in `~/.ctxlock/events`, or `$CTXLOCK_HOME/events`. It never records content.
+The records go in `~/.ctxlock/events`, or `$CTXLOCK_HOME/events`. It never records content. [The collector](collector.md) has the details.
 
 ```
 ctxlock loads [dir] [--format text|json]
 ```
 
+On [katanemo/plano](https://github.com/katanemo/plano), after one session that asked how to build its CLI:
+
 ```
-ctxlock loads · 20 Claude Code sessions, 2026-10-30 to 2026-11-08
+ctxlock loads · 1 Claude Code session, 2026-11-08
 
 Loaded:
-  CLAUDE.md             20 sessions  session_start  last 2026-11-08
-  .claude/rules/api.md  5 sessions   glob           last 2026-11-07  2 on another version
+  .claude/skills/build-cli  1 session  skill_invoked  last 2026-11-08
+  CLAUDE.md                 1 session  session_start  last 2026-11-08
 
 Not loaded in these sessions:
-  .claude/rules/legacy.md  lazy
-  .claude/skills/old       listed
+  .claude/skills/build-brightstaff  listed
+  .claude/skills/build-wasm         listed
+  .claude/skills/check              listed
+  .claude/skills/test-python        listed
+
+These sessions match no consumer in ctxlock.yaml. Declare one so impact can name it.
 ```
 
 - **Loaded** lists each unit with the number of sessions that loaded it, how, and when last.

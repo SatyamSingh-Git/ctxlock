@@ -2,7 +2,12 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [11 — the graph: what a change reaches, and who should look](11-graph.md).
+**Latest:** [12 — the collector: what Claude Code actually loaded](12-collector.md).
+- Plan 5: a Claude Code plugin that records which units developers' sessions load, as paths and digests only; `ctxlock loads`; observed sessions in `who-uses`; 518 tests.
+- Live on S4's fixture, the loads ctxlock reported matched Claude Code's own load events exactly.
+- Found: eval's digest misread CRLF checkouts, and Claude Code dropped every load event in one session of six.
+
+**Earlier:** [11 — the graph: what a change reaches, and who should look](11-graph.md).
 - Plan 4: `depends-on` and consumers in `ctxlock.yaml`, `ctxlock who-uses`, `ctxlock impact` and an Impact section in the pull request comment, `L15-graph`, and `eval` running the probes of everything a change reaches; 486 tests.
 - On openai-agents-python, four declared references between its skills were enough to name four dependent skills, a consumer and the owners to ask for a one-line edit.
 - Found: CI on `main` red for three pushes over Windows 8.3 short names, and a plan that let a pull request hide its own reach by deleting an edge.

@@ -5,7 +5,7 @@ A rule your release skill relies on changes. Who should look at that pull reques
 - what a change reaches, and whose approval it needs (`ctxlock impact`, and the pull request comment);
 - which probes a change should run (`ctxlock eval`).
 
-> **Status:** implemented and tested, within one repository. Loads seen in real sessions, and the org context repository that carries changes to other repositories, come later.
+> **Status:** implemented and tested, within one repository. Loads seen in your own sessions come from [the collector](collector.md). The org context repository, which carries changes to other repositories, comes later.
 
 ## Declaring it
 
@@ -49,6 +49,19 @@ Loaded by (predicted):
 ```
 
 "Through" is the shortest chain of `depends-on` from that unit down to the one you asked about. "Loaded by" comes from ctxlock's model of how each agent loads context, the same one `ctxlock budget` uses. It is a prediction, not something seen in a session. `who-uses` also lists the files [`ctxlock build`](build.md) generated from the unit.
+
+With [the collector](collector.md) installed, `who-uses` also shows how many of your recorded Claude Code sessions loaded the unit. That is the observed `loaded` edge, beside the predicted one. On plano, after one session:
+
+```
+Loaded by (predicted):
+  claude-code  .       listed
+  claude-code  skills  listed
+
+Loaded in sessions (observed):
+  claude-code  1 of 1 session  skill_invoked  last 2026-11-08
+```
+
+[`ctxlock loads`](commands.md#ctxlock-loads) shows the same for every unit, and lists those that no session loaded.
 
 ## What a change reaches
 

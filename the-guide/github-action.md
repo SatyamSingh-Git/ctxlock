@@ -2,7 +2,13 @@
 
 Runs [`ctxlock diff`](commands.md#ctxlock-diff) on every pull request, and, when you give it Claude credentials, [`ctxlock eval`](evals.md) too. It shows the result in the job summary and in one pull request comment, which is updated on each push. The check fails when the pull request adds a `must` finding or an execution-affecting change. The behavioral check is advisory unless you ask it to fail on a regression.
 
-> **Status:** the Action is built, and each of its steps has been run locally with simulated GitHub variables: a clean diff, a missing base, and a base the clone doesn't have. It has not run on a live pull request yet. Until there is a release tag, use `@main`.
+> **Status:** the Action is built, and has run on [a live pull request](https://github.com/SatyamSingh-Git/ctxlock/pull/1). There it:
+> - passed a harmless change;
+> - posted one comment, and updated that same comment on the next push;
+> - said the behavioral section was skipped, as there were no credentials;
+> - failed the check on a hidden character.
+>
+> Until there is a release tag, use `@main`.
 
 ## Add it to a repository
 

@@ -270,3 +270,13 @@ M5 made `--suggest-index` compute the folder's path from the repository's top wi
 *Cost:* three commits on a red `main`, found when the live pull request test was about to start.
 
 *Changed:* the directory and the folder are compared by real path (`realpathSync.native`, which expands 8.3 names and follows links), with a test that gives the directory by its short name on Windows and by a symlink elsewhere. After each push, the CI run it starts is watched to the end.
+
+### Backticks in a shell-quoted script ran as commands
+
+During Plan 5, an edit to the commands guide went through `node -e`, with the new markdown inside bash double quotes. Bash ran each backticked span as a command before node saw the script. About twenty stray commands ran, and all failed harmlessly (`command not found`, `Is a directory`). Node then wrote the guide with those spans missing.
+
+*Cause:* the edit was sent through a shell when the file-editing tool was right there. The note already kept was about backslashes in heredocs. Backticks and `$` are the same hazard.
+
+*Cost:* nothing shipped. `git diff` showed the damage, and `git checkout` restored the file before any commit. But the stray commands were whatever the text happened to contain, and they could as easily have been destructive.
+
+*Changed:* text that holds backticks, `$` or backslashes is written with the Edit or Write tool, never inside a shell string.

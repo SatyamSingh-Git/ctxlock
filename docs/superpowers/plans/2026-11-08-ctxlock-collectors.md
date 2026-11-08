@@ -32,10 +32,10 @@ This is Phase 2's second plan. The next one is the org context repository, with 
 
 | Task | Status | Commits |
 |---|---|---|
-| 1 | Not started | |
-| 2 | Not started | |
-| 3 | Not started | |
-| 4 | Not started | |
+| 1 | Done | `34f0c85` |
+| 2 | Done | `2d1b519` (the CRLF fix), `bab4b42` |
+| 3 | Done | `a1db050` |
+| 4 | Done: exact match on S4's fixture, and plano ([report](../../dogfood/2026-11-08-collector.md)) | the docs commit |
 
 ## Rulings this plan makes
 

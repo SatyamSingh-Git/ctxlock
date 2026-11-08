@@ -6,12 +6,15 @@
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)
 ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-339933.svg)
 
-> **Status: pre-alpha.** Two checks and a builder work, from source:
+> **Status: pre-alpha.** Two checks, a builder and the dependency graph within one repository work, from source:
 > - **Static:** `ctxlock scan`, `lint`, `budget` and `diff`.
 > - **Behavioral:** `ctxlock eval` runs probes against Claude Code with the base and the head context, and `ctxlock probe draft` drafts them. On three public repositories it caught every planted edit ([report](docs/dogfood/2026-11-06-behavioral.md)).
 > - **Build:** `ctxlock build` reports the gaps between Claude Code and Codex, and `--fill-missing` writes the files that close them, never over a file a person wrote ([report](docs/dogfood/2026-11-07-build.md)).
+> - **Graph:**
+>   - `ctxlock who-uses` and `ctxlock impact` say what relies on a unit and what a change reaches ([report](docs/dogfood/2026-11-08-graph.md)).
+>   - A Claude Code plugin records what your sessions actually load, for `ctxlock loads` ([report](docs/dogfood/2026-11-08-collector.md)).
 >
-> A GitHub Action posts both on pull requests, but it has not yet run on a live pull request. Nothing is on npm yet, and there is no release tag. The dependency graph and the feedback loop are still being designed. Everything below that isn't marked as done is planned.
+> A GitHub Action posts both checks on pull requests, and has run on a live pull request. Nothing is on npm yet, and there is no release tag. Propagation across repositories and the feedback loop are still being designed. Everything below that isn't marked as done is planned.
 
 ---
 
@@ -187,7 +190,8 @@ flowchart LR
 - [x] **Behavioral CI:** adherence and trigger probes, paired base-vs-head runs through `claude -p` with nothing the agent tries executed, and a behavioral section in the Action ([plan](docs/superpowers/plans/2026-11-06-ctxlock-behavioral-ci.md), [guide](the-guide/evals.md)). On three public repositories it caught every planted change to an instruction or a skill description, and every revert cleared it ([report](docs/dogfood/2026-11-06-behavioral.md)). In the Action it has run live only without credentials so far, where it says it was skipped. It stands on four spikes: a [run harness](docs/spikes/S1-eval-runner.md), [rulesync](docs/spikes/S2-rulesync.md) as a generation backend, a [reproduced adherence effect](docs/spikes/S3-reproduction.md), and [load events joined to units](docs/spikes/S4-telemetry.md).
 - [x] **`ctxlock build`:** each agent's budget, the gaps between Claude Code and Codex, and drift between hand-written files; `--fill-missing` writes what is missing and records it, and `L14` catches drift in what it wrote ([plan](docs/superpowers/plans/2026-11-07-ctxlock-build.md), [guide](the-guide/build.md), [report](docs/dogfood/2026-11-07-build.md)).
 - [x] **Dependency graph, in one repository:** `depends-on` and consumers in `ctxlock.yaml`, `ctxlock who-uses`, a change's blast radius in `ctxlock impact` and the pull request comment, `L15` for references to no unit, and `eval` running the probes of everything a change reaches ([plan](docs/superpowers/plans/2026-11-08-ctxlock-graph.md), [guide](the-guide/graph.md), [report](docs/dogfood/2026-11-08-graph.md)).
-- [ ] **Propagation:** loads seen in real sessions, and update pull requests from an org context repository into the repositories that use it.
+- [x] **Loads seen in real sessions:** a Claude Code plugin records which units your sessions load, as paths and digests only. `ctxlock loads` lists what loaded and what never did, and `who-uses` shows it beside the prediction. Checked live against Claude Code's own load events ([plan](docs/superpowers/plans/2026-11-08-ctxlock-collectors.md), [guide](the-guide/collector.md), [report](docs/dogfood/2026-11-08-collector.md), [spike](docs/spikes/S5-collector-plugin.md)).
+- [ ] **Propagation:** update pull requests from an org context repository into the repositories that use it, pinned by `ctxlock.lock`.
 - [ ] **Feedback loop:** agent misses routed to the owner, fixed, validated by replay, and tracked for durability.
 - [ ] **Business context:** metrics, knowledge docs and procedures, served over MCP.
 
