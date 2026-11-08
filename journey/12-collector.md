@@ -14,7 +14,7 @@
   It also lists what the prediction says Claude Code can load but no session did, and says whether a declared consumer covers the sessions.
 - **`ctxlock who-uses`** shows the observed sessions beside the predicted loads.
 - **`ctxlock eval`'s own load join** reads CRLF as LF, as scans do.
-- **The suite** has 518 tests.
+- **The suite** has 522 tests.
 
 ## What worked
 

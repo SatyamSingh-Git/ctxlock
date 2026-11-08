@@ -3,7 +3,7 @@
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
 **Latest:** [12 — the collector: what Claude Code actually loaded](12-collector.md).
-- Plan 5: a Claude Code plugin that records which units developers' sessions load, as paths and digests only; `ctxlock loads`; observed sessions in `who-uses`; 518 tests.
+- Plan 5: a Claude Code plugin that records which units developers' sessions load, as paths and digests only; `ctxlock loads`; observed sessions in `who-uses`; 522 tests.
 - Live on S4's fixture, the loads ctxlock reported matched Claude Code's own load events exactly.
 - Found: eval's digest misread CRLF checkouts; Claude Code dropped every load event in one session of six; and the final review caught "not loaded" judging every session from the repository's top.
 
