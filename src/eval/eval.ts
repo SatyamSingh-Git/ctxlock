@@ -187,11 +187,13 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     ...baseProbes.map((probe) => ({ probe, source: 'base' as const, changedInHead: headProbes.has(probe.id) && headProbes.get(probe.id)!.hash !== probe.hash })),
     ...headOnly.filter((p) => unitIds.has(p.unit)).map((probe) => ({ probe, source: 'head' as const, changedInHead: false })),
   ];
-  // The changed units' own probes come first, so the run budget reaches them first.
+  // The base's probes come before those the pull request adds, which never gate, and within each the
+  // changed units' own come first: the run budget reaches them in that order.
+  const rank = (c: { source: 'base' | 'head'; selectedFor: string }) => (c.source === 'head' ? 2 : 0) + (c.selectedFor === 'changed' ? 0 : 1);
   const selected = candidates
     .map((c) => ({ ...c, selectedFor: selectedFor(c.probe) }))
     .filter((c): c is typeof c & { selectedFor: string } => c.selectedFor !== undefined)
-    .sort((a, b) => Number(b.selectedFor === 'changed') - Number(a.selectedFor === 'changed'));
+    .sort((a, b) => rank(a) - rank(b));
 
   const result: EvalResult = {
     harness: 'claude-code', model: null, claudeVersion: null, runsPerArm: opts.runs, changedUnits, outcomes: [], stripped: [], gateFailures: [], headProbeErrors,

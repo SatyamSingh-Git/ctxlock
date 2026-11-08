@@ -1,8 +1,12 @@
+import { posix } from 'node:path';
 import { parse } from 'yaml';
 import { z } from 'zod';
 import { LIMITS, type Limits } from '../harness/limits.js';
 import type { HarnessId, Severity } from '../model.js';
 import type { RepoReader } from '../repo/reader.js';
+
+// A repository path as people type it: from ./, with a closing slash, or with Windows separators.
+export const repoPath = (path: string) => posix.normalize(path.replaceAll('\\', '/')).replace(/(.)\/+$/, '$1');
 
 // Most trusted first.
 export const TIERS = ['certified', 'reviewed', 'imported', 'proposal'] as const;
@@ -100,7 +104,7 @@ const schema = z.strictObject({
         models: z.array(z.string()).default([]),
         repos: z.array(z.string()).default([]),
         'depends-on': z.array(requirement).default([]),
-        evals: z.array(z.string()).default([]),
+        evals: z.array(z.string().transform(repoPath)).default([]),
         maturity: z.enum(['experimental', 'production', 'deprecated']).default('production'),
       }),
     )

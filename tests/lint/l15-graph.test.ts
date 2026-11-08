@@ -43,7 +43,7 @@ units:
 consumers:
   payments-api:
     depends-on: [.claude/rules/b.md@reviewed, rule/.claude/rules/a.md]
-    evals: [evals/probes/payments.yaml, evals/probes]
+    evals: [evals/probes/payments.yaml, evals/probes, ./evals/probes/]
 `;
     expect(await run({ ...RULES, 'ctxlock.yaml': yaml, 'evals/probes/payments.yaml': PROBE })).toEqual([]);
   });

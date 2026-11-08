@@ -98,6 +98,24 @@ describe('runEval', { timeout: 120_000 }, () => {
     ]);
   });
 
+  it("runs the base's probes before the ones a pull request adds, so those cannot push the base's out of the run budget", async () => {
+    const added = probeFile(...['a', 'b', 'c', 'd'].map((id) => ({ id: `new-${id}`, unit: 'rule/.claude/rules/x.md' })));
+    const root = await repo(
+      { 'AGENTS.md': 'Use pnpm.\n', '.claude/rules/x.md': 'Use tabs.\n', 'ctxlock.yaml': 'version: 1\nunits:\n  AGENTS.md:\n    depends-on: [.claude/rules/x.md]\n', 'evals/probes/agents.yaml': probeFile({ id: 'deps' }) },
+      { '.claude/rules/x.md': 'Use spaces.\n', 'evals/probes/new.yaml': added },
+    );
+
+    const r = await runEval(options(root));
+
+    expect(r.outcomes.map((o) => [o.probe.id, o.source, o.status === 'not-run'])).toEqual([
+      ['deps', 'base', false],
+      ['new-a', 'head', false],
+      ['new-b', 'head', false],
+      ['new-c', 'head', false],
+      ['new-d', 'head', true],
+    ]);
+  });
+
   it('reverting the change clears the flag: nothing runs, and with all every probe is unchanged', async () => {
     const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) });
 

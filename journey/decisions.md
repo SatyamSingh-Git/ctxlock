@@ -70,7 +70,7 @@ Every significant decision, why it was made, and whether it still stands. Revers
 | D59 | A reference is a unit's path or its ID, with `@<tier>` the only suffix; digest pins wait for `ctxlock.lock` | The spec's `skill/<name>` shorthand can name a skill and its copy at once. Only a bare word after the last `@` is a tier, so `notes@v2.md` stays a path | Stands (Plan 4) |
 | D60 | The graph is built in memory from a scan, with no SQLite until there are events to store | A scan is fast, and what it builds cannot go stale | Stands (Plan 4) |
 | D61 | `loaded` edges are predicted from the resolvers and labelled "predicted" | Observed edges need local collectors, which come next (§9: predicted, not observed) | Stands (Plan 4) |
-| D62 | Impact walks both refs' `depends-on`, shows in `ctxlock impact` and the pull request comment, selects probes, and never fails a check | A pull request that also deletes an edge would otherwise hide what it reaches and skip the probes behind it (D30: a pull request cannot rewrite its judge). The spec gates only on MUST lint and deterministic eval regressions | Stands (Plan 4) |
+| D62 | Impact walks both refs' `depends-on`, shows in `ctxlock impact` and the pull request comment, selects probes, and never fails a check | A pull request that also deletes an edge would otherwise hide what it reaches and skip the probes behind it (D30: a pull request cannot rewrite its judge). The spec gates only on MUST lint and deterministic eval regressions. The final review extended it: owners also come from both refs, and the base's probes run before those a pull request adds, so neither can be crowded out or rewritten by the change | Stands (Plan 4, final review) |
 
 ## Process
 

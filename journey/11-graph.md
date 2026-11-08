@@ -45,6 +45,11 @@ One finding came from thinking past a test rather than from a mutation: `notes@v
 
 - **CI on `main` was red for three pushes.** M5 compared paths with `path.relative`, and GitHub's Windows runner gives its temp folder by its 8.3 short name while git gives the long one. Local checks passed, on a machine whose temp path has no short name. The fix compares real paths, and each push is now watched to the end of its CI run ([mistakes](mistakes.md)).
 - **The plan let a pull request hide its reach.** As written, `impact` walked the head's `depends-on`. A pull request could change a rule and delete the edge pointing at it in the same change, and the dependent's probes would not run. That breaks D30, under which a pull request cannot rewrite its judge. It was caught while wiring the probe selection in Task 6, before any of it shipped. Impact now walks both refs (D62).
+- **The final review found two more places a pull request could weaken its own check.** It reproduced both on throwaway repositories:
+  - **Owners:** "Owners to ask" came from the head's CODEOWNERS and `owner` fields, so a change could rewrite who it asked.
+  - **Probe order:** probes a pull request adds on the changed unit ran before the base's probes on its dependents, so with default budgets the base's could go unrun.
+
+  Owners now come from both refs, and the base's probes run first (D62). A trailing slash in an `evals` path, which silently ran none of that consumer's probes, is now read as people write it.
 - **A working-directory flip.** Twice, the session's directory switched to a lowercase drive (`f:\ContextFS`). Vitest then loaded itself twice and found no tests. Rerunning from `F:\ContextFS` fixed it; nothing was committed in between.
 
 ## What was learned

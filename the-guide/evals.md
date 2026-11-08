@@ -106,7 +106,7 @@ A probe runs when the change reaches it, in one of three ways, and the report sa
 - **`depends on <path>`:** its unit depends on a changed unit in `ctxlock.yaml`, directly or through others;
 - **`consumer <name>`:** its file is under the `evals` of a consumer whose units the change reaches ([the graph](graph.md)).
 
-What depends on what is read from both refs, so a pull request that also deletes a `depends-on` still runs the probes behind it. Probes on changed units run first, so the run budget reaches them first. `--all` runs every probe.
+What depends on what is read from both refs, so a pull request that also deletes a `depends-on` still runs the probes behind it. The base's probes run before those the pull request adds, which never gate, and within each, probes on changed units run first. The run budget reaches them in that order. `--all` runs every probe.
 
 For each probe, ctxlock runs Claude Code headless (`claude -p`) `runs` times in each arm, alternating base and head:
 

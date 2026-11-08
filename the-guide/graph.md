@@ -69,7 +69,7 @@ Consumers:
 Owners to ask: @payments-team, @platform-team
 ```
 
-The owners are those of each changed unit, from `ctxlock.yaml` or CODEOWNERS, and of each consumer reached. `depends-on` is read from both refs, so a change that also deletes an edge still reaches what relied on the unit before it.
+The owners are those of each changed unit, from `ctxlock.yaml` or CODEOWNERS, and of each consumer reached. All of it is read from both refs. A change that also deletes an edge still reaches what relied on the unit before it, and a change that rewrites CODEOWNERS or an `owner` still asks the owners the base names, as GitHub does.
 
 The same section, `#### Impact`, appears in the pull request comment of [the GitHub Action](github-action.md) whenever a change reaches a unit or a consumer. Every name in it is shown as code, so the comment notifies no one. Impact never fails a check: it tells reviewers where to look.
 

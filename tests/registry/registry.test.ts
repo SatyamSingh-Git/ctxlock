@@ -133,6 +133,11 @@ consumers:
     ]);
   });
 
+  it('reads evals paths as people type them: from ./, with a closing slash, or with Windows separators', async () => {
+    const registry = await load('version: 1\nconsumers:\n  web:\n    evals: [./evals/probes/web.yaml, "evals\\\\probes\\\\", evals/probes/a/]\n');
+    expect(registry.consumers[0]!.evals).toEqual(['evals/probes/web.yaml', 'evals/probes', 'evals/probes/a']);
+  });
+
   it("fills in the registry's harnesses and empty lists, and sorts consumers by name", async () => {
     const registry = await load('version: 1\nharnesses: [codex]\nconsumers:\n  web:\n    depends-on: [a.md]\n  api: {}\n');
     expect(registry.consumers).toEqual([

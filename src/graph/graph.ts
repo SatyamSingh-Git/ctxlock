@@ -3,7 +3,7 @@ import type { UnitChange } from '../diff.js';
 import type { LoadMode } from '../harness/types.js';
 import type { HarnessId, Unit } from '../model.js';
 import { unitOwners } from '../registry/codeowners.js';
-import type { Consumer, Requirement, Tier } from '../registry/registry.js';
+import { type Consumer, type Requirement, type Tier, repoPath } from '../registry/registry.js';
 import type { ScanResult } from '../scan.js';
 
 export type GraphInput = Pick<ScanResult, 'units' | 'registry' | 'contexts' | 'codeowners'> & { generated: GeneratedFile[] };
@@ -54,7 +54,8 @@ export interface Impact {
 const byKey = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 export function resolveRef(ref: string, units: Unit[]): Unit | undefined {
-  return units.find((u) => u.path === ref || u.id === ref || u.aliases.includes(ref));
+  const path = repoPath(ref);
+  return units.find((u) => u.path === path || u.id === ref || u.aliases.includes(path));
 }
 
 export function unitChanges(base: ScanResult, head: ScanResult): UnitChange[] {
@@ -156,17 +157,20 @@ export function impactOf(base: ScanResult, head: ScanResult): Impact {
   const dependents = new Map<string, Use & { on: string }>();
   const consumers = new Map<string, ConsumerUse>();
   const owners = new Set<string>();
-  for (const { id, change } of changed) {
-    for (const owner of (change === 'removed' ? graphs.base : graphs.head).owners(id)) owners.add(owner);
+  // Owners too come from both: a change cannot rewrite who it asks, as GitHub reads CODEOWNERS from the base.
+  for (const { id } of changed) {
     for (const graph of [graphs.head, graphs.base]) {
+      if (graph.units.has(id)) for (const owner of graph.owners(id)) owners.add(owner);
       const reached = reach(graph, id);
       for (const [dependent, via] of reached.units) {
         if (!changedIds.has(dependent) && via.length < (dependents.get(dependent)?.via.length ?? Infinity)) dependents.set(dependent, { id: dependent, via, on: id });
       }
-      for (const c of reached.consumers) if (c.via.length < (consumers.get(c.name)?.via.length ?? Infinity)) consumers.set(c.name, c);
+      for (const c of reached.consumers) {
+        if (c.owner) owners.add(c.owner);
+        if (c.via.length < (consumers.get(c.name)?.via.length ?? Infinity)) consumers.set(c.name, c);
+      }
     }
   }
-  for (const c of consumers.values()) if (c.owner) owners.add(c.owner);
   return {
     changed,
     dependents: [...dependents.values()].sort((a, b) => byKey(a.id, b.id)),

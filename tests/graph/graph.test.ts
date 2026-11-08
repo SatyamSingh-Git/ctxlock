@@ -44,6 +44,8 @@ describe('resolveRef', () => {
     expect(resolveRef('skill/.agents/skills/release', s.units)).toBe(skill);
     expect(resolveRef('.claude/skills/release', s.units)).toBe(skill);
     expect(resolveRef('.agents/skills/nope', s.units)).toBeUndefined();
+    // As people type paths: from ./, with a closing slash, or with Windows separators.
+    for (const written of ['./.agents/skills/release/', '.agents\\skills\\release']) expect(resolveRef(written, s.units), written).toBe(skill);
   });
 });
 
@@ -122,6 +124,16 @@ describe('impactOf', () => {
       consumers: [{ name: 'payments-api', owner: '@payments-team', maturity: 'production', via: [C, B] }],
       owners: ['@payments-team', '@rules-team'],
     });
+  });
+
+  it('asks the owners the base names as well as the head, so a change cannot rewrite who it asks', async () => {
+    const head = {
+      ...CHAIN,
+      '.claude/rules/a.md': 'Use npm.\n',
+      '.github/CODEOWNERS': '.claude/rules/a.md @mallory\n',
+      'ctxlock.yaml': CHAIN['ctxlock.yaml'].replace('owner: "@payments-team"', 'owner: "@me"'),
+    };
+    expect((await impact(CHAIN, head)).owners).toEqual(['@mallory', '@me', '@payments-team', '@rules-team']);
   });
 
   it('still reaches what depended on a unit when the same change deletes that depends-on, so a change cannot hide its reach', async () => {

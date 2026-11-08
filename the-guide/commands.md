@@ -199,7 +199,7 @@ Loaded by (predicted):
 
 ## `ctxlock impact`
 
-Lists what a change reaches: the units that depend on what changed, the consumers that use them, and whose approval the change needs. Those are the owners of each changed unit, from `ctxlock.yaml` or CODEOWNERS, and of each consumer reached. It reads the refs as `diff` does, and never fails a check.
+Lists what a change reaches: the units that depend on what changed, the consumers that use them, and whose approval the change needs. Those are the owners of each changed unit, from `ctxlock.yaml` or CODEOWNERS, and of each consumer reached, as both the base and the head name them. It reads the refs as `diff` does, and never fails a check.
 
 ```
 ctxlock impact [dir] --base <ref> [--head <ref>] [--format text|json|markdown]
