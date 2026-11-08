@@ -19,6 +19,34 @@ export interface LoadRecord {
 
 const REASONS: Record<string, string> = { session_start: 'session_start', include: 'import', nested_traversal: 'nested', path_glob_match: 'glob' };
 
+export const loadReason = (raw: string) => REASONS[raw] ?? raw;
+
+// Each unit under its path and under every symlink alias of it.
+export function unitsByPath(scan: ScanResult): Map<string, Unit> {
+  const byPath = new Map<string, Unit>();
+  for (const unit of scan.units) for (const p of [unit.path, ...unit.aliases]) byPath.set(p, unit);
+  return byPath;
+}
+
+// Claude Code reads AGENTS.md through a plugin when a project has no CLAUDE.md, and reports it
+// nowhere, though the agent follows it. Those loads, and what they import, come from the prediction.
+export function fallbackLoads(scan: ScanResult, observed: Set<string>): Array<{ unit: Unit; reason: 'session_start' | 'import' }> {
+  const byId = new Map(scan.units.map((u) => [u.id, u]));
+  const root = scan.contexts.find((c) => c.harness === 'claude-code' && c.site === '');
+  const predicted = new Set<string>();
+  const loads: Array<{ unit: Unit; reason: 'session_start' | 'import' }> = [];
+  for (const entry of root?.entries ?? []) {
+    if (entry.mode !== 'always') continue;
+    const from = entry.reason.startsWith('import:') ? entry.reason.slice('import:'.length) : null;
+    if (entry.reason !== 'agents-md-fallback' && !(from !== null && predicted.has(from))) continue;
+    const unit = byId.get(entry.unitId);
+    if (!unit || observed.has(unit.id)) continue;
+    predicted.add(entry.path);
+    loads.push({ unit, reason: from === null ? 'session_start' : 'import' });
+  }
+  return loads;
+}
+
 function digestIn(dir: string, unit: Unit): string | null {
   if (!unit.files.every((f) => existsSync(join(dir, f.path)))) return null;
   const digest = unitDigest(unit.files.map((f) => ({ ...f, sha256: lfDigest(readFileSync(join(dir, f.path))) })));
@@ -26,8 +54,7 @@ function digestIn(dir: string, unit: Unit): string | null {
 }
 
 export function joinLoads(t: Transcript, scan: ScanResult, dir: string): LoadRecord[] {
-  const byPath = new Map<string, Unit>();
-  for (const unit of scan.units) for (const p of [unit.path, ...unit.aliases]) byPath.set(p, unit);
+  const byPath = unitsByPath(scan);
   const byId = new Map(scan.units.map((u) => [u.id, u]));
   const records: LoadRecord[] = [];
   const observed = new Set<string>();
@@ -39,7 +66,7 @@ export function joinLoads(t: Transcript, scan: ScanResult, dir: string): LoadRec
     records.push({
       unit_id: unit.id,
       unit_digest: digestIn(dir, unit),
-      load_reason: REASONS[load.reason] ?? load.reason,
+      load_reason: loadReason(load.reason),
       ...(load.trigger ? { trigger_file: load.trigger } : {}),
       observed: true,
     });
@@ -53,17 +80,8 @@ export function joinLoads(t: Transcript, scan: ScanResult, dir: string): LoadRec
     }
   }
 
-  // Claude Code reads AGENTS.md through a plugin when a project has no CLAUDE.md, and reports it
-  // nowhere, though the agent follows it. Those loads, and what they import, come from the prediction.
-  const predicted = new Set<string>();
-  for (const entry of root?.entries ?? []) {
-    if (entry.mode !== 'always') continue;
-    const from = entry.reason.startsWith('import:') ? entry.reason.slice('import:'.length) : null;
-    if (entry.reason !== 'agents-md-fallback' && !(from !== null && predicted.has(from))) continue;
-    const unit = byId.get(entry.unitId);
-    if (!unit || observed.has(unit.id)) continue;
-    predicted.add(entry.path);
-    records.push({ unit_id: unit.id, unit_digest: unit.digest, load_reason: from === null ? 'session_start' : 'import', observed: false });
+  for (const { unit, reason } of fallbackLoads(scan, observed)) {
+    records.push({ unit_id: unit.id, unit_digest: unit.digest, load_reason: reason, observed: false });
   }
   return records;
 }

@@ -1,0 +1,156 @@
+import { join, resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import type { RecordedEvent } from '../../src/collect/events.js';
+import { joinSessions } from '../../src/collect/sessions.js';
+import { scanRepo } from '../../src/scan.js';
+import { lfDigest } from '../../src/units/digest.js';
+import { memReader } from '../helpers/mem-reader.js';
+
+const ROOT = resolve('/work/repo');
+const at = (path: string) => join(ROOT, path);
+const sha = (text: string) => lfDigest(Buffer.from(text));
+const t = (minute: number) => `2026-11-08T10:${String(minute).padStart(2, '0')}:00.000Z`;
+
+const start = (session: string, ts: string, cwd = ROOT): RecordedEvent => ({ event: 'session_start', ts, session, cwd, source: 'startup' });
+const load = (session: string, ts: string, file: string, reason: string, sha256: string | null, cwd = ROOT): RecordedEvent => ({
+  event: 'load', ts, session, cwd, file, sha256, reason,
+});
+const skill = (session: string, ts: string, name: string): RecordedEvent => ({ event: 'skill', ts, session, cwd: ROOT, skill: name });
+
+const join_ = async (files: Record<string, string>, events: RecordedEvent[], skipped = 0) => joinSessions({ events, skipped }, await scanRepo(memReader(files)), [ROOT]);
+
+const RULE = '---\npaths: ["packages/api/**"]\n---\nAPI rule\n';
+
+describe('joinSessions', () => {
+  it('counts each unit once per session, with its reasons and its last load', async () => {
+    const files = { 'CLAUDE.md': 'c\n', '.claude/rules/api.md': RULE, 'packages/api/h.ts': 'x' };
+    // Hooks run asynchronously, so a session's lines are not in time order.
+    const s = await join_(files, [
+      start('s2', t(5)),
+      load('s2', t(5), at('CLAUDE.md'), 'session_start', sha('c\n')),
+      load('s1', t(4), at('CLAUDE.md'), 'compact', sha('c\n')),
+      load('s1', t(3), at('.claude/rules/api.md'), 'path_glob_match', sha(RULE)),
+      load('s1', t(1), at('CLAUDE.md'), 'session_start', sha('c\n')),
+      start('s1', t(1)),
+    ]);
+
+    expect(s).toMatchObject({ sessions: 2, first: t(1), last: t(5) });
+    expect(s.units).toEqual([
+      { id: 'instructions/CLAUDE.md', path: 'CLAUDE.md', sessions: 2, reasons: ['compact', 'session_start'], lastSeen: t(5), otherVersion: 0, predicted: false },
+      { id: 'rule/.claude/rules/api.md', path: '.claude/rules/api.md', sessions: 1, reasons: ['glob'], lastSeen: t(3), otherVersion: 0, predicted: false },
+    ]);
+  });
+
+  it('matches a skill call to the skill Claude Code lists, by name; an unknown name is ignored', async () => {
+    const s = await join_(
+      {
+        'CLAUDE.md': 'c\n',
+        '.claude/skills/release/SKILL.md': '---\nname: release\ndescription: Publish a version.\n---\nSteps.\n',
+        // Below the top, so not listed when a session starts there.
+        'pkg/.claude/skills/simplify/SKILL.md': '---\nname: simplify\ndescription: A nested skill.\n---\nx\n',
+      },
+      [start('s1', t(1)), skill('s1', t(2), 'release'), skill('s1', t(3), 'simplify'), skill('s1', t(4), 'unknown')],
+    );
+
+    expect(s.units).toEqual([
+      { id: 'skill/.claude/skills/release', path: '.claude/skills/release', sessions: 1, reasons: ['skill_invoked'], lastSeen: t(2), otherVersion: 0, predicted: false },
+    ]);
+  });
+
+  it('leaves out files outside the repository, but counts a session started in a subfolder', async () => {
+    const files = { 'CLAUDE.md': 'c\n', 'packages/api/CLAUDE.md': 'api\n' };
+    const sub = at('packages/api');
+    const s = await join_(files, [
+      load('s1', t(1), resolve('/home/u/.claude/CLAUDE.md'), 'session_start', sha('mine\n'), sub),
+      load('s1', t(1), at('CLAUDE.md'), 'session_start', sha('c\n'), sub),
+      load('s1', t(1), at('packages/api/CLAUDE.md'), 'session_start', sha('api\n'), sub),
+      load('s2', t(2), resolve('/work/other/CLAUDE.md'), 'session_start', sha('c\n'), resolve('/work/other')),
+      // A sibling whose name starts with the repository's.
+      load('s3', t(3), resolve('/work/repo-two/CLAUDE.md'), 'session_start', sha('c\n'), resolve('/work/repo-two')),
+      // Started above the repository: it counts only when it loaded something inside.
+      load('s4', t(4), resolve('/work/CLAUDE.md'), 'session_start', sha('w\n'), resolve('/work')),
+      load('s5', t(5), at('packages/api/CLAUDE.md'), 'nested_traversal', sha('api\n'), resolve('/work')),
+    ]);
+
+    expect(s.sessions).toBe(2);
+    expect(s.units.map((u) => [u.path, u.sessions])).toEqual([
+      ['packages/api/CLAUDE.md', 2],
+      ['CLAUDE.md', 1],
+    ]);
+  });
+
+  it.runIf(process.platform === 'win32')('matches paths whatever their separators or drive-letter case', async () => {
+    const other = (path: string) => (path[0]!.toLowerCase() + path.slice(1)).replaceAll('\\', '/');
+    const s = await join_({ 'CLAUDE.md': 'c\n' }, [
+      load('s1', t(1), other(at('CLAUDE.md')), 'session_start', sha('c\n'), other(ROOT)),
+      start('s2', t(2), String.raw`Z:\elsewhere`),
+    ]);
+
+    expect(s.sessions).toBe(1);
+    expect(s.units.map((u) => u.path)).toEqual(['CLAUDE.md']);
+  });
+
+  it('counts a load of an edited file as another version of the unit', async () => {
+    const s = await join_({ 'CLAUDE.md': 'now\n' }, [
+      load('s1', t(1), at('CLAUDE.md'), 'session_start', sha('then\n')),
+      load('s1', t(1), at('CLAUDE.md'), 'compact', sha('then\n')),
+      load('s2', t(2), at('CLAUDE.md'), 'session_start', sha('now\n')),
+      load('s3', t(3), at('CLAUDE.md'), 'session_start', null),
+    ]);
+
+    expect(s.units).toEqual([expect.objectContaining({ path: 'CLAUDE.md', sessions: 3, otherVersion: 1 })]);
+  });
+
+  it('labels AGENTS.md read through the fallback as predicted, in every session', async () => {
+    const files = { 'AGENTS.md': 'Use pnpm.\n@sub/AGENTS.md\n', 'sub/AGENTS.md': 'sub\n' };
+    // S5: a session's loads arrive before its SessionStart.
+    const s = await join_(files, [start('s1', t(1)), load('s2', t(6), at('sub/AGENTS.md'), 'include', sha('sub\n')), start('s2', t(5))]);
+
+    expect(s.units).toEqual([
+      { id: 'instructions/AGENTS.md', path: 'AGENTS.md', sessions: 2, reasons: ['session_start'], lastSeen: t(5), otherVersion: 0, predicted: true },
+      { id: 'instructions/sub/AGENTS.md', path: 'sub/AGENTS.md', sessions: 2, reasons: ['import'], lastSeen: t(6), otherVersion: 0, predicted: false },
+    ]);
+
+    // Once Claude Code reports it, nothing is predicted for it.
+    const seen = await join_(files, [start('s1', t(1)), load('s1', t(2), at('AGENTS.md'), 'compact', sha('Use pnpm.\n@sub/AGENTS.md\n'))]);
+    expect(seen.units.find((u) => u.path === 'AGENTS.md')).toMatchObject({ reasons: ['compact'], predicted: false });
+  });
+
+  it('lists what Claude Code can load that no session loaded, with its mode, and nothing before any session', async () => {
+    const files = {
+      'CLAUDE.md': 'c\n@docs/notes.md\n',
+      'docs/notes.md': 'not a unit\n',
+      '.claude/rules/style.md': 'Two spaces.\n',
+      '.claude/rules/api.md': RULE,
+      '.claude/skills/old/SKILL.md': '---\nname: old\ndescription: Unused.\n---\nx\n',
+    };
+
+    expect((await join_(files, [start('s1', t(1)), load('s1', t(1), at('CLAUDE.md'), 'session_start', sha('c\n@docs/notes.md\n'))])).unseen).toEqual([
+      { id: 'rule/.claude/rules/api.md', path: '.claude/rules/api.md', mode: 'lazy' },
+      { id: 'rule/.claude/rules/style.md', path: '.claude/rules/style.md', mode: 'always' },
+      { id: 'skill/.claude/skills/old', path: '.claude/skills/old', mode: 'listed' },
+    ]);
+    expect((await join_(files, [])).unseen).toEqual([]);
+  });
+
+  it('counts collector errors and unread lines, whatever the repository', async () => {
+    const s = await join_(
+      { 'CLAUDE.md': 'c\n' },
+      [{ event: 'error', ts: t(1), message: 'disk full' }, start('s9', t(2), resolve('/elsewhere')), { event: 'error', ts: t(3), message: 'EACCES' }],
+      2,
+    );
+
+    expect(s).toMatchObject({ sessions: 0, first: null, last: null, units: [], errors: { count: 2, last: 'EACCES' }, skipped: 2 });
+    expect((await join_({ 'CLAUDE.md': 'c\n' }, [])).errors).toEqual({ count: 0 });
+  });
+
+  it('says when no consumer covers the sessions', async () => {
+    const seen = [start('s1', t(1))];
+    const yaml = (body: string) => ({ 'CLAUDE.md': 'c\n', 'ctxlock.yaml': `version: 1\n${body}` });
+
+    expect((await join_(yaml(''), seen)).undeclared).toBe(true);
+    expect((await join_(yaml('consumers:\n  api:\n    harnesses: [codex]\n'), seen)).undeclared).toBe(true);
+    expect((await join_(yaml('consumers:\n  web:\n    harnesses: [claude-code]\n'), seen)).undeclared).toBe(false);
+    expect((await join_(yaml(''), [])).undeclared).toBe(false);
+  });
+});
