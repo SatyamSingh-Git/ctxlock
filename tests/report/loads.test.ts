@@ -15,11 +15,12 @@ const seen: Sessions = {
     { id: 'skill/.claude/skills/old', path: '.claude/skills/old', mode: 'listed' },
   ],
   undeclared: true,
+  elsewhere: 4,
   errors: { count: 2, last: { ts: '2026-11-08T17:00:00.000Z', message: 'EACCES: permission denied' } },
   skipped: 1,
 };
 
-const none: Sessions = { sessions: 0, first: null, last: null, units: [], unseen: [], undeclared: false, errors: { count: 0 }, skipped: 0 };
+const none: Sessions = { sessions: 0, first: null, last: null, units: [], unseen: [], undeclared: false, elsewhere: 0, errors: { count: 0 }, skipped: 0 };
 
 describe('renderLoads', () => {
   it('lists what loaded and how, what never did, an undeclared consumer, and what the collector could not record', () => {
@@ -66,6 +67,14 @@ The collector records which units Claude Code loads in your sessions. To install
     expect(renderLoads({ ...none, errors: { count: 1, last: { ts: '2026-11-07T09:00:00.000Z', message: 'the hook input is not JSON' } } }, 'text')).toBe(
       `${install}\nCollector errors, from every repository: 1. The last, on 2026-11-07: the hook input is not JSON\n`,
     );
+  });
+
+  it('says the collector recorded sessions elsewhere, not how to install it, when none was in this repository', () => {
+    expect(renderLoads({ ...none, elsewhere: 3 }, 'text')).toBe(`ctxlock loads · no Claude Code sessions recorded for this repository
+
+The collector has recorded 3 sessions, none in this repository. A session counts here when Claude Code starts in it or loads a file from it.
+`);
+    expect(renderLoads({ ...none, elsewhere: 1 }, 'text')).toContain('has recorded 1 session, none in this repository.');
   });
 
   it('JSON is the result itself', () => {

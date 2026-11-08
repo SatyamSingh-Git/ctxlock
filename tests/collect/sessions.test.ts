@@ -113,6 +113,7 @@ describe('joinSessions', () => {
     ]);
 
     expect(s.sessions).toBe(2);
+    expect(s.elsewhere).toBe(3);
     expect(s.units.map((u) => [u.path, u.sessions])).toEqual([
       ['packages/api/CLAUDE.md', 2],
       ['CLAUDE.md', 1],

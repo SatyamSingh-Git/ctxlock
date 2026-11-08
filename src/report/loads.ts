@@ -1,9 +1,8 @@
 import type { Sessions } from '../collect/sessions.js';
 import { block, howLoaded, sessions } from './graph.js';
 
+const NONE = 'ctxlock loads · no Claude Code sessions recorded for this repository';
 const INSTALL = [
-  'ctxlock loads · no Claude Code sessions recorded for this repository',
-  '',
   'The collector records which units Claude Code loads in your sessions. To install it:',
   '  claude plugin marketplace add SatyamSingh-Git/ctxlock',
   '  claude plugin install ctxlock@ctxlock',
@@ -15,7 +14,13 @@ export function renderLoads(s: Sessions, format: 'text' | 'json'): string {
   const to = s.last?.slice(0, 10);
   const lines =
     s.sessions === 0
-      ? [...INSTALL]
+      ? [
+          NONE,
+          '',
+          ...(s.elsewhere
+            ? [`The collector has recorded ${sessions(s.elsewhere)}, none in this repository. A session counts here when Claude Code starts in it or loads a file from it.`]
+            : INSTALL),
+        ]
       : [
           `ctxlock loads · ${s.sessions} Claude Code ${s.sessions === 1 ? 'session' : 'sessions'}, ${from === to ? from : `${from} to ${to}`}`,
           ...block('Loaded', s.units.map((u) => [u.path, sessions(u.sessions), ...howLoaded(u)])),

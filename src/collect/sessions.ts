@@ -25,6 +25,8 @@ export interface Sessions {
   units: UnitLoads[];
   unseen: Array<{ id: string; path: string; mode: LoadMode }>;
   undeclared: boolean;
+  // Sessions the collector recorded in other folders.
+  elsewhere: number;
   // Errors and unread lines are counted over the whole store: an error belongs to no session.
   errors: { count: number; last?: { ts: string; message: string } };
   skipped: number;
@@ -138,6 +140,7 @@ export function joinSessions(
     units,
     unseen,
     undeclared: sessions > 0 && !scan.registry.consumers.some((c) => c.harnesses.includes('claude-code')),
+    elsewhere: bySession.size - sessions,
     errors: { count: errors, ...(lastError !== undefined && { last: lastError }) },
     skipped: read.skipped,
   };
