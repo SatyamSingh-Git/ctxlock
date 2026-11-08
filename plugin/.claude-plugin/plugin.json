@@ -1,0 +1,7 @@
+{
+  "name": "ctxlock",
+  "description": "Records which context units Claude Code loads in your sessions, for ctxlock loads and ctxlock who-uses. Paths and digests only, never content.",
+  "author": { "name": "Satyam Singh" },
+  "homepage": "https://github.com/SatyamSingh-Git/ctxlock",
+  "license": "Apache-2.0"
+}

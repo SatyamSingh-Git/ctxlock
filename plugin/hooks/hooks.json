@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/collect.mjs\"", "timeout": 10 }] }],
+    "InstructionsLoaded": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/collect.mjs\"", "timeout": 10 }] }],
+    "PostToolUse": [{ "matcher": "Skill", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/collect.mjs\"", "timeout": 10 }] }]
+  }
+}

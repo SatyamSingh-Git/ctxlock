@@ -1,0 +1,14 @@
+{
+  "name": "ctxlock",
+  "owner": {
+    "name": "Satyam Singh"
+  },
+  "description": "ctxlock, CI for AI agent context: its Claude Code collector.",
+  "plugins": [
+    {
+      "name": "ctxlock",
+      "source": "./plugin",
+      "description": "Records which context units Claude Code loads in your sessions, for ctxlock loads and ctxlock who-uses."
+    }
+  ]
+}
