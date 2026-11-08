@@ -1,4 +1,4 @@
-# Commands: `scan`, `lint`, `budget`, `diff`, `eval`, `build`
+# Commands: `scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`
 
 ctxlock reads your repository's agent context and reports on it. The checks never change a file in the repository. Two commands write new files when you ask them to: `ctxlock build --fill-missing` and `ctxlock probe draft`. Nothing leaves your machine except through `eval` and `probe draft`, which run Claude Code.
 
@@ -173,14 +173,64 @@ ctxlock build [dir] [--fill-missing] [--suggest-index <dir>] [--format text|json
 
 `--suggest-index <dir>` prints a compressed index of the markdown under `<dir>` for `AGENTS.md`, and writes nothing. `<dir>` is taken from the directory `build` runs on, and may be `.` or an absolute path inside the repository.
 
+## `ctxlock who-uses`
+
+Lists what relies on a unit. That covers the units whose `depends-on` in `ctxlock.yaml` names it, directly or through others, and the consumers that use it. It also lists the agents predicted to load it, and the files `build` generated from it. [The graph](graph.md) explains `depends-on` and consumers.
+
+```
+ctxlock who-uses <unit> [dir] [--format text|json]
+```
+
+`<unit>` is a unit's path, such as `.claude/rules/deps.md`, or its ID, such as `rule/.claude/rules/deps.md`:
+
+```
+ctxlock who-uses · .claude/rules/deps.md
+
+Units that depend on it:
+  .claude/rules/testing.md
+  .agents/skills/release    through .claude/rules/testing.md
+
+Consumers:
+  payments-api  @payments-team  production  through .agents/skills/release, .claude/rules/testing.md
+
+Loaded by (predicted):
+  claude-code  .  always
+```
+
+## `ctxlock impact`
+
+Lists what a change reaches: the units that depend on what changed, the consumers that use them, and whose approval the change needs. Those are the owners of each changed unit, from `ctxlock.yaml` or CODEOWNERS, and of each consumer reached. It reads the refs as `diff` does, and never fails a check.
+
+```
+ctxlock impact [dir] --base <ref> [--head <ref>] [--format text|json|markdown]
+```
+
+```
+ctxlock impact
+
+Changed:
+  .claude/rules/deps.md  modified
+
+Depends on what changed:
+  .claude/rules/testing.md
+  .agents/skills/release    through .claude/rules/testing.md
+
+Consumers:
+  payments-api  @payments-team  production  through .agents/skills/release, .claude/rules/testing.md
+
+Owners to ask: @payments-team, @platform-team
+```
+
+In markdown, every name is shown as code, so a pull request comment notifies no one.
+
 ---
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
-| 0 | Done, including every `build`. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
+| 0 | Done, including every `build`, `who-uses` and `impact`. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
 | 1 | `lint`: at least one `must` finding. `diff`: a new `must` finding or an execution-affecting change. `eval`: only with `--fail-on-regression`, a gated regression |
-| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff` and `eval`), a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` cannot read, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
+| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`, `eval` and `impact`), a `who-uses` unit that is no unit, a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` cannot read, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
 
 `scan` and `budget` exit 0 whatever they find, so you can run them anywhere without failing a build.

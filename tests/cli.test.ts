@@ -330,6 +330,44 @@ describe('ctxlock build', { timeout: 120_000 }, () => {
   });
 });
 
+describe('ctxlock who-uses and ctxlock impact', { timeout: 120_000 }, () => {
+  const files = {
+    '.claude/rules/a.md': 'Use pnpm.\n',
+    '.claude/rules/b.md': 'Run pnpm test.\n',
+    '.claude/rules/c.md': 'Run pnpm lint.\n',
+    '.github/CODEOWNERS': '.claude/rules/a.md @rules-team\n',
+    'ctxlock.yaml':
+      'version: 1\nunits:\n  .claude/rules/b.md:\n    depends-on: [.claude/rules/a.md]\n  .claude/rules/c.md:\n    depends-on: [.claude/rules/b.md]\nconsumers:\n  payments-api:\n    owner: "@payments-team"\n    depends-on: [.claude/rules/c.md]\n',
+  };
+
+  it("who-uses gives one answer for a unit's path and its ID, and exits 2 for no unit", async () => {
+    const { dir } = await gitRepo([files]);
+
+    const byPath = await cli('who-uses', '.claude/rules/a.md', dir);
+    expect(byPath.code).toBe(0);
+    expect(byPath.stdout).toContain('Units that depend on it:\n  .claude/rules/b.md\n  .claude/rules/c.md  through .claude/rules/b.md');
+    expect((await cli('who-uses', 'rule/.claude/rules/a.md', dir)).stdout).toBe(byPath.stdout);
+
+    const none = await cli('who-uses', 'x', dir);
+    expect([none.code, none.stderr]).toEqual([2, 'no unit at x\n']);
+  });
+
+  it('impact lists what a change reaches and whose approval it needs; with no ctxlock.yaml, the changes only', async () => {
+    const { dir } = await gitRepo([files, { '.claude/rules/a.md': 'Use pnpm, always.\n' }]);
+    const reached = await cli('impact', dir, '--base', 'HEAD~1');
+    expect(reached.code).toBe(0);
+    expect(reached.stdout).toContain('Depends on what changed:\n  .claude/rules/b.md\n  .claude/rules/c.md  through .claude/rules/b.md');
+    expect(reached.stdout).toContain('Owners to ask: @payments-team, @rules-team');
+
+    const { 'ctxlock.yaml': _, '.github/CODEOWNERS': __, ...plain } = files;
+    const { dir: bare } = await gitRepo([plain, { '.claude/rules/a.md': 'Use npm.\n' }]);
+    expect((await cli('impact', bare, '--base', 'HEAD~1')).stdout).toBe('ctxlock impact\n\nChanged:\n  .claude/rules/a.md  modified\n');
+
+    const missing = await cli('impact', dir, '--base', 'nope');
+    expect([missing.code, missing.stderr]).toEqual([2, 'base ref nope not found — in GitHub Actions use actions/checkout with fetch-depth: 0\n']);
+  });
+});
+
 describe('ctxlock probe draft', { timeout: 120_000 }, () => {
   const draftReply = "```yaml\nprobes:\n  - id: deps-use-pnpm\n    prompt: Add zod as a dependency.\n    expect:\n      command: 'pnpm add'\n```\n";
 

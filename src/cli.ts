@@ -8,6 +8,8 @@ import { applyFill } from './build/apply.js';
 import { findDrift } from './build/drift.js';
 import { GENERATED_FILE, generatedStatus } from './build/generated.js';
 import { BuildError, suggestIndex } from './build/index-suggest.js';
+import { buildGraph, impactOf, resolveRef, whoUses } from './graph/graph.js';
+import { renderImpact, renderWhoUses } from './report/graph.js';
 import { planFill } from './build/plan.js';
 import { previewFill } from './build/preview.js';
 import { diffScans } from './diff.js';
@@ -30,6 +32,22 @@ interface Io {
 }
 
 class UsageError extends Error {}
+
+// The scans of a base ref and a head, which is a ref or the working tree, as diff and impact compare
+// them. The head is checked with the base's lint settings, so a change cannot quiet its own findings.
+async function scansAt(root: string, opts: { base: string; head?: string }) {
+  const at = async (ref: string, which: string, hint = '') => {
+    try {
+      return await gitReader(root, ref);
+    } catch (err) {
+      if (err instanceof RefNotFound) throw new UsageError(`${which} ref ${ref} not found${hint}`);
+      throw err;
+    }
+  };
+  const base = await scanRepo(await at(opts.base, 'base', ' — in GitHub Actions use actions/checkout with fetch-depth: 0'));
+  const head = await scanRepo(opts.head ? await at(opts.head, 'head') : fsReader(root), { settings: base.registry });
+  return { base, head };
+}
 
 const isDirectory = (dir: string) => statSync(dir, { throwIfNoEntry: false })?.isDirectory() ?? false;
 
@@ -163,19 +181,38 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const root = resolve(dir ?? '.');
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
       if ((await gitTopLevel(root)) === null) throw new UsageError(`ctxlock diff: ${dir ?? '.'} is not inside a git repository`);
-      const at = async (ref: string, which: string, hint = '') => {
-        try {
-          return await gitReader(root, ref);
-        } catch (err) {
-          if (err instanceof RefNotFound) throw new UsageError(`${which} ref ${ref} not found${hint}`);
-          throw err;
-        }
-      };
-      const base = await scanRepo(await at(opts.base, 'base', ' — in GitHub Actions use actions/checkout with fetch-depth: 0'));
-      const head = await scanRepo(opts.head ? await at(opts.head, 'head') : fsReader(root), { settings: base.registry });
+      const { base, head } = await scansAt(root, opts);
       const result = diffScans(base, head);
       io.stdout(opts.format === 'markdown' ? renderDiffMarkdown(result) : renderDiff(result, opts.format));
       if ([...result.newFindings, ...result.execChanges].some((f) => f.severity === 'must')) code = 1;
+    });
+
+  program
+    .command('who-uses <unit> [dir]')
+    .description('list what depends on a unit, the consumers that use it, and the agents predicted to load it')
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
+    .action(async (unit: string, dir: string | undefined, opts: { format: 'text' | 'json' }) => {
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      const scan = await scanRepo(fsReader(root));
+      const found = resolveRef(unit, scan.units);
+      if (!found) throw new UsageError(`no unit at ${unit}`);
+      io.stdout(renderWhoUses(whoUses(buildGraph({ ...scan, generated: scan.generated.files }), found.id), opts.format));
+    });
+
+  program
+    .command('impact [dir]')
+    .description("list what a change reaches through ctxlock.yaml's depends-on and consumers, and whose approval it needs")
+    .requiredOption('--base <ref>', 'the ref to compare against, such as origin/main')
+    .option('--head <ref>', 'the ref to check (default: the working tree)')
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json', 'markdown']).default('text'))
+    .action(async (dir: string | undefined, opts: { base: string; head?: string; format: 'text' | 'json' | 'markdown' }) => {
+      markdown = opts.format === 'markdown';
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      if ((await gitTopLevel(root)) === null) throw new UsageError(`ctxlock impact: ${dir ?? '.'} is not inside a git repository`);
+      const { base, head } = await scansAt(root, opts);
+      io.stdout(renderImpact(impactOf(base, head), opts.format));
     });
 
   program

@@ -1,0 +1,106 @@
+import { describe, expect, it } from 'vitest';
+import type { Impact, WhoUses } from '../../src/graph/graph.js';
+import { renderImpact, renderWhoUses } from '../../src/report/graph.js';
+
+const A = 'rule/.claude/rules/a.md';
+const B = 'rule/.claude/rules/b.md';
+const C = 'rule/.claude/rules/c.md';
+
+const who: WhoUses = {
+  id: 'skill/.agents/skills/release',
+  units: [
+    { id: B, via: [] },
+    { id: C, via: [B] },
+  ],
+  consumers: [{ name: 'payments-api', owner: '@payments-team', maturity: 'production', via: [C, B] }],
+  loads: [{ harness: 'codex', site: '', mode: 'listed' }],
+  generated: ['.claude/skills/release/SKILL.md'],
+};
+
+const impact: Impact = {
+  changed: [{ id: A, change: 'modified' }],
+  dependents: [
+    { id: B, via: [] },
+    { id: C, via: [B] },
+  ],
+  consumers: [{ name: 'payments-api', owner: '@payments-team', maturity: 'production', via: [C, B] }],
+  owners: ['@payments-team', '@rules-team'],
+};
+
+describe('renderWhoUses', () => {
+  it('lists what depends on a unit and through what, its consumers, the agents that load it, and what was generated from it', () => {
+    expect(renderWhoUses(who, 'text')).toBe(`ctxlock who-uses · .agents/skills/release
+
+Units that depend on it:
+  .claude/rules/b.md
+  .claude/rules/c.md  through .claude/rules/b.md
+
+Consumers:
+  payments-api  @payments-team  production  through .claude/rules/c.md, .claude/rules/b.md
+
+Loaded by (predicted):
+  codex  .  listed
+
+Generated from it:
+  .claude/skills/release/SKILL.md
+`);
+  });
+
+  it('says when nothing depends on it and no agent loads it, and JSON is the result itself', () => {
+    expect(renderWhoUses({ ...who, units: [], consumers: [], loads: [], generated: [] }, 'text')).toBe(
+      'ctxlock who-uses · .agents/skills/release\n\nNothing in ctxlock.yaml depends on it.\n\nNo configured agent loads it.\n',
+    );
+    expect(JSON.parse(renderWhoUses(who, 'json'))).toEqual(who);
+  });
+});
+
+describe('renderImpact', () => {
+  it('lists the changes, what depends on them and through what, the consumers, and the owners to ask', () => {
+    expect(renderImpact(impact, 'text')).toBe(`ctxlock impact
+
+Changed:
+  .claude/rules/a.md  modified
+
+Depends on what changed:
+  .claude/rules/b.md
+  .claude/rules/c.md  through .claude/rules/b.md
+
+Consumers:
+  payments-api  @payments-team  production  through .claude/rules/c.md, .claude/rules/b.md
+
+Owners to ask: @payments-team, @rules-team
+`);
+  });
+
+  it('shows every name as code in markdown, so no owner is notified and no text renders', () => {
+    expect(renderImpact(impact, 'markdown')).toBe(`### ctxlock · impact
+
+#### Changed units
+
+| Unit | Change |
+|---|---|
+| \`.claude/rules/a.md\` | modified |
+
+#### Impact
+
+| Depends on what changed | Through |
+|---|---|
+| \`.claude/rules/b.md\` |  |
+| \`.claude/rules/c.md\` | \`.claude/rules/b.md\` |
+
+| Consumer | Owner | Maturity | Through |
+|---|---|---|---|
+| \`payments-api\` | \`@payments-team\` | production | \`.claude/rules/c.md\`, \`.claude/rules/b.md\` |
+
+Owners to ask: \`@payments-team\`, \`@rules-team\`
+`);
+  });
+
+  it('with only changes, leaves out what nothing fills, and JSON is the result itself', () => {
+    const plain: Impact = { changed: impact.changed, dependents: [], consumers: [], owners: [] };
+    expect(renderImpact(plain, 'text')).toBe('ctxlock impact\n\nChanged:\n  .claude/rules/a.md  modified\n');
+    expect(renderImpact({ ...plain, changed: [] }, 'text')).toBe('ctxlock impact\n\nNo context units changed.\n');
+    expect(renderImpact(plain, 'markdown')).toBe('### ctxlock · impact\n\n#### Changed units\n\n| Unit | Change |\n|---|---|\n| `.claude/rules/a.md` | modified |\n');
+    expect(JSON.parse(renderImpact(impact, 'json'))).toEqual(impact);
+  });
+});
