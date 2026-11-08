@@ -53,6 +53,15 @@ describe('joinLoads', () => {
     ]);
   });
 
+  it('keeps the digest when the run copy has CRLF line endings', async () => {
+    const { dir, scan } = await setup({ 'CLAUDE.md': 'Use pnpm.\nRun tests.\n' });
+    writeTree(dir, { 'CLAUDE.md': 'Use pnpm.\r\nRun tests.\r\n' });
+
+    expect(joinLoads(transcript({ loads: [{ path: 'CLAUDE.md', reason: 'session_start' }] }), scan, dir)).toEqual([
+      { unit_id: 'instructions/CLAUDE.md', unit_digest: digestOf('CLAUDE.md', 'Use pnpm.\nRun tests.\n'), load_reason: 'session_start', observed: true },
+    ]);
+  });
+
   it('ignores loads of files that are no unit, and of paths outside the copy', async () => {
     const { dir, scan } = await setup({ 'CLAUDE.md': 'c\n', 'notes.md': 'n' });
     const loads = [{ path: 'notes.md', reason: 'session_start' }, { path: '/elsewhere/CLAUDE.md', reason: 'session_start' }];

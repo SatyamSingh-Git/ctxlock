@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Unit } from '../model.js';
 import type { ScanResult } from '../scan.js';
-import { sha256Hex, unitDigest } from '../units/digest.js';
+import { lfDigest, unitDigest } from '../units/digest.js';
 import type { Transcript } from './claude.js';
 
 // The design's context.load event (spec §4.3), without the session and time.
@@ -21,7 +21,7 @@ const REASONS: Record<string, string> = { session_start: 'session_start', includ
 
 function digestIn(dir: string, unit: Unit): string | null {
   if (!unit.files.every((f) => existsSync(join(dir, f.path)))) return null;
-  const digest = unitDigest(unit.files.map((f) => ({ ...f, sha256: sha256Hex(readFileSync(join(dir, f.path))) })));
+  const digest = unitDigest(unit.files.map((f) => ({ ...f, sha256: lfDigest(readFileSync(join(dir, f.path))) })));
   return digest === unit.digest ? digest : null;
 }
 
