@@ -38,15 +38,15 @@ This is Phase 2's second plan. The next one is the org context repository, with 
 | 4 | Done: exact match on S4's fixture, and plano ([report](../../dogfood/2026-11-08-collector.md)) | `b2aa97e` |
 | Final review | Done. No critical finding. Two important ones fixed, each with a test that failed first: a fallback `AGENTS.md` below the top, and sessions started in a subfolder. Two minors re-graded important and fixed: verbatim output in the report, and exact statements of what is recorded ([chapter 12](../../../journey/12-collector.md#what-broke)) | `490e269`, the docs commit |
 
-**Deferred from the final review** (minor, not fixed):
-- `M3`: the collector relies on `hooks.json`'s exact `Skill` matcher for D66. A `tool_name === 'Skill'` check in `collect.mjs` would keep the guarantee if matcher rules ever changed.
-- `M4`: event paths aren't canonicalized, only the roots are. A session started through a junction or an 8.3 name, while `loads` runs on the real path, doesn't match, nor does a nested path whose case differs below the root.
-- `M5`: a line cut short with no newline joins the next line written, so that complete line is lost too.
-- `M7`: `who-uses` exits 2 when `~/.ctxlock/events` exists but is a file. A static query shouldn't depend on the collector's store.
-- `M8`: collector errors and unread lines are counted across the whole store, with no date. One old error shows in every repository's `loads`.
-- `M9`: when the collector is installed but no session matched the folder, `loads` still prints the install commands.
-- `M10`: "What it can't see" doesn't cover skills a person invokes by typing `/name`, which probably fire no Skill tool call (unverified), nor a project skill shadowed by a personal one of the same name.
-- `M11`: `bySession` copies its array on every event, and `renderLoads`'s header repeats the pluralization that `sessions()` already does.
+**Deferred from the final review** (minor), then fixed the next day, one commit each:
+- `M3`: the collector relies on `hooks.json`'s exact `Skill` matcher for D66. A `tool_name === 'Skill'` check in `collect.mjs` would keep the guarantee if matcher rules ever changed. Fixed in `7bcecf5`.
+- `M4`: event paths aren't canonicalized, only the roots are. A session started through a junction or an 8.3 name, while `loads` runs on the real path, doesn't match, nor does a nested path whose case differs below the root. Fixed in `cb15eb0`.
+- `M5`: a line cut short with no newline joins the next line written, so that complete line is lost too. Fixed in `7e356f3`.
+- `M7`: `who-uses` exits 2 when `~/.ctxlock/events` exists but is a file. A static query shouldn't depend on the collector's store. Fixed in `ae41cac`.
+- `M8`: collector errors and unread lines are counted across the whole store, with no date. One old error shows in every repository's `loads`. Fixed in `0502bba`.
+- `M9`: when the collector is installed but no session matched the folder, `loads` still prints the install commands. Fixed in `79f2981`.
+- `M10`: "What it can't see" doesn't cover skills a person invokes by typing `/name`, which fire no Skill tool call (checked live), nor a project skill shadowed by a personal one of the same name. Fixed in `9bddec8`.
+- `M11`: `bySession` copies its array on every event, and `renderLoads`'s header repeats the pluralization that `sessions()` already does. Fixed in `b1884f9`.
 
 ## Rulings this plan makes
 
