@@ -1,4 +1,5 @@
 import type { GeneratedFile } from '../build/generated.js';
+import type { UnitLoads } from '../collect/sessions.js';
 import type { UnitChange } from '../diff.js';
 import type { LoadMode } from '../harness/types.js';
 import type { HarnessId, Unit } from '../model.js';
@@ -41,6 +42,8 @@ export interface WhoUses {
   consumers: ConsumerUse[];
   loads: Load[];
   generated: string[];
+  // Present when the collector recorded sessions in the repository; unit is null when none loaded it.
+  observed?: { sessions: number; unit: UnitLoads | null };
 }
 
 export interface Impact {

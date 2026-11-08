@@ -1,4 +1,4 @@
-# Commands: `scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`
+# Commands: `scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`, `loads`
 
 ctxlock reads your repository's agent context and reports on it. The checks never change a file in the repository. Two commands write new files when you ask them to: `ctxlock build --fill-missing` and `ctxlock probe draft`. Nothing leaves your machine except through `eval` and `probe draft`, which run Claude Code.
 
@@ -175,7 +175,7 @@ ctxlock build [dir] [--fill-missing] [--suggest-index <dir>] [--format text|json
 
 ## `ctxlock who-uses`
 
-Lists what relies on a unit. That covers the units whose `depends-on` in `ctxlock.yaml` names it, directly or through others, and the consumers that use it. It also lists the agents predicted to load it, and the files `build` generated from it. [The graph](graph.md) explains `depends-on` and consumers.
+Lists what relies on a unit. That covers the units whose `depends-on` in `ctxlock.yaml` names it, directly or through others, and the consumers that use it. It also lists the agents predicted to load it, and the files `build` generated from it. When the collector has recorded Claude Code sessions in the repository (see [`ctxlock loads`](#ctxlock-loads)), it also says how many of them loaded the unit. [The graph](graph.md) explains `depends-on` and consumers.
 
 ```
 ctxlock who-uses <unit> [dir] [--format text|json]
@@ -195,6 +195,9 @@ Consumers:
 
 Loaded by (predicted):
   claude-code  .  always
+
+Loaded in sessions (observed):
+  claude-code  14 of 20 sessions  session_start  last 2026-11-08
 ```
 
 ## `ctxlock impact`
@@ -223,14 +226,56 @@ Owners to ask: @payments-team, @platform-team
 
 In markdown, every name is shown as code, so a pull request comment notifies no one.
 
+## `ctxlock loads`
+
+Lists which units Claude Code loaded in your own sessions in this repository, as ctxlock's collector recorded them. The collector is a Claude Code plugin:
+
+```sh
+claude plugin marketplace add SatyamSingh-Git/ctxlock
+claude plugin install ctxlock@ctxlock
+```
+
+For each load it records:
+- the file's path and a digest of it;
+- the reason and the time.
+
+The records go in `~/.ctxlock/events`, or `$CTXLOCK_HOME/events`. It never records content.
+
+```
+ctxlock loads [dir] [--format text|json]
+```
+
+```
+ctxlock loads · 20 Claude Code sessions, 2026-10-30 to 2026-11-08
+
+Loaded:
+  CLAUDE.md             20 sessions  session_start  last 2026-11-08
+  .claude/rules/api.md  5 sessions   glob           last 2026-11-07  2 on another version
+
+Not loaded in these sessions:
+  .claude/rules/legacy.md  lazy
+  .claude/skills/old       listed
+```
+
+- **Loaded** lists each unit with the number of sessions that loaded it, how, and when last.
+  - "On another version" counts sessions that loaded different bytes from the file as it is now.
+  - A unit Claude Code never reports shows as `(predicted)`. That is an `AGENTS.md` it reads through its fallback, when there is no `CLAUDE.md`.
+- **Not loaded in these sessions** lists what ctxlock predicts Claude Code can load from the top of the repository, but no session did. Over many sessions, these are the units to review or delete.
+- **When no consumer in `ctxlock.yaml` runs on Claude Code,** it says so, because `impact` can only name declared consumers.
+
+**What counts:**
+- A session counts if it started in the repository, or loaded a file in it.
+- Files outside the repository, such as your own `~/.claude/CLAUDE.md`, are never listed.
+- The JSON has counts per unit and no session IDs.
+
 ---
 
 ## Exit codes
 
 | Code | Meaning |
 |---|---|
-| 0 | Done, including every `build`, `who-uses` and `impact`. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
+| 0 | Done, including every `build`, `who-uses`, `impact` and `loads`. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
 | 1 | `lint`: at least one `must` finding. `diff`: a new `must` finding or an execution-affecting change. `eval`: only with `--fail-on-regression`, a gated regression |
-| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`, `eval` and `impact`), a `who-uses` unit that is no unit, a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` cannot read, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
+| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`, `eval` and `impact`), a `who-uses` unit that is no unit, a `loads` folder that does not exist, a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` cannot read, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
 
 `scan` and `budget` exit 0 whatever they find, so you can run them anywhere without failing a build.

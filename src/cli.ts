@@ -8,8 +8,11 @@ import { applyFill } from './build/apply.js';
 import { findDrift } from './build/drift.js';
 import { GENERATED_FILE, generatedStatus } from './build/generated.js';
 import { BuildError, suggestIndex } from './build/index-suggest.js';
+import { eventsHome, readEvents } from './collect/events.js';
+import { joinSessions } from './collect/sessions.js';
 import { buildGraph, impactOf, resolveRef, whoUses } from './graph/graph.js';
 import { renderImpact, renderWhoUses } from './report/graph.js';
+import { renderLoads } from './report/loads.js';
 import { planFill } from './build/plan.js';
 import { previewFill } from './build/preview.js';
 import { diffScans } from './diff.js';
@@ -24,7 +27,7 @@ import { renderBuild } from './report/build.js';
 import { renderEval } from './report/eval.js';
 import { renderDiffMarkdown, renderErrorMarkdown } from './report/markdown.js';
 import { renderDiff, renderScan } from './report/render.js';
-import { scanRepo } from './scan.js';
+import { type ScanResult, scanRepo } from './scan.js';
 
 interface Io {
   stdout: (s: string) => void;
@@ -50,6 +53,10 @@ async function scansAt(root: string, opts: { base: string; head?: string }) {
 }
 
 const isDirectory = (dir: string) => statSync(dir, { throwIfNoEntry: false })?.isDirectory() ?? false;
+
+// Recorded sessions in a folder, matched under its real path and under the path as typed: Claude Code
+// reports the path its session was started in, and Windows can give a temp folder an 8.3 name.
+const sessionsAt = (root: string, scan: ScanResult) => joinSessions(readEvents(eventsHome()), scan, [...new Set([realpathSync.native(root), root])]);
 
 function count(value: string): number {
   const n = Number(value);
@@ -197,7 +204,20 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const scan = await scanRepo(fsReader(root));
       const found = resolveRef(unit, scan.units);
       if (!found) throw new UsageError(`no unit at ${unit}`);
-      io.stdout(renderWhoUses(whoUses(buildGraph({ ...scan, generated: scan.generated.files }), found.id), opts.format));
+      const uses = whoUses(buildGraph({ ...scan, generated: scan.generated.files }), found.id);
+      const seen = sessionsAt(root, scan);
+      const observed = seen.sessions ? { sessions: seen.sessions, unit: seen.units.find((u) => u.id === found.id) ?? null } : undefined;
+      io.stdout(renderWhoUses(observed ? { ...uses, observed } : uses, opts.format));
+    });
+
+  program
+    .command('loads [dir]')
+    .description('list which units Claude Code loaded in the sessions the collector recorded, and which it never did')
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
+    .action(async (dir: string | undefined, opts: { format: 'text' | 'json' }) => {
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      io.stdout(renderLoads(sessionsAt(root, await scanRepo(fsReader(root))), opts.format));
     });
 
   program

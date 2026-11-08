@@ -1,3 +1,4 @@
+import type { UnitLoads } from '../collect/sessions.js';
 import type { ConsumerUse, Impact, Use, WhoUses } from '../graph/graph.js';
 import { cell, code } from './markdown.js';
 import { table } from './render.js';
@@ -5,7 +6,14 @@ import { table } from './render.js';
 // A unit's ID is its kind, a slash, then its path.
 const pathOf = (id: string) => id.slice(id.indexOf('/') + 1);
 const through = (via: string[]) => (via.length ? `through ${via.map(pathOf).join(', ')}` : '');
-const block = (title: string, rows: string[][]) => (rows.length ? ['', `${title}:`, table(rows.map(([first, ...rest]) => [`  ${first}`, ...rest]))] : []);
+export const block = (title: string, rows: string[][]) => (rows.length ? ['', `${title}:`, table(rows.map(([first, ...rest]) => [`  ${first}`, ...rest]))] : []);
+export const sessions = (n: number) => `${n} session${n === 1 ? '' : 's'}`;
+// How recorded sessions loaded a unit, and when last.
+export const howLoaded = (u: UnitLoads) => [
+  `${u.reasons.join(', ')}${u.predicted ? ' (predicted)' : ''}`,
+  `last ${u.lastSeen.slice(0, 10)}`,
+  u.otherVersion ? `${u.otherVersion} on another version` : '',
+];
 const unitRows = (uses: Use[]) => uses.map((u) => [pathOf(u.id), through(u.via)]);
 const consumerRows = (consumers: ConsumerUse[]) => consumers.map((c) => [c.name, c.owner ?? '', c.maturity, through(c.via)]);
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
@@ -18,6 +26,11 @@ export function renderWhoUses(w: WhoUses, format: 'text' | 'json'): string {
       ? ['', 'Nothing in ctxlock.yaml depends on it.']
       : [...block('Units that depend on it', unitRows(w.units)), ...block('Consumers', consumerRows(w.consumers))]),
     ...(w.loads.length ? block('Loaded by (predicted)', w.loads.map((l) => [l.harness, l.site || '.', l.mode])) : ['', 'No configured agent loads it.']),
+    ...(w.observed
+      ? block('Loaded in sessions (observed)', [
+          ['claude-code', `${w.observed.unit?.sessions ?? 0} of ${sessions(w.observed.sessions)}`, ...(w.observed.unit ? howLoaded(w.observed.unit) : [])],
+        ])
+      : []),
     ...block('Generated from it', w.generated.map((path) => [path])),
   ];
   return `${lines.join('\n')}\n`;

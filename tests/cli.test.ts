@@ -1,11 +1,18 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { main } from '../src/cli.js';
 import { cleanup, gitRepo, tempDir, writeTree } from './helpers/repo.js';
 
 afterAll(cleanup);
+// No test reads the developer's own recorded sessions.
+beforeEach(() => {
+  vi.stubEnv('CTXLOCK_HOME', tempDir());
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 async function cli(...argv: string[]) {
   let stdout = '';
@@ -365,6 +372,64 @@ describe('ctxlock who-uses and ctxlock impact', { timeout: 120_000 }, () => {
 
     const missing = await cli('impact', dir, '--base', 'nope');
     expect([missing.code, missing.stderr]).toEqual([2, 'base ref nope not found — in GitHub Actions use actions/checkout with fetch-depth: 0\n']);
+  });
+});
+
+describe('ctxlock loads', () => {
+  it('lists what recorded sessions loaded, and who-uses shows them beside the prediction', async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'CLAUDE.md': 'Use pnpm.\n', '.claude/rules/old.md': 'Old.\n' });
+    // Claude Code reports the long path where Windows' temp folder has an 8.3 name.
+    const real = realpathSync.native(dir);
+    const line = (o: object) => JSON.stringify({ v: 1, ts: '2026-11-08T10:00:00.000Z', harness: 'claude-code', session: 's1', cwd: real, ...o });
+    const home = tempDir();
+    writeTree(home, {
+      'events/2026-11.jsonl': `${line({ event: 'session_start', source: 'startup' })}\n${line({ event: 'load', file: join(real, 'CLAUDE.md'), sha256: null, reason: 'session_start' })}\n`,
+    });
+    vi.stubEnv('CTXLOCK_HOME', home);
+
+    const loads = await cli('loads', dir);
+    expect(loads.code).toBe(0);
+    expect(loads.stdout).toBe(`ctxlock loads · 1 Claude Code session, 2026-11-08
+
+Loaded:
+  CLAUDE.md  1 session  session_start  last 2026-11-08
+
+Not loaded in these sessions:
+  .claude/rules/old.md  always
+
+These sessions match no consumer in ctxlock.yaml. Declare one so impact can name it.
+`);
+    expect((await cli('who-uses', 'CLAUDE.md', dir)).stdout).toContain('Loaded in sessions (observed):\n  claude-code  1 of 1 session  session_start  last 2026-11-08\n');
+    expect((await cli('who-uses', '.claude/rules/old.md', dir)).stdout).toContain('Loaded in sessions (observed):\n  claude-code  0 of 1 session\n');
+  });
+
+  it('matches sessions recorded under the real path of the folder and under a link to it', async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'CLAUDE.md': 'Use pnpm.\n' });
+    const real = realpathSync.native(dir);
+    const link = join(tempDir(), 'link');
+    symlinkSync(real, link, 'junction');
+    const line = (session: string, top: string) =>
+      JSON.stringify({ v: 1, ts: '2026-11-08T10:00:00.000Z', harness: 'claude-code', session, cwd: top, event: 'load', file: join(top, 'CLAUDE.md'), sha256: null, reason: 'session_start' });
+    const home = tempDir();
+    writeTree(home, { 'events/2026-11.jsonl': `${line('s1', real)}\n${line('s2', link)}\n` });
+    vi.stubEnv('CTXLOCK_HOME', home);
+
+    expect((await cli('loads', link)).stdout).toContain('ctxlock loads · 2 Claude Code sessions');
+  });
+
+  it('says how to install the collector when nothing was recorded, and exits 2 for a folder that is not one', async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'CLAUDE.md': 'Use pnpm.\n' });
+
+    const loads = await cli('loads', dir);
+    expect(loads.code).toBe(0);
+    expect(loads.stdout).toContain('claude plugin install ctxlock@ctxlock');
+    expect((await cli('who-uses', 'CLAUDE.md', dir)).stdout).not.toContain('observed');
+
+    const file = await cli('loads', join(dir, 'CLAUDE.md'));
+    expect(file.code).toBe(2);
   });
 });
 

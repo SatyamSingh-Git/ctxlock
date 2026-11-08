@@ -52,6 +52,18 @@ Generated from it:
     );
     expect(JSON.parse(renderWhoUses(who, 'json'))).toEqual(who);
   });
+
+  it('adds the recorded sessions that loaded it, only when there are any', () => {
+    const unit = { id: who.id, path: '.agents/skills/release', sessions: 14, reasons: ['skill_invoked'], lastSeen: '2026-11-08T10:00:00.000Z', otherVersion: 0, predicted: false };
+
+    expect(renderWhoUses({ ...who, generated: [], observed: { sessions: 20, unit } }, 'text')).toContain(
+      'Loaded by (predicted):\n  codex  .  listed\n\nLoaded in sessions (observed):\n  claude-code  14 of 20 sessions  skill_invoked  last 2026-11-08\n',
+    );
+    expect(renderWhoUses({ ...who, observed: { sessions: 1, unit: null } }, 'text')).toContain(
+      'Loaded in sessions (observed):\n  claude-code  0 of 1 session\n\nGenerated from it:',
+    );
+    expect(renderWhoUses(who, 'text')).not.toContain('observed');
+  });
 });
 
 describe('renderImpact', () => {
