@@ -34,6 +34,11 @@ function parse(text: string): unknown {
   }
 }
 
+// A line cut short without its newline, as a full disk leaves it, has the next line written run on
+// from it. Every line the collector writes starts with {"v":, which can't occur inside a JSON string,
+// where the quote is escaped.
+const records = (text: string) => text.split(/(?=\{"v":)/).map(parse);
+
 export function readEvents(home: string): { events: RecordedEvent[]; skipped: number } {
   const folder = join(home, 'events');
   if (!existsSync(folder)) return { events: [], skipped: 0 };
@@ -42,10 +47,11 @@ export function readEvents(home: string): { events: RecordedEvent[]; skipped: nu
   for (const name of readdirSync(folder).filter((n) => n.endsWith('.jsonl')).sort()) {
     for (const text of readFileSync(join(folder, name), 'utf8').split('\n')) {
       if (!text.trim()) continue;
-      const raw = parse(text) as { v?: unknown } | null;
-      const result = raw?.v === 1 ? recorded.safeParse(raw) : null;
-      if (result?.success) events.push(result.data);
-      else skipped++;
+      for (const raw of records(text) as Array<{ v?: unknown } | null>) {
+        const result = raw?.v === 1 ? recorded.safeParse(raw) : null;
+        if (result?.success) events.push(result.data);
+        else skipped++;
+      }
     }
   }
   return { events, skipped };

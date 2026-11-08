@@ -19,7 +19,7 @@ describe('readEvents', () => {
         line({ ts: '2026-11-01T00:00:00.000Z', session: 's1', cwd: '/r', event: 'load', file: '/r/CLAUDE.md', sha256: 'ab', reason: 'session_start', trigger: '/r/a.ts' }),
         line({ ts: '2026-11-01T00:00:01.000Z', session: 's1', cwd: '/r', event: 'load', file: '/r/gone.md', sha256: null, reason: 'include', parent: '/r/CLAUDE.md' }),
         line({ ts: '2026-11-01T00:00:02.000Z', session: 's1', cwd: '/r', event: 'skill', skill: 'release' }),
-        JSON.stringify({ v: 1, ts: '2026-11-01T00:00:03.000Z', event: 'error', message: 'disk full' }),
+        JSON.stringify({ v: 1, ts: '2026-11-01T00:00:03.000Z', event: 'error', message: 'disk full {"v":1}' }),
         JSON.stringify({ v: 2, ts: '2026-11-01T00:00:04.000Z', session: 's1', cwd: '/r', event: 'session_start' }),
         line({ ts: '2026-11-01T00:00:05.000Z', session: 's1', cwd: '/r', event: 'compact' }),
         '',
@@ -38,10 +38,19 @@ describe('readEvents', () => {
         { event: 'load', ts: '2026-11-01T00:00:00.000Z', session: 's1', cwd: '/r', file: '/r/CLAUDE.md', sha256: 'ab', reason: 'session_start', trigger: '/r/a.ts' },
         { event: 'load', ts: '2026-11-01T00:00:01.000Z', session: 's1', cwd: '/r', file: '/r/gone.md', sha256: null, reason: 'include', parent: '/r/CLAUDE.md' },
         { event: 'skill', ts: '2026-11-01T00:00:02.000Z', session: 's1', cwd: '/r', skill: 'release' },
-        { event: 'error', ts: '2026-11-01T00:00:03.000Z', message: 'disk full' },
+        { event: 'error', ts: '2026-11-01T00:00:03.000Z', message: 'disk full {"v":1}' },
       ],
       skipped: 3,
     });
+  });
+
+  it('reads a whole line written after one cut short without its newline', () => {
+    const home = tempDir();
+    mkdirSync(join(home, 'events'));
+    const whole = line({ ts: '2026-11-01T00:00:01.000Z', session: 's1', cwd: '/r', event: 'skill', skill: 'release' });
+    writeFileSync(join(home, 'events', '2026-11.jsonl'), `{"v":1,"ts":"2026-11-01T00:00:00.000Z","sess${whole}\n`);
+
+    expect(readEvents(home)).toEqual({ events: [{ event: 'skill', ts: '2026-11-01T00:00:01.000Z', session: 's1', cwd: '/r', skill: 'release' }], skipped: 1 });
   });
 
   it('no events folder gives no events', () => {
