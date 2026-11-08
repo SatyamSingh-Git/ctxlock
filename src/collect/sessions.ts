@@ -73,7 +73,11 @@ export function joinSessions(
     if (e.event === 'error') {
       errors++;
       if (!lastError || e.ts >= lastError.ts) lastError = { ts: e.ts, message: e.message };
-    } else bySession.set(e.session, [...(bySession.get(e.session) ?? []), e]);
+    } else {
+      const lines = bySession.get(e.session) ?? [];
+      lines.push(e);
+      bySession.set(e.session, lines);
+    }
   }
 
   const tally = new Map<string, Omit<UnitLoads, 'reasons' | 'predicted'> & { reasons: Set<string>; observed: boolean }>();

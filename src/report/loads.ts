@@ -22,7 +22,7 @@ export function renderLoads(s: Sessions, format: 'text' | 'json'): string {
             : INSTALL),
         ]
       : [
-          `ctxlock loads · ${s.sessions} Claude Code ${s.sessions === 1 ? 'session' : 'sessions'}, ${from === to ? from : `${from} to ${to}`}`,
+          `ctxlock loads · ${sessions(s.sessions, 'Claude Code ')}, ${from === to ? from : `${from} to ${to}`}`,
           ...block('Loaded', s.units.map((u) => [u.path, sessions(u.sessions), ...howLoaded(u)])),
           ...block('Not loaded in these sessions', s.unseen.map((u) => [u.path, u.mode])),
           ...(s.undeclared ? ['', 'These sessions match no consumer in ctxlock.yaml. Declare one so impact can name it.'] : []),

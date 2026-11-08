@@ -7,7 +7,7 @@ import { table } from './render.js';
 const pathOf = (id: string) => id.slice(id.indexOf('/') + 1);
 const through = (via: string[]) => (via.length ? `through ${via.map(pathOf).join(', ')}` : '');
 export const block = (title: string, rows: string[][]) => (rows.length ? ['', `${title}:`, table(rows.map(([first, ...rest]) => [`  ${first}`, ...rest]))] : []);
-export const sessions = (n: number) => `${n} session${n === 1 ? '' : 's'}`;
+export const sessions = (n: number, kind = '') => `${n} ${kind}session${n === 1 ? '' : 's'}`;
 // How recorded sessions loaded a unit, and when last.
 export const howLoaded = (u: UnitLoads) => [
   `${u.reasons.join(', ')}${u.predicted ? ' (predicted)' : ''}`,
