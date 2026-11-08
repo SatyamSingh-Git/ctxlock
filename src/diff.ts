@@ -1,3 +1,4 @@
+import { unitChanges } from './graph/graph.js';
 import type { Finding } from './model.js';
 import type { BudgetRow } from './report/budget.js';
 import type { ScanResult } from './scan.js';
@@ -18,8 +19,6 @@ export interface DiffResult {
   execChanges: Finding[];
   existingMust: number;
 }
-
-const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 // Positions and counts in messages move with unrelated edits ("at 14:7", "is 33902 bytes",
 // "(1 unit)" becoming "(4 units)"), so findings are matched without them. A finding about hidden
@@ -44,16 +43,7 @@ const isInventory = (f: Finding) => f.rule === 'L2-exec-config';
 const isMust = (f: Finding) => f.severity === 'must';
 
 export function diffScans(base: ScanResult, head: ScanResult): DiffResult {
-  const baseUnits = new Map(base.units.map((u) => [u.id, u]));
-  const headIds = new Set(head.units.map((u) => u.id));
-  const changes: UnitChange[] = [];
-  for (const unit of head.units) {
-    const before = baseUnits.get(unit.id);
-    if (!before) changes.push({ id: unit.id, change: 'added' });
-    else if (before.digest !== unit.digest) changes.push({ id: unit.id, change: 'modified' });
-  }
-  for (const unit of base.units) if (!headIds.has(unit.id)) changes.push({ id: unit.id, change: 'removed' });
-  changes.sort((a, b) => byCodeUnit(a.id, b.id));
+  const changes = unitChanges(base, head);
 
   // Inventory items are reported once, as execution-affecting changes, not again as new findings.
   const headFindings = head.findings.filter((f) => !isInventory(f));
