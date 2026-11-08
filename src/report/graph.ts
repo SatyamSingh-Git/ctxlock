@@ -51,6 +51,13 @@ function reachedText(i: Impact): string[] {
   ];
 }
 
+// The Impact section of diff's output: only when a change reaches a unit or a consumer.
+export function impactSection(i: Impact, format: 'text' | 'markdown'): string[] {
+  if (i.dependents.length + i.consumers.length === 0) return [];
+  if (format === 'markdown') return ['', '#### Impact', ...reachedMarkdown(i)];
+  return ['', 'Impact:', ...reachedText(i).filter(Boolean).join('\n').split('\n').map((line) => `  ${line}`)];
+}
+
 export function renderImpact(i: Impact, format: 'text' | 'json' | 'markdown'): string {
   if (format === 'json') return json(i);
   if (format === 'markdown') {

@@ -85,13 +85,14 @@ lint:
 
 The comment starts with `### ctxlock · context check` and a status line (`❌ 2 must-fix` or `✅ no must-fix issues`). Then it has:
 - the changed units;
+- what they reach, when `ctxlock.yaml` declares it ([the graph](graph.md)): the units that depend on them, the consumers that use those units, and the owners whose approval the change needs. It never fails the check;
 - a before → after budget table;
 - the new findings by severity;
 - the execution-affecting changes;
 - a count of resolved findings;
 - the behavioral section, `### ctxlock · behavioral check`, when it ran: a table of probes with base and head results, whether the agent loaded the changed unit, the tokens per run, and the cost. Without credentials, a line saying it was skipped.
 
-Every path and message from your repository is shown as code, so a file cannot use the comment to notify someone with `@name`, hide text, or load images. Line breaks in that text become spaces, so it cannot end the code early. When ctxlock cannot run, the comment gives the reason the same way. If it crashed before writing anything, the comment says so and the reason is in the job log; ctxlock's error output never goes into the comment.
+Every path, name, owner and message from your repository is shown as code, so a file cannot use the comment to notify someone with `@name` (not even an owner the change needs), hide text, or load images. Line breaks in that text become spaces, so it cannot end the code early. When ctxlock cannot run, the comment gives the reason the same way. If it crashed before writing anything, the comment says so and the reason is in the job log; ctxlock's error output never goes into the comment.
 
 ## Pull requests from forks
 

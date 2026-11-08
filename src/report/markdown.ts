@@ -1,5 +1,6 @@
 import type { DiffResult } from '../diff.js';
 import type { Finding } from '../model.js';
+import { impactSection } from './graph.js';
 
 // Repository text is always shown as code: as markdown it could notify GitHub users (@name), hide
 // itself (<!-- -->), or load images and links into the pull request.
@@ -32,6 +33,7 @@ export function renderDiffMarkdown(d: DiffResult): string {
   lines.push('', '#### Changed units', '');
   if (d.changes.length === 0) lines.push('No context units changed.');
   else lines.push('| Unit | Change |', '|---|---|', ...d.changes.map((c) => `| ${cell(code(c.id))} | ${c.change} |`));
+  lines.push(...impactSection(d.impact, 'markdown'));
 
   lines.push('', '#### Budget', '');
   if (d.budget.length === 0) lines.push('No change in what agents load at the start of a session.');

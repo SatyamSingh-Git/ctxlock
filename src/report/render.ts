@@ -2,6 +2,7 @@ import type { DiffResult } from '../diff.js';
 import type { Finding } from '../model.js';
 import type { ScanResult } from '../scan.js';
 import type { BudgetRow } from './budget.js';
+import { impactSection } from './graph.js';
 
 const site = (s: string) => s || '.';
 
@@ -79,6 +80,7 @@ function diffText(d: DiffResult): string {
     '',
     'Changed units:',
     ...(d.changes.length ? d.changes.map((c) => `  ${c.change.padEnd(9)} ${c.id}`) : ['  none']),
+    ...impactSection(d.impact, 'text'),
     '',
     'Budget:',
     ...(budget.length ? [table(budget)] : ['  no change']),

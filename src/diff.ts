@@ -1,4 +1,4 @@
-import { unitChanges } from './graph/graph.js';
+import { type Impact, impactOf, unitChanges } from './graph/graph.js';
 import type { Finding } from './model.js';
 import type { BudgetRow } from './report/budget.js';
 import type { ScanResult } from './scan.js';
@@ -12,6 +12,7 @@ export interface DiffResult {
   base: ScanResult;
   head: ScanResult;
   changes: UnitChange[];
+  impact: Impact;
   newFindings: Finding[];
   resolvedFindings: Finding[];
   // Only rows whose alwaysBytes changed.
@@ -73,6 +74,7 @@ export function diffScans(base: ScanResult, head: ScanResult): DiffResult {
     base,
     head,
     changes,
+    impact: impactOf(base, head),
     newFindings,
     resolvedFindings: unmatched(baseFindings, headFindings),
     budget,

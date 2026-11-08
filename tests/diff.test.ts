@@ -211,6 +211,30 @@ describe('ctxlock diff', () => {
     expect((await cli('diff', tempDir())).code).toBe(2);
   });
 
+  it('shows what a change reaches, in markdown after the changed units and in text, without changing the exit code', async () => {
+    const yaml = 'version: 1\nunits:\n  .claude/rules/b.md:\n    depends-on: [.claude/rules/a.md]\nconsumers:\n  payments-api:\n    owner: "@payments-team"\n    depends-on: [.claude/rules/b.md]\n';
+    const { dir, shas } = await gitRepo([{ '.claude/rules/a.md': 'Use pnpm.\n', '.claude/rules/b.md': 'Run pnpm test.\n', 'ctxlock.yaml': yaml }, { '.claude/rules/a.md': 'Use pnpm, always.\n' }]);
+
+    const md = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, '--format', 'markdown', dir);
+    expect(md.code).toBe(0);
+    expect(md.stdout).toContain(
+      '| `rule/.claude/rules/a.md` | modified |\n\n#### Impact\n\n| Depends on what changed | Through |\n|---|---|\n| `.claude/rules/b.md` |  |\n\n| Consumer | Owner | Maturity | Through |\n|---|---|---|---|\n| `payments-api` | `@payments-team` | production | `.claude/rules/b.md` |\n\nOwners to ask: `@payments-team`\n\n#### Budget',
+    );
+
+    const text = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, dir);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain(
+      'Changed units:\n  modified  rule/.claude/rules/a.md\n\nImpact:\n  Depends on what changed:\n    .claude/rules/b.md\n  Consumers:\n    payments-api  @payments-team  production  through .claude/rules/b.md\n  Owners to ask: @payments-team\n\nBudget:',
+    );
+  });
+
+  it('shows no impact when no ctxlock.yaml declares what depends on what', async () => {
+    const { dir, shas } = await gitRepo([{ '.claude/rules/a.md': 'Use pnpm.\n', '.claude/rules/b.md': 'Run pnpm test.\n' }, { '.claude/rules/a.md': 'Use pnpm, always.\n' }]);
+    for (const format of ['markdown', 'text']) {
+      expect((await cli('diff', '--base', shas[0]!, '--head', shas[1]!, '--format', format, dir)).stdout).not.toContain('Impact');
+    }
+  });
+
   it('markdown contains the status line, changed units, and execution-affecting section', async () => {
     const { dir, shas } = await gitRepo([
       { 'AGENTS.md': 'Use pnpm.\n' },
@@ -251,14 +275,22 @@ describe('ctxlock diff', () => {
       budget: [{ harness: 'codex', site: evil, baseAlwaysBytes: 1, alwaysBytes: 2, limitBytes: 32768 }],
       execChanges: [{ rule: 'L2-exec-config-changed', severity: 'must', message: evil, path: '.mcp.json' }],
       existingMust: 0,
+      impact: {
+        changed: [],
+        dependents: [{ id: `rule/${evil}`, via: [`rule/${evil}`] }],
+        consumers: [{ name: evil, owner: evil, maturity: 'production', via: [`rule/${evil}`] }],
+        owners: [evil],
+      },
     } as unknown as DiffResult);
+    expect(md).toContain('#### Impact');
     const outsideCode = new MarkdownIt({ html: true }).render(md).replace(/<code>[\s\S]*?<\/code>/g, '');
 
     expect(outsideCode).not.toMatch(/octocat|<img/);
   });
 
   it('a | in a unit id cannot break the changed-units table', () => {
-    const md = renderDiffMarkdown({ changes: [{ id: 'skill/a|b', change: 'added' }], newFindings: [], resolvedFindings: [], budget: [], execChanges: [], existingMust: 0 } as unknown as DiffResult);
+    const impact = { changed: [], dependents: [], consumers: [], owners: [] };
+    const md = renderDiffMarkdown({ changes: [{ id: 'skill/a|b', change: 'added' }], newFindings: [], resolvedFindings: [], budget: [], execChanges: [], existingMust: 0, impact } as unknown as DiffResult);
 
     expect(md).toContain('| `skill/a\\|b` | added |');
     expect(md).toContain('Resolved: 0 findings no longer present.');
