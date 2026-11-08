@@ -23,8 +23,8 @@ export function renderLoads(s: Sessions, format: 'text' | 'json'): string {
           ...(s.undeclared ? ['', 'These sessions match no consumer in ctxlock.yaml. Declare one so impact can name it.'] : []),
         ];
   const problems = [
-    ...(s.errors.count ? [`Collector errors: ${s.errors.count}. The last: ${s.errors.last}`] : []),
-    ...(s.skipped ? [`Lines not read: ${s.skipped}`] : []),
+    ...(s.errors.last ? [`Collector errors, from every repository: ${s.errors.count}. The last, on ${s.errors.last.ts.slice(0, 10)}: ${s.errors.last.message}`] : []),
+    ...(s.skipped ? [`Lines not read, from every repository: ${s.skipped}`] : []),
   ];
   if (problems.length) lines.push('', ...problems);
   return `${lines.join('\n')}\n`;

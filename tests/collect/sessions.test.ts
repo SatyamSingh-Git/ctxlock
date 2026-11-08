@@ -203,11 +203,12 @@ describe('joinSessions', () => {
   it('counts collector errors and unread lines, whatever the repository', async () => {
     const s = await join_(
       { 'CLAUDE.md': 'c\n' },
-      [{ event: 'error', ts: t(1), message: 'disk full' }, start('s9', t(2), resolve('/elsewhere')), { event: 'error', ts: t(3), message: 'EACCES' }],
+      // Writers can interleave, so the latest error is not always the last line.
+      [{ event: 'error', ts: t(3), message: 'EACCES' }, start('s9', t(2), resolve('/elsewhere')), { event: 'error', ts: t(1), message: 'disk full' }],
       2,
     );
 
-    expect(s).toMatchObject({ sessions: 0, first: null, last: null, units: [], errors: { count: 2, last: 'EACCES' }, skipped: 2 });
+    expect(s).toMatchObject({ sessions: 0, first: null, last: null, units: [], errors: { count: 2, last: { ts: t(3), message: 'EACCES' } }, skipped: 2 });
     expect((await join_({ 'CLAUDE.md': 'c\n' }, [])).errors).toEqual({ count: 0 });
   });
 

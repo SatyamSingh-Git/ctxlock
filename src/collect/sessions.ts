@@ -25,7 +25,8 @@ export interface Sessions {
   units: UnitLoads[];
   unseen: Array<{ id: string; path: string; mode: LoadMode }>;
   undeclared: boolean;
-  errors: { count: number; last?: string };
+  // Errors and unread lines are counted over the whole store: an error belongs to no session.
+  errors: { count: number; last?: { ts: string; message: string } };
   skipped: number;
 }
 
@@ -65,11 +66,11 @@ export function joinSessions(
 
   const bySession = new Map<string, Exclude<RecordedEvent, { event: 'error' }>[]>();
   let errors = 0;
-  let lastError: string | undefined;
+  let lastError: { ts: string; message: string } | undefined;
   for (const e of read.events) {
     if (e.event === 'error') {
       errors++;
-      lastError = e.message;
+      if (!lastError || e.ts >= lastError.ts) lastError = { ts: e.ts, message: e.message };
     } else bySession.set(e.session, [...(bySession.get(e.session) ?? []), e]);
   }
 

@@ -15,7 +15,7 @@ const seen: Sessions = {
     { id: 'skill/.claude/skills/old', path: '.claude/skills/old', mode: 'listed' },
   ],
   undeclared: true,
-  errors: { count: 2, last: 'EACCES: permission denied' },
+  errors: { count: 2, last: { ts: '2026-11-08T17:00:00.000Z', message: 'EACCES: permission denied' } },
   skipped: 1,
 };
 
@@ -35,8 +35,8 @@ Not loaded in these sessions:
 
 These sessions match no consumer in ctxlock.yaml. Declare one so impact can name it.
 
-Collector errors: 2. The last: EACCES: permission denied
-Lines not read: 1
+Collector errors, from every repository: 2. The last, on 2026-11-08: EACCES: permission denied
+Lines not read, from every repository: 1
 `);
   });
 
@@ -63,8 +63,8 @@ The collector records which units Claude Code loads in your sessions. To install
   claude plugin install ctxlock@ctxlock
 `;
     expect(renderLoads(none, 'text')).toBe(install);
-    expect(renderLoads({ ...none, errors: { count: 1, last: 'the hook input is not JSON' } }, 'text')).toBe(
-      `${install}\nCollector errors: 1. The last: the hook input is not JSON\n`,
+    expect(renderLoads({ ...none, errors: { count: 1, last: { ts: '2026-11-07T09:00:00.000Z', message: 'the hook input is not JSON' } } }, 'text')).toBe(
+      `${install}\nCollector errors, from every repository: 1. The last, on 2026-11-07: the hook input is not JSON\n`,
     );
   });
 
