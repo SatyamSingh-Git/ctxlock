@@ -26,7 +26,7 @@
 | 11 | Done | `98a1d89`, `07eccd8` |
 | 12 | Done | `cee346f`, `b991f5f` |
 | Batch-2 review (Tasks 6–10) | Done; fixes in | `abbf135` |
-| 13 | Built and checked locally; a live pull request needs Satyam's OK for a test branch | `feat: GitHub Action posting the static context check on PRs` |
+| 13 | Done; checked live on [PR #1](https://github.com/SatyamSingh-Git/ctxlock/pull/1), 2026-11-08 | `feat: GitHub Action posting the static context check on PRs` |
 | 14 | Done on four repositories; not pushed until Satyam says so | `03a342f`, `048ce98` |
 | Batch-3 review (Tasks 11–14) | Done; fixes in, not pushed | `293499d` |
 | S2 | Done: [memo](../../spikes/S2-rulesync.md) | `docs: spike S2, rulesync as the compile backend` |
@@ -831,8 +831,9 @@ docs/dogfood/           # Task 14 report
 
 - [x] **Step 1: Write `action.yml`, `self-test.yml` and the README Usage section.**
 - [x] **Step 2: Verify locally.** Run `node dist/cli.js diff --base HEAD~1 --format markdown` in this repo. Expected: exit 0 and the `✅ no must-fix issues` status line.
-- [ ] **Step 3: Ask Satyam** before pushing a test branch and opening a PR. Creating a branch needs his OK (CLAUDE.md).
-- [ ] **Step 4: With his OK, open the PR and confirm three things:** the sticky comment appears, the job summary renders, and the check passes. Then push a commit adding a U+200B to a test rule, and confirm the check fails with exit 1.
+- [x] **Step 3: Ask Satyam** before pushing a test branch and opening a PR. Creating a branch needs his OK (CLAUDE.md).
+- [x] **Step 4: With his OK, open the PR and confirm three things:** the sticky comment appears, the job summary renders, and the check passes. Then push a commit adding a U+200B to a test rule, and confirm the check fails with exit 1.
+  - Done on [PR #1](https://github.com/SatyamSingh-Git/ctxlock/pull/1) (closed, not merged). The check passed on a new rule; the sticky comment appeared, and stayed one comment when the next run updated it; the step that writes the job summary ran. A U+200B in the rule failed the check with exit 1: `hidden character U+200B ZERO WIDTH SPACE at 1:52`.
 - [x] **Step 5: Commit:** `feat: GitHub Action posting the static context check on PRs`.
 
 ### Task 14: Dogfood on three public repos

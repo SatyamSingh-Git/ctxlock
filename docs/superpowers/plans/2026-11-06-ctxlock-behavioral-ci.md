@@ -30,7 +30,7 @@ The decisions they led to are D35–D37 in [journey/decisions.md](../../../journ
 | 5 | Done | `8ae5098` |
 | 6 | Done | `6ceddfc` |
 | 7 | Done | `0d64289` |
-| 8 | Done; not yet run on a live pull request | `c626853` |
+| 8 | Done; run live on [PR #1](https://github.com/SatyamSingh-Git/ctxlock/pull/1), without credentials | `c626853` |
 | 9 | Done: isolation, and exit items (a) and (b), live in 73 runs ([report](../../dogfood/2026-11-06-behavioral.md)); one bug fixed | `f6f7376` and the docs commit |
 | Final review | Done: 3 critical and 4 important findings fixed, each with a test that failed first; the inline-shell fix checked live in 5 more runs ([chapter 9](../../../journey/09-behavioral-ci.md#the-final-review)) | the fix-pass commit |
 
@@ -899,7 +899,7 @@ Live runs, within the 200-run cap and the usage stop rule in Global Constraints.
   - Add mistakes, if any.
   - Update the journey README, the README roadmap and this plan's progress table.
 
-- [ ] **Step 6: Verify and stop.**
+- [x] **Step 6: Verify and stop.** Done on [PR #1](https://github.com/SatyamSingh-Git/ctxlock/pull/1): the sticky comment carried the behavioral section, which said it was skipped, since the repository passes no Claude credentials.
   - Run `npm run ci` and report the real result.
   - **Ask Satyam** before pushing.
   - **Ask Satyam** before creating a test branch and pull request to see the Action live. That step checks the sticky comment with its behavioral section, the skip note on a run without the secret, and Plan 1 Task 13 Steps 3–4, still open.
