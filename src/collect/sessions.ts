@@ -46,8 +46,18 @@ function within(path: string, roots: string[]): string | null {
   return null;
 }
 
-export function joinSessions(read: { events: RecordedEvent[]; skipped: number }, scan: ScanResult, roots: string[]): Sessions {
+// real gives a path's real one. A session started through a junction or an 8.3 name records that name,
+// and a path the agent typed can differ in case below the top.
+export function joinSessions(
+  read: { events: RecordedEvent[]; skipped: number },
+  scan: ScanResult,
+  roots: string[],
+  real: (path: string) => string = (path) => path,
+): Sessions {
+  const folderOf = (cwd: string) => within(real(cwd), roots) ?? within(cwd, roots);
+  const fileOf = (file: string) => within(file, roots) ?? within(real(file), roots);
   const byPath = unitsByPath(scan);
+  const unitAt = (file: string) => byPath.get(within(file, roots) ?? '') ?? byPath.get(within(real(file), roots) ?? '');
   const byId = new Map(scan.units.map((u) => [u.id, u]));
   const contexts = new Map(scan.contexts.filter((c) => c.harness === 'claude-code').map((c) => [c.site, c.entries]));
   // What some session could have been seen loading.
@@ -67,7 +77,7 @@ export function joinSessions(read: { events: RecordedEvent[]; skipped: number },
   let sessions = 0;
   const stamps: string[] = [];
   for (const events of bySession.values()) {
-    if (!events.some((e) => within(e.cwd, roots) !== null || (e.event === 'load' && within(e.file, roots) !== null))) continue;
+    if (!events.some((e) => folderOf(e.cwd) !== null || (e.event === 'load' && fileOf(e.file) !== null))) continue;
     sessions++;
     const ordered = [...events].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
     const begun = ordered[0]!.ts;
@@ -76,7 +86,7 @@ export function joinSessions(read: { events: RecordedEvent[]; skipped: number },
     // A session sees what the folder it started in sees. The deepest site above that folder has the
     // same instruction files above it, and Claude Code offers the skills of the folder and every folder
     // above. A skill below can share a name with one of Claude Code's own, so no call is credited to it.
-    const folder = within(ordered[0]!.cwd, roots) ?? '';
+    const folder = folderOf(ordered[0]!.cwd) ?? '';
     const site = [...contexts.keys()].filter((s) => s === '' || folder === s || folder.startsWith(`${s}/`)).reduce((a, b) => (b.length > a.length ? b : a), '');
     const above = ancestry(folder);
     const offered = (e: LoadEntry) => above.includes(ownerDir(e.path, '.claude/skills')!);
@@ -91,7 +101,7 @@ export function joinSessions(read: { events: RecordedEvent[]; skipped: number },
 
     const loads: Load[] = [];
     for (const e of ordered) {
-      const unit = e.event === 'load' ? byPath.get(within(e.file, roots) ?? '') : e.event === 'skill' ? skills.get(e.skill) : undefined;
+      const unit = e.event === 'load' ? unitAt(e.file) : e.event === 'skill' ? skills.get(e.skill) : undefined;
       if (!unit) continue;
       const other = e.event === 'load' && e.sha256 !== null && e.sha256 !== unit.files[0]!.sha256;
       loads.push({ unit, ts: e.ts, reason: e.event === 'load' ? loadReason(e.reason) : 'skill_invoked', other, observed: true });

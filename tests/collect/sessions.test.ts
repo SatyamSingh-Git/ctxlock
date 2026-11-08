@@ -130,6 +130,33 @@ describe('joinSessions', () => {
     expect(s.units.map((u) => u.path)).toEqual(['CLAUDE.md']);
   });
 
+  it('matches a path recorded under another name for the folder, or in another case below the top, by its real path', async () => {
+    // As a junction or an 8.3 name would read, and a path the agent typed in another case.
+    const alias = resolve('/alias/repo');
+    const real = (path: string) => (path.startsWith(alias) ? ROOT + path.slice(alias.length) : path).replace('PACKAGES', 'packages');
+    const events = [
+      start('s1', t(1), alias),
+      load('s1', t(1), join(alias, 'CLAUDE.md'), 'session_start', sha('c\n'), alias),
+      load('s1', t(2), join(alias, 'PACKAGES', 'api', 'CLAUDE.md'), 'nested_traversal', sha('api\n'), alias),
+      // Started elsewhere, and inside only by the real path of what it loaded.
+      load('s2', t(3), join(alias, 'CLAUDE.md'), 'session_start', sha('c\n'), resolve('/elsewhere')),
+    ];
+    const scan = await scanRepo(memReader({ 'CLAUDE.md': 'c\n', 'packages/api/CLAUDE.md': 'api\n' }));
+
+    const s = joinSessions({ events, skipped: 0 }, scan, [ROOT], real);
+    expect(s.sessions).toBe(2);
+    expect(s.units.map((u) => u.path)).toEqual(['CLAUDE.md', 'packages/api/CLAUDE.md']);
+    expect(joinSessions({ events, skipped: 0 }, scan, [ROOT]).sessions).toBe(0);
+  });
+
+  it('judges a session by the real path of the folder it started in', async () => {
+    const real = (path: string) => path.replace('PKG', 'pkg');
+    const scan = await scanRepo(memReader({ 'AGENTS.md': 'Use pnpm.\n', 'pkg/CLAUDE.md': 'pkg\n' }));
+
+    // pkg has a CLAUDE.md of its own, so Claude Code reads no AGENTS.md through its fallback there.
+    expect(joinSessions({ events: [start('s1', t(1), at('PKG'))], skipped: 0 }, scan, [ROOT], real).units).toEqual([]);
+  });
+
   it('counts a load of an edited file as another version of the unit', async () => {
     const s = await join_({ 'CLAUDE.md': 'now\n' }, [
       load('s1', t(1), at('CLAUDE.md'), 'session_start', sha('then\n')),

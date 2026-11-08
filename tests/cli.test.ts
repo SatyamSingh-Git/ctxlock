@@ -384,7 +384,13 @@ describe('ctxlock loads', () => {
     const line = (o: object) => JSON.stringify({ v: 1, ts: '2026-11-08T10:00:00.000Z', harness: 'claude-code', session: 's1', cwd: real, ...o });
     const home = tempDir();
     writeTree(home, {
-      'events/2026-11.jsonl': `${line({ event: 'session_start', source: 'startup' })}\n${line({ event: 'load', file: join(real, 'CLAUDE.md'), sha256: null, reason: 'session_start' })}\n`,
+      // The last load is of a file deleted since.
+      'events/2026-11.jsonl': [
+        line({ event: 'session_start', source: 'startup' }),
+        line({ event: 'load', file: join(real, 'CLAUDE.md'), sha256: null, reason: 'session_start' }),
+        line({ event: 'load', file: join(real, 'gone.md'), sha256: null, reason: 'session_start' }),
+        '',
+      ].join('\n'),
     });
     vi.stubEnv('CTXLOCK_HOME', home);
 
@@ -417,6 +423,7 @@ These sessions match no consumer in ctxlock.yaml. Declare one so impact can name
     vi.stubEnv('CTXLOCK_HOME', home);
 
     expect((await cli('loads', link)).stdout).toContain('ctxlock loads · 2 Claude Code sessions');
+    expect((await cli('loads', real)).stdout).toContain('ctxlock loads · 2 Claude Code sessions');
   });
 
   it('who-uses shows recorded sessions only for a unit whose loads Claude Code can report', async () => {

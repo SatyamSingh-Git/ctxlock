@@ -53,10 +53,19 @@ async function scansAt(root: string, opts: { base: string; head?: string }) {
 }
 
 const isDirectory = (dir: string) => statSync(dir, { throwIfNoEntry: false })?.isDirectory() ?? false;
+// A path with links and 8.3 short names expanded, or as it is when nothing is there any more.
+const real = (path: string) => (existsSync(path) ? realpathSync.native(path) : path);
 
 // Recorded sessions in a folder, matched under its real path and under the path as typed: Claude Code
 // reports the path its session was started in, and Windows can give a temp folder an 8.3 name.
-const sessionsAt = (root: string, scan: ScanResult) => joinSessions(readEvents(eventsHome()), scan, [...new Set([realpathSync.native(root), root])]);
+function sessionsAt(root: string, scan: ScanResult) {
+  const known = new Map<string, string>();
+  const realOf = (path: string) => {
+    if (!known.has(path)) known.set(path, real(path));
+    return known.get(path)!;
+  };
+  return joinSessions(readEvents(eventsHome()), scan, [...new Set([real(root), root])], realOf);
+}
 
 function count(value: string): number {
   const n = Number(value);
@@ -137,7 +146,6 @@ export async function main(argv: string[], io: Io): Promise<number> {
         // The folder is given from the directory build runs on, and read from the repository's top. Git
         // gives the top by its real path; the directory may come by a symlink or an 8.3 short name, as
         // the temp folder does on GitHub's Windows runners, which realpathSync.native expands.
-        const real = (path: string) => (existsSync(path) ? realpathSync.native(path) : path);
         const base = real(root);
         const folder = relative(top ?? base, real(resolve(base, opts.suggestIndex))).split(sep).join('/');
         if (folder === '..' || folder.startsWith('../') || isAbsolute(folder)) throw new BuildError(`${opts.suggestIndex} is outside the repository`);
