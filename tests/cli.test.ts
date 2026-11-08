@@ -452,6 +452,12 @@ These sessions match no consumer in ctxlock.yaml. Declare one so impact can name
 
     const file = await cli('loads', join(dir, 'CLAUDE.md'));
     expect(file.code).toBe(2);
+
+    // A static query does not depend on the collector's store.
+    const broken = tempDir();
+    writeTree(broken, { events: 'not a folder\n' });
+    vi.stubEnv('CTXLOCK_HOME', broken);
+    expect((await cli('who-uses', 'CLAUDE.md', dir)).code).toBe(0);
   });
 });
 

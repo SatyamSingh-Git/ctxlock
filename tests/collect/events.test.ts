@@ -57,6 +57,12 @@ describe('readEvents', () => {
     expect(readEvents(tempDir())).toEqual({ events: [], skipped: 0 });
   });
 
+  it('an events path that is a file gives no events', () => {
+    const home = tempDir();
+    writeFileSync(join(home, 'events'), 'not a folder\n');
+    expect(readEvents(home)).toEqual({ events: [], skipped: 0 });
+  });
+
   it('eventsHome is CTXLOCK_HOME, else .ctxlock in the home folder', () => {
     expect(eventsHome({ CTXLOCK_HOME: join('x', 'y') })).toBe(join('x', 'y'));
     expect(eventsHome({})).toBe(join(homedir(), '.ctxlock'));

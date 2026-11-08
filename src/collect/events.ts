@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -41,7 +41,7 @@ const records = (text: string) => text.split(/(?=\{"v":)/).map(parse);
 
 export function readEvents(home: string): { events: RecordedEvent[]; skipped: number } {
   const folder = join(home, 'events');
-  if (!existsSync(folder)) return { events: [], skipped: 0 };
+  if (!statSync(folder, { throwIfNoEntry: false })?.isDirectory()) return { events: [], skipped: 0 };
   const events: RecordedEvent[] = [];
   let skipped = 0;
   for (const name of readdirSync(folder).filter((n) => n.endsWith('.jsonl')).sort()) {
