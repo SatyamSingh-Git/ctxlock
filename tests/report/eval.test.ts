@@ -20,8 +20,8 @@ const arm = (passed: number, valid: number, interval: [number, number], extra: P
 const result = (extra: Partial<EvalResult> = {}): EvalResult => ({
   harness: 'claude-code', model: 'claude-sonnet-5-5', claudeVersion: '2.1.292', runsPerArm: 3, changedUnits: ['instructions/AGENTS.md'],
   outcomes: [
-    { probe: probe('deps'), source: 'base', changedInHead: false, base: arm(0, 3, [0, 0.5615]), head: arm(3, 3, [0.4385, 1], { inputTokens: 1010 }), status: 'improved' },
-    { probe: probe('b'), source: 'base', changedInHead: false, base: null, head: null, status: 'not-run', reason: 'run budget (6 runs)' },
+    { probe: probe('deps'), source: 'base', changedInHead: false, selectedFor: 'changed', base: arm(0, 3, [0, 0.5615]), head: arm(3, 3, [0.4385, 1], { inputTokens: 1010 }), status: 'improved' },
+    { probe: probe('b'), source: 'base', changedInHead: false, selectedFor: 'changed', base: null, head: null, status: 'not-run', reason: 'run budget (6 runs)' },
   ],
   stripped: ['.claude/settings.json'], gateFailures: [], headProbeErrors: [],
   totals: { runs: 6, cachedRuns: 0, wallMs: 72_000, costUsd: 0.26, utilizationBefore: 0.57, utilizationAfter: 0.57 },
@@ -88,6 +88,21 @@ describe('renderEval text and json', () => {
 
   it('json is the result itself', () => {
     expect(JSON.parse(renderEval(result(), 'json'))).toEqual(result());
+  });
+});
+
+describe('renderEval: why a probe ran', () => {
+  it('says why a probe ran when its own unit did not change, as code in markdown, and says nothing for a changed unit or --all', () => {
+    const [first] = result().outcomes;
+    const because = result({ outcomes: [{ ...first!, selectedFor: 'consumer pay|ments @octocat' }] });
+
+    expect(renderEval(because, 'markdown')).toContain('| `deps` | `instructions/AGENTS.md` | 0/3 | 3/3 | improved · selected: `consumer pay\\|ments @octocat` |');
+    expect(renderEval(because, 'text')).toContain('improved\n    selected: consumer pay|ments @octocat\n');
+    for (const selectedFor of ['changed', 'all']) {
+      const plain = result({ outcomes: [{ ...first!, selectedFor }] });
+      expect(renderEval(plain, 'text')).not.toContain('selected:');
+      expect(renderEval(plain, 'markdown')).not.toContain('selected:');
+    }
   });
 });
 

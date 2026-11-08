@@ -116,12 +116,23 @@ describe('impactOf', () => {
     expect(await impact(CHAIN, { ...CHAIN, '.claude/rules/a.md': 'Use pnpm, always.\n' })).toEqual({
       changed: [{ id: A, change: 'modified' }],
       dependents: [
-        { id: B, via: [] },
-        { id: C, via: [B] },
+        { id: B, via: [], on: A },
+        { id: C, via: [B], on: A },
       ],
       consumers: [{ name: 'payments-api', owner: '@payments-team', maturity: 'production', via: [C, B] }],
       owners: ['@payments-team', '@rules-team'],
     });
+  });
+
+  it('still reaches what depended on a unit when the same change deletes that depends-on, so a change cannot hide its reach', async () => {
+    const unhooked = CHAIN['ctxlock.yaml'].replace('  .claude/rules/b.md:\n    depends-on: [.claude/rules/a.md]\n', '');
+    const i = await impact(CHAIN, { ...CHAIN, '.claude/rules/a.md': 'Use npm.\n', 'ctxlock.yaml': unhooked });
+
+    expect(i.dependents.map((d) => [d.id, d.on])).toEqual([
+      [B, A],
+      [C, A],
+    ]);
+    expect(i.consumers.map((c) => c.name)).toEqual(['payments-api']);
   });
 
   it('finds what depended on a removed unit in the base', async () => {
@@ -137,7 +148,7 @@ describe('impactOf', () => {
     const i = await impact(CHAIN, { ...CHAIN, '.claude/rules/a.md': 'A2.\n', '.claude/rules/b.md': 'B2.\n' });
 
     expect(i.changed.map((c) => c.id)).toEqual([A, B]);
-    expect(i.dependents).toEqual([{ id: C, via: [] }]);
+    expect(i.dependents).toEqual([{ id: C, via: [], on: B }]);
     expect(i.consumers.map((c) => c.via)).toEqual([[C]]);
   });
 

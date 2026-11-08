@@ -21,8 +21,10 @@ function costLine(r: EvalResult): string {
   return parts.join(' · ');
 }
 
-function notes(o: ProbeOutcome): string[] {
+// `shown` formats repository text: a path or a consumer's name is code in markdown.
+function notes(o: ProbeOutcome, shown: (text: string) => string): string[] {
   const out: string[] = [];
+  if (o.selectedFor !== 'changed' && o.selectedFor !== 'all') out.push(`selected: ${shown(o.selectedFor)}`);
   if (o.source === 'head') out.push('new in this pull request, so it never gates');
   if (o.changedInHead) out.push('this pull request edits the probe; the base version ran');
   return out;
@@ -59,7 +61,7 @@ export function renderEval(r: EvalResult, format: 'text' | 'json' | 'markdown'):
     if (r.outcomes.length === 0) lines.push(empty);
     for (const o of r.outcomes) {
       lines.push(`  ${o.probe.id}  ${o.probe.unit}  base ${ratio(o.base)}  head ${ratio(o.head)}  ${o.status === 'not-run' ? 'not run' : o.status}${o.reason ? ` (${o.reason})` : ''}`);
-      for (const n of notes(o)) lines.push(`    ${n}`);
+      for (const n of notes(o, (text) => text)) lines.push(`    ${n}`);
       for (const e of [...(o.base?.errors ?? []).map((x) => `base: ${x}`), ...(o.head?.errors ?? []).map((x) => `head: ${x}`)]) lines.push(`    error, ${e}`);
     }
     if (r.stripped.length > 0) lines.push('', `Removed from the copies before running: ${r.stripped.join(', ')}`);
@@ -75,7 +77,7 @@ export function renderEval(r: EvalResult, format: 'text' | 'json' | 'markdown'):
     lines.push(
       '| Probe | Unit | Base | Head | Result |',
       '|---|---|---|---|---|',
-      ...r.outcomes.map((o) => `| ${cell(code(o.probe.id))} | ${cell(code(o.probe.unit))} | ${ratio(o.base)} | ${ratio(o.head)} | ${[label(o), ...notes(o)].join(' · ')} |`),
+      ...r.outcomes.map((o) => `| ${cell(code(o.probe.id))} | ${cell(code(o.probe.unit))} | ${ratio(o.base)} | ${ratio(o.head)} | ${[label(o), ...notes(o, (text) => cell(code(text)))].join(' · ')} |`),
     );
   }
 

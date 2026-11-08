@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { diffScans } from '../diff.js';
+import { impactOf } from '../graph/graph.js';
 import { fsReader, gitReader } from '../repo/reader.js';
 import { type ScanResult, scanRepo } from '../scan.js';
 import { sha256Hex } from '../units/digest.js';
@@ -53,6 +53,8 @@ export interface ProbeOutcome {
   probe: Probe;
   source: 'base' | 'head';
   changedInHead: boolean;
+  // 'changed', 'depends on <path>', 'consumer <name>', or 'all' with --all.
+  selectedFor: string;
   base: ArmResult | null;
   head: ArmResult | null;
   status: ProbeStatus;
@@ -151,7 +153,17 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   // The head is judged with the base's settings, as diff does (D30).
   const head = await scanRepo(readers.head, { settings: base.registry });
   const scans: Record<ArmName, ScanResult> = { base, head };
-  const changedUnits = diffScans(base, head).changes.map((c) => c.id);
+  // The impact walks the base's depends-on and consumers too, so a pull request that deletes an edge
+  // cannot keep the probes behind it from running.
+  const impact = impactOf(base, head);
+  const changedUnits = impact.changed.map((c) => c.id);
+  const reasons = new Map(changedUnits.map((id) => [id, 'changed']));
+  // A unit's ID is its kind, a slash, then its path.
+  for (const d of impact.dependents) if (!reasons.has(d.id)) reasons.set(d.id, `depends on ${d.on.slice(d.on.indexOf('/') + 1)}`);
+  const reached = new Set(impact.consumers.map((c) => c.name));
+  const suites = [...base.registry.consumers, ...head.registry.consumers].filter((c) => reached.has(c.name));
+  const selectedFor = (probe: Probe) =>
+    opts.all ? 'all' : (reasons.get(probe.unit) ?? suites.filter((c) => c.evals.some((path) => probe.file === path || probe.file.startsWith(`${path}/`))).map((c) => `consumer ${c.name}`)[0]);
 
   // A probe both sides define keeps the base's definition, so a pull request cannot rewrite its judge.
   const baseProbes = await loadProbes(readers.base);
@@ -175,7 +187,11 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     ...baseProbes.map((probe) => ({ probe, source: 'base' as const, changedInHead: headProbes.has(probe.id) && headProbes.get(probe.id)!.hash !== probe.hash })),
     ...headOnly.filter((p) => unitIds.has(p.unit)).map((probe) => ({ probe, source: 'head' as const, changedInHead: false })),
   ];
-  const selected = candidates.filter((c) => opts.all || changedUnits.includes(c.probe.unit));
+  // The changed units' own probes come first, so the run budget reaches them first.
+  const selected = candidates
+    .map((c) => ({ ...c, selectedFor: selectedFor(c.probe) }))
+    .filter((c): c is typeof c & { selectedFor: string } => c.selectedFor !== undefined)
+    .sort((a, b) => Number(b.selectedFor === 'changed') - Number(a.selectedFor === 'changed'));
 
   const result: EvalResult = {
     harness: 'claude-code', model: null, claudeVersion: null, runsPerArm: opts.runs, changedUnits, outcomes: [], stripped: [], gateFailures: [], headProbeErrors,
@@ -285,16 +301,16 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     }
 
     for (const plan of plans) {
-      const { probe, source, changedInHead } = plan;
+      const { probe, source, changedInHead, selectedFor } = plan;
       let outcome: ProbeOutcome;
-      if (!plan.runnable) outcome = { probe, source, changedInHead, base: null, head: null, status: 'not-run', reason: `run budget (${opts.maxRuns} runs)` };
-      else if (!plan.complete && !plan.started) outcome = { probe, source, changedInHead, base: null, head: null, status: 'not-run', reason: `time budget (${opts.maxMinutes} min)` };
+      if (!plan.runnable) outcome = { probe, source, changedInHead, selectedFor, base: null, head: null, status: 'not-run', reason: `run budget (${opts.maxRuns} runs)` };
+      else if (!plan.complete && !plan.started) outcome = { probe, source, changedInHead, selectedFor, base: null, head: null, status: 'not-run', reason: `time budget (${opts.maxMinutes} min)` };
       else {
         const arms = { base: summarise(probe, plan.records.base, plan.cached.base), head: summarise(probe, plan.records.head, plan.cached.head) };
         result.totals.cachedRuns += plan.cached.base + plan.cached.head;
         outcome = plan.complete
-          ? { probe, source, changedInHead, ...arms, status: status(arms.base, arms.head) }
-          : { probe, source, changedInHead, ...arms, status: 'inconclusive', reason: `time budget (${opts.maxMinutes} min)` };
+          ? { probe, source, changedInHead, selectedFor, ...arms, status: status(arms.base, arms.head) }
+          : { probe, source, changedInHead, selectedFor, ...arms, status: 'inconclusive', reason: `time budget (${opts.maxMinutes} min)` };
       }
       result.outcomes.push(outcome);
     }

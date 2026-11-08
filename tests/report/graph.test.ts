@@ -20,8 +20,8 @@ const who: WhoUses = {
 const impact: Impact = {
   changed: [{ id: A, change: 'modified' }],
   dependents: [
-    { id: B, via: [] },
-    { id: C, via: [B] },
+    { id: B, via: [], on: A },
+    { id: C, via: [B], on: A },
   ],
   consumers: [{ name: 'payments-api', owner: '@payments-team', maturity: 'production', via: [C, B] }],
   owners: ['@payments-team', '@rules-team'],

@@ -85,7 +85,7 @@ ctxlock eval --base origin/main --head HEAD --format markdown
 | `--claude <path>` | `claude` on `PATH` | Claude Code's executable |
 | `--workdir <dir>` | `$RUNNER_TEMP`, or the system temp folder | Where the run folders and the cache go |
 | `--cache <dir>` | `ctxlock` in your cache folder: `$XDG_CACHE_HOME`, else `~/.cache`, or `~/AppData/Local` on Windows | Where results from git refs are cached. Not a temp folder by default: on a machine other users share, they could plant results there |
-| `--all` | off | Run every probe, not only those on changed units |
+| `--all` | off | Run every probe, not only those a change reaches |
 | `--keep-runs` | off | Keep the run folders, with each transcript, to see why a probe failed |
 | `--fail-on-regression` | off | Exit 1 on a gated regression (below) |
 
@@ -101,7 +101,14 @@ eval:
 
 ## What runs, and what cannot
 
-A probe runs only when the unit it names changed between the two refs; `--all` runs them all. For each probe, ctxlock runs Claude Code headless (`claude -p`) `runs` times in each arm, alternating base and head:
+A probe runs when the change reaches it, in one of three ways, and the report says which for the last two:
+- **`changed`:** the unit it names changed between the two refs;
+- **`depends on <path>`:** its unit depends on a changed unit in `ctxlock.yaml`, directly or through others;
+- **`consumer <name>`:** its file is under the `evals` of a consumer whose units the change reaches ([the graph](graph.md)).
+
+What depends on what is read from both refs, so a pull request that also deletes a `depends-on` still runs the probes behind it. Probes on changed units run first, so the run budget reaches them first. `--all` runs every probe.
+
+For each probe, ctxlock runs Claude Code headless (`claude -p`) `runs` times in each arm, alternating base and head:
 
 - **Each arm is a copy** of the repository at that ref, in a fresh folder under `--workdir`. Links become plain files, and links that leave the repository are dropped. So is any file whose path would land outside the copy, such as a Windows path with `..\` in it. A working-tree head leaves out a gitignored `CLAUDE.local.md`, which the base cannot have; `probe draft` leaves it out too.
 - **Execution config is removed from the copy**: `.claude/settings.json` and `.claude/settings.local.json` at any depth and in any letter case, `.mcp.json`, and any `hooks:`, `allowed-tools:` or YAML merge key (`<<:`) in the frontmatter of a markdown file under `.claude/`. Frontmatter ctxlock cannot parse that mentions one of those keys is removed whole. The report lists what was removed. No hook, MCP server or key helper from the repository runs, and no skill grants itself a tool.

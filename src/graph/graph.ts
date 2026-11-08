@@ -45,7 +45,8 @@ export interface WhoUses {
 
 export interface Impact {
   changed: UnitChange[];
-  dependents: Use[];
+  // on: the changed unit each one was reached from.
+  dependents: Array<Use & { on: string }>;
   consumers: ConsumerUse[];
   owners: string[];
 }
@@ -146,23 +147,30 @@ export function whoUses(graph: Graph, id: string): WhoUses {
   return { id, units: toUses(units), consumers: consumers.sort(byName), loads: graph.loads.get(id) ?? [], generated: graph.compiledTo.get(id) ?? [] };
 }
 
-// A change's blast radius. A removed unit is looked up in the base, where it and its edges still are.
+// A change's blast radius. Both graphs are walked, so a change that also deletes a depends-on still
+// reaches what relied on the unit before it, and a removed unit is found where it still is.
 export function impactOf(base: ScanResult, head: ScanResult): Impact {
   const changed = unitChanges(base, head);
   const graphs = { base: buildGraph({ ...base, generated: base.generated.files }), head: buildGraph({ ...head, generated: head.generated.files }) };
   const changedIds = new Set(changed.map((c) => c.id));
-  const dependents = new Map<string, string[]>();
+  const dependents = new Map<string, Use & { on: string }>();
   const consumers = new Map<string, ConsumerUse>();
   const owners = new Set<string>();
   for (const { id, change } of changed) {
-    const graph = change === 'removed' ? graphs.base : graphs.head;
-    for (const owner of graph.owners(id)) owners.add(owner);
-    const reached = reach(graph, id);
-    for (const [dependent, via] of reached.units) {
-      if (!changedIds.has(dependent) && via.length < (dependents.get(dependent)?.length ?? Infinity)) dependents.set(dependent, via);
+    for (const owner of (change === 'removed' ? graphs.base : graphs.head).owners(id)) owners.add(owner);
+    for (const graph of [graphs.head, graphs.base]) {
+      const reached = reach(graph, id);
+      for (const [dependent, via] of reached.units) {
+        if (!changedIds.has(dependent) && via.length < (dependents.get(dependent)?.via.length ?? Infinity)) dependents.set(dependent, { id: dependent, via, on: id });
+      }
+      for (const c of reached.consumers) if (c.via.length < (consumers.get(c.name)?.via.length ?? Infinity)) consumers.set(c.name, c);
     }
-    for (const c of reached.consumers) if (c.via.length < (consumers.get(c.name)?.via.length ?? Infinity)) consumers.set(c.name, c);
   }
   for (const c of consumers.values()) if (c.owner) owners.add(c.owner);
-  return { changed, dependents: toUses(dependents), consumers: [...consumers.values()].sort(byName), owners: [...owners].sort() };
+  return {
+    changed,
+    dependents: [...dependents.values()].sort((a, b) => byKey(a.id, b.id)),
+    consumers: [...consumers.values()].sort(byName),
+    owners: [...owners].sort(),
+  };
 }

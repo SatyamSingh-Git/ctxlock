@@ -70,6 +70,34 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect(r.claudeVersion).toBe('2.1.292');
   });
 
+  it('runs the probes of what depends on the change and of the consumers it reaches, says why each ran, and runs the changed first', async () => {
+    const yaml =
+      'version: 1\nunits:\n  AGENTS.md:\n    depends-on: [.claude/rules/x.md]\nconsumers:\n  payments-api:\n    depends-on: [.claude/rules/x.md]\n    evals: [evals/probes/payments.yaml]\n  web:\n    depends-on: [.claude/rules/z.md]\n    evals: [evals/probes/other.yaml]\n';
+    const root = await repo(
+      {
+        'AGENTS.md': 'Use pnpm.\n',
+        '.claude/rules/x.md': 'Use tabs.\n',
+        '.claude/rules/y.md': 'Use semicolons.\n',
+        '.claude/rules/z.md': 'Use single quotes.\n',
+        'ctxlock.yaml': yaml,
+        'evals/probes/agents.yaml': probeFile({ id: 'deps' }),
+        'evals/probes/other.yaml': probeFile({ id: 'other', unit: 'rule/.claude/rules/z.md' }),
+        'evals/probes/payments.yaml': probeFile({ id: 'payments', unit: 'rule/.claude/rules/y.md' }),
+        'evals/probes/x.yaml': probeFile({ id: 'tabs', unit: 'rule/.claude/rules/x.md' }),
+      },
+      { '.claude/rules/x.md': 'Use spaces.\n' },
+    );
+
+    const r = await runEval(options(root));
+
+    expect(r.changedUnits).toEqual(['rule/.claude/rules/x.md']);
+    expect(r.outcomes.map((o) => [o.probe.id, o.selectedFor])).toEqual([
+      ['tabs', 'changed'],
+      ['deps', 'depends on .claude/rules/x.md'],
+      ['payments', 'consumer payments-api'],
+    ]);
+  });
+
   it('reverting the change clears the flag: nothing runs, and with all every probe is unchanged', async () => {
     const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) });
 
@@ -78,7 +106,7 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect(claudeRuns()).toBe(0);
 
     const all = await runEval(options(root, { all: true }));
-    expect(all.outcomes[0]).toMatchObject({ status: 'unchanged', base: { passed: 0 }, head: { passed: 0 } });
+    expect(all.outcomes[0]).toMatchObject({ status: 'unchanged', base: { passed: 0 }, head: { passed: 0 }, selectedFor: 'all' });
   });
 
   it('the gate fails only a base probe whose every base run passed and no head run did', async () => {
