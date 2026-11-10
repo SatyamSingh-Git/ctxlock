@@ -330,7 +330,7 @@ Not synced:
 - A unit you take out of `units:`, or a file an upstream skill no longer has, is removed: exactly the files the lock says sync wrote.
 - Upstream clones are kept in ctxlock's cache folder, as `eval`'s results are. No hook runs in them.
 
-**What it refuses.** Sync never writes over a file it did not write, ignored by git or not, nor over a file it wrote that has been edited since. It never removes an edited one either. If any file is refused, it writes nothing and exits 1:
+**What it refuses.** Sync never writes over a file it did not write, ignored by git or not, nor over a file it wrote that has been edited since. If any file is refused, it writes nothing and exits 1:
 
 ```
 Refused, so nothing was written:

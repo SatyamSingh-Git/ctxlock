@@ -146,10 +146,23 @@ describe('planSync', () => {
     for (const org of [ORG, { ...ORG, '.agents/skills/api/SKILL.md': `${SKILL}Upstream line.\n` }]) {
       expect((await sync(org, C2, handEdited, first.lock)).refused).toEqual([{ path: '.agents/skills/api/SKILL.md', reason: 'edited since the last sync' }]);
     }
-    // Removing an edited file is refused too.
-    const { '.claude/rules/testing.md': _, ...noRule } = ORG;
+  });
+
+  it('an edited file whose unit is taken out of units, or gone from its skill, is left as the person\'s, out of the lock', async () => {
+    const consumer = { 'ctxlock.yaml': yaml() };
+    const first = await sync(ORG, C1, consumer);
     const editedRule = { ...after(consumer, first), 'ctxlock.yaml': yaml(['.agents/skills/api']), '.claude/rules/testing.md': 'Changed here.\n' };
-    expect((await sync(noRule, C2, editedRule, first.lock)).refused).toEqual([{ path: '.claude/rules/testing.md', reason: 'edited since the last sync' }]);
+    const dropped = await sync(ORG, C1, editedRule, first.lock);
+
+    expect([dropped.refused, dropped.removes, dropped.released]).toEqual([[], [], ['.claude/rules/testing.md']]);
+    expect(dropped.lock.upstreams[0]!.units.map((u) => u.path)).toEqual(['.agents/skills/api']);
+    // The next sync sees a file it did not write, and leaves it alone.
+    const next = await sync(ORG, C1, after(editedRule, dropped), dropped.lock);
+    expect([next.writes, next.removes, next.refused, next.released]).toEqual([[], [], [], []]);
+
+    const { '.agents/skills/api/ref.md': _, ...smaller } = ORG;
+    const editedRef = { ...after(consumer, first), '.agents/skills/api/ref.md': 'Ours now.\n' };
+    expect((await sync(smaller, C2, editedRef, first.lock)).released).toEqual(['.agents/skills/api/ref.md']);
   });
 
   it('a CRLF copy of an unchanged file is not a change', async () => {
@@ -216,7 +229,7 @@ describe('applySync', () => {
     const top = join(tempDir(), 'repo');
     mkdirSync(top);
     for (const path of ['../outside.txt', 'a/../../outside.txt']) {
-      const plan = { lock: { upstreams: [] }, moved: [], writes: [{ path, bytes: Buffer.from('x') }], removes: [], changes: [], refused: [], skipped: [] };
+      const plan = { lock: { upstreams: [] }, moved: [], writes: [{ path, bytes: Buffer.from('x') }], removes: [], changes: [], refused: [], released: [], skipped: [] };
       await expect(applySync(top, plan)).rejects.toThrow(`${path} is outside the repository`);
     }
     expect(existsSync(join(top, '..', 'outside.txt'))).toBe(false);

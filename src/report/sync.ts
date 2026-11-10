@@ -3,7 +3,8 @@ import { block, shortDigest as short } from './graph.js';
 import { cell, code } from './markdown.js';
 
 const ADVICE = 'Make such a change upstream and move the file aside, or take its unit out of upstream units in ctxlock.yaml.';
-const commits = (from: string | null, to: string) => (from === null || from === to ? [to.slice(0, 7)] : [from.slice(0, 7), to.slice(0, 7)]);
+const KEPT = 'Kept as yours, since they were edited here, and no longer synced';
+const commits =(from: string | null, to: string) => (from === null || from === to ? [to.slice(0, 7)] : [from.slice(0, 7), to.slice(0, 7)]);
 const digests = (c: SyncChange) => (c.change === 'updated' ? [short(c.from!), short(c.to!)] : [short((c.to ?? c.from)!)]);
 
 // What sync wrote, or would write; `applied` is false for a dry run or a refused sync. `filled` is what
@@ -25,6 +26,7 @@ export function renderSync(plan: SyncPlan, format: 'text' | 'json' | 'markdown',
       );
     }
     if (filled.length) lines.push('', '#### Filled, so every agent loads it', '', ...filled.map((f) => `- ${code(f)}`));
+    if (plan.released.length) lines.push('', `#### ${KEPT}`, '', ...plan.released.map((p) => `- ${code(p)}`));
     if (plan.skipped.length) lines.push('', '#### Not synced', '', ...plan.skipped.map((s) => `- ${code(s.path)}: ${s.reason}`));
     if (plan.refused.length) lines.push('', '#### Refused, so nothing was written', '', ...plan.refused.map((r) => `- ${code(r.path)}: ${r.reason}`), '', ADVICE);
     return `${lines.join('\n')}\n`;
@@ -42,6 +44,7 @@ export function renderSync(plan: SyncPlan, format: 'text' | 'json' | 'markdown',
           ...block('Removed', of('removed').map((c) => [c.path, `from ${c.upstream}`])),
         ]),
     ...block('Filled, so every agent loads it', filled.map((f) => [f])),
+    ...block(KEPT, plan.released.map((p) => [p])),
     ...block('Not synced', plan.skipped.map((s) => [s.path, s.reason])),
     ...(plan.refused.length ? [...block('Refused, so nothing was written', plan.refused.map((r) => [r.path, r.reason])), '', ADVICE] : []),
     ...(!applied && plan.refused.length === 0 ? ['', 'A dry run: nothing was written.'] : []),

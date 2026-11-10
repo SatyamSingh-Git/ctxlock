@@ -41,7 +41,7 @@ Then run [`ctxlock sync`](commands.md#ctxlock-sync), and commit what it wrote to
 - **Instructions files** (`AGENTS.md`, `CLAUDE.md`) are each repository's own. Naming one in `units:` stops sync with exit 2.
 - **Config** never syncs: settings, hooks and MCP registrations. Inside a skill, sync leaves out any `hooks/` folder, `settings.json`, `settings.local.json` and `.mcp.json`, and lists each one it left out.
 - **A file sync didn't write is never overwritten,** whether git tracks it, ignores it, or doesn't know it.
-- **A synced file edited here is never overwritten or removed either.** Sync refuses, writes nothing, and exits 1.
+- **A synced file edited here is never overwritten.** Sync refuses, writes nothing, and exits 1. Nor is it removed: when its unit leaves `units:`, or its skill no longer has it, sync leaves it as yours and drops it from the lock.
 
 These rules come from the design's §7. Shared context runs in every repository that takes it, so anything that could run a command, or change what an agent may do, stays a decision each repository makes for itself.
 
@@ -76,7 +76,7 @@ The lock is rewritten only when what it says changes. When the upstream moves bu
 
 ## Changing a synced unit
 
-Change it in the org repository, then sync. To keep a version of your own instead, take the unit out of `units:`. Sync then removes the files it wrote, and you can add your own at that path.
+Change it in the org repository, then sync. To keep a version of your own instead, edit it and take the unit out of `units:`. Sync then removes the files it wrote that nobody edited, leaves the edited ones as yours, and drops the unit from the lock.
 
 ## Trust tiers
 

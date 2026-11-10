@@ -26,6 +26,9 @@ export interface SyncPlan {
   changes: SyncChange[];
   // A person's file, or a synced file edited since: sync writes nothing while any is here.
   refused: Array<{ path: string; reason: string }>;
+  // Files sync wrote and someone edited since, whose unit or skill file sync no longer takes: they
+  // stay, as the person's, and leave the lock.
+  released: string[];
   // Files inside an upstream skill that configure the agent rather than instruct it (§7).
   skipped: Array<{ path: string; reason: string }>;
 }
@@ -59,7 +62,7 @@ export async function planSync(
   // Every file an earlier sync wrote, with what it wrote.
   const written = new Map(lock.upstreams.flatMap((u) => u.units.flatMap((x) => Object.entries(x.files))));
   const now = async (path: string) => ((await local.exists(path)) ? lfDigest(await local.readFile(path)) : null);
-  const plan: SyncPlan = { lock: { upstreams: [] }, moved: [], writes: [], removes: [], changes: [], refused: [], skipped: [] };
+  const plan: SyncPlan = { lock: { upstreams: [] }, moved: [], writes: [], removes: [], changes: [], refused: [], released: [], skipped: [] };
   const kept = new Set<string>();
 
   for (const u of registry.upstreams) {
@@ -116,17 +119,19 @@ export async function planSync(
     for (const x of had.units) plan.changes.push({ upstream: name, path: x.path, change: 'removed', from: x.digest });
   }
 
-  // A file an earlier sync wrote that the new lock no longer lists goes, unless someone edited it.
+  // A file an earlier sync wrote that the new lock no longer lists goes, unless someone edited it: then
+  // it is theirs. Refusing would leave no way to keep a version of one's own.
   for (const [path, was] of written) {
     if (kept.has(path)) continue;
     const here = await now(path);
     if (here === null) continue;
     if (here === was) plan.removes.push(path);
-    else plan.refused.push({ path, reason: 'edited since the last sync' });
+    else plan.released.push(path);
   }
 
   plan.writes.sort(byPath);
   plan.removes.sort();
+  plan.released.sort();
   plan.refused.sort(byPath);
   plan.skipped.sort(byPath);
   plan.changes.sort((a, b) => (a.upstream < b.upstream ? -1 : a.upstream > b.upstream ? 1 : a.path < b.path ? -1 : a.path > b.path ? 1 : 0));

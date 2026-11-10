@@ -16,6 +16,7 @@ const plan: SyncPlan = {
     { upstream: 'platform', path: '.claude/rules/same.md', change: 'unchanged', to: D2 },
   ],
   refused: [],
+  released: [],
   skipped: [{ path: '.agents/skills/api/hooks/pre.sh', reason: 'hooks never sync' }],
 };
 
@@ -61,6 +62,13 @@ Not synced:
     expect(md).toContain('| `.agents/skills/api` | `platform` | added | `sha256:aaaaaaaaaaaa` |');
     expect(md).toContain('- `.agents/skills/api/hooks/pre.sh`: hooks never sync');
     expect(md).not.toContain('same.md');
+  });
+
+  it("lists the edited files sync leaves as the person's", () => {
+    const kept: SyncPlan = { ...plan, released: ['.claude/rules/old.md'] };
+    expect(renderSync(kept, 'text', true)).toContain('\nKept as yours, since they were edited here, and no longer synced:\n  .claude/rules/old.md\n');
+    expect(renderSync(kept, 'markdown', true)).toContain('\n#### Kept as yours, since they were edited here, and no longer synced\n\n- `.claude/rules/old.md`\n');
+    expect(renderSync(plan, 'text', true)).not.toContain('Kept as yours');
   });
 
   it('JSON is the plan without file contents', () => {
