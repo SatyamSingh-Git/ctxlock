@@ -41,7 +41,7 @@ Want to help? Start with **[Contributing](#contributing)**.
 
 <div align="center" markdown="1">
 
-### *The path is ours to walk.*<br/>*Where it ends was never ours to choose.*
+### *What an agent reads, it believes.*<br/>*What it never reads, it cannot know.*
 
 **So check what your agents read, and lock what they share.**
 
