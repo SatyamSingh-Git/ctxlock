@@ -52,7 +52,7 @@ const schema = z.strictObject({
 
 const byKey = <T>(key: (t: T) => string) => (a: T, b: T) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
 
-export async function loadLock(reader: RepoReader): Promise<Lock> {
+export async function loadLock(reader: Pick<RepoReader, 'exists' | 'readFile'>): Promise<Lock> {
   if (!(await reader.exists(LOCK_FILE))) return { upstreams: [] };
   let raw: unknown;
   try {

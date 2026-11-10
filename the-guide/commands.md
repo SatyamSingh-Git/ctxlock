@@ -202,7 +202,7 @@ Loaded by (predicted):
 Lists what a change reaches: the units that depend on what changed, the consumers that use them, and whose approval the change needs. Those are the owners of each changed unit, from `ctxlock.yaml` or CODEOWNERS, and of each consumer reached, as both the base and the head name them. It reads the refs as `diff` does, and never fails a check.
 
 ```
-ctxlock impact [dir] --base <ref> [--head <ref>] [--format text|json|markdown]
+ctxlock impact [dir] --base <ref> [--head <ref>] [--format text|json|markdown] [--locks <folder>...]
 ```
 
 ```
@@ -222,6 +222,15 @@ Owners to ask: @payments-team, @platform-team
 ```
 
 In markdown, every name is shown as code, so a pull request comment notifies no one.
+
+**Across repositories.** In a repository others sync from, `--locks` names the repositories that would feel a change. It reads every `ctxlock.lock` under the folders you give, such as a folder holding checkouts of your org's repositories, and lists those that pin a changed unit from this one:
+
+```
+Pinned by other repositories:
+  https://github.com/acme/payments.git  .claude/rules/deps.md  at sha256:f4dd868c168b  from platform
+```
+
+A repository is named by its `origin` URL, or by its folder when it has none. A lock matches when its upstream `repo` is this repository's `origin`, with or without `.git`, or a path to this folder. It skips `.git` and `node_modules`, and a lock it cannot read is skipped with a warning on stderr. Put `--locks` last, since it takes every folder after it.
 
 ## `ctxlock loads`
 

@@ -5,6 +5,8 @@ import { table } from './render.js';
 
 // A unit's ID is its kind, a slash, then its path.
 const pathOf = (id: string) => id.slice(id.indexOf('/') + 1);
+// A digest as people compare it by eye.
+export const shortDigest = (digest: string) => digest.slice(0, 'sha256:'.length + 12);
 const through = (via: string[]) => (via.length ? `through ${via.map(pathOf).join(', ')}` : '');
 export const block = (title: string, rows: string[][]) => (rows.length ? ['', `${title}:`, table(rows.map(([first, ...rest]) => [`  ${first}`, ...rest]))] : []);
 export const sessions = (n: number, kind = '') => `${n} ${kind}session${n === 1 ? '' : 's'}`;
@@ -79,12 +81,25 @@ export function renderImpact(i: Impact, format: 'text' | 'json' | 'markdown'): s
     else lines.push('| Unit | Change |', '|---|---|', ...i.changed.map((c) => `| ${cell(code(pathOf(c.id)))} | ${c.change} |`));
     const reached = reachedMarkdown(i);
     if (reached.length) lines.push('', '#### Impact', ...reached);
+    if (i.pinned?.length) {
+      lines.push(
+        '',
+        '#### Pinned by other repositories',
+        '',
+        '| Repository | Unit | Digest | Upstream |',
+        '|---|---|---|---|',
+        ...i.pinned.map((p) => `| ${cell(code(p.repo))} | ${cell(code(p.unit))} | ${code(shortDigest(p.digest))} | ${cell(code(p.upstream))} |`),
+      );
+    } else if (i.pinned) lines.push('', 'No repository under the --locks paths pins what changed.');
     return `${lines.join('\n')}\n`;
   }
   const lines = [
     'ctxlock impact',
     ...(i.changed.length ? block('Changed', i.changed.map((c) => [pathOf(c.id), c.change])) : ['', 'No context units changed.']),
     ...reachedText(i),
+    ...(i.pinned?.length === 0
+      ? ['', 'No repository under the --locks paths pins what changed.']
+      : block('Pinned by other repositories', (i.pinned ?? []).map((p) => [p.repo, p.unit, `at ${shortDigest(p.digest)}`, `from ${p.upstream}`]))),
   ];
   return `${lines.join('\n')}\n`;
 }

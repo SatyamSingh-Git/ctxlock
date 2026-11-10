@@ -1,3 +1,4 @@
+import { dirname, isAbsolute, resolve } from 'node:path';
 import type { GeneratedFile } from '../build/generated.js';
 import type { UnitLoads } from '../collect/sessions.js';
 import type { UnitChange } from '../diff.js';
@@ -6,8 +7,9 @@ import type { HarnessId, Unit } from '../model.js';
 import { unitOwners } from '../registry/codeowners.js';
 import { type Consumer, type Requirement, type Tier, repoPath } from '../registry/registry.js';
 import type { ScanResult } from '../scan.js';
+import type { Lock } from '../sync/lock.js';
 
-export type GraphInput = Pick<ScanResult, 'units' | 'registry' | 'contexts' | 'codeowners'> & { generated: GeneratedFile[] };
+export type GraphInput = Pick<ScanResult, 'units' | 'registry' | 'contexts' | 'codeowners'> & { generated: GeneratedFile[]; lock?: Lock };
 type Edge = { id: string; tier?: Tier };
 type Load = { harness: HarnessId; site: string; mode: LoadMode };
 
@@ -52,6 +54,8 @@ export interface Impact {
   dependents: Array<Use & { on: string }>;
   consumers: ConsumerUse[];
   owners: string[];
+  // With --locks: the repositories that pin a changed unit.
+  pinned?: Pin[];
 }
 
 const byKey = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -74,7 +78,7 @@ export function unitChanges(base: ScanResult, head: ScanResult): UnitChange[] {
   return changes.sort((a, b) => byKey(a.id, b.id));
 }
 
-export function buildGraph({ units, registry, contexts, codeowners, generated }: GraphInput): Graph {
+export function buildGraph({ units, registry, contexts, codeowners, generated, lock }: GraphInput): Graph {
   const dangling: Graph['dangling'] = [];
   const resolve = (from: string, requirements: Requirement[]) =>
     requirements.flatMap(({ ref, tier }): Edge[] => {
@@ -108,6 +112,8 @@ export function buildGraph({ units, registry, contexts, codeowners, generated }:
   }
 
   const byId = new Map(units.map((u) => [u.id, u]));
+  // A synced unit's tier is its owner's, upstream (D72).
+  const pinned = new Map((lock?.upstreams ?? []).flatMap((u) => u.units.map((x) => [x.path, x.tier])));
   return {
     units: byId,
     dependsOn,
@@ -117,7 +123,7 @@ export function buildGraph({ units, registry, contexts, codeowners, generated }:
     dangling,
     owners: (id) => unitOwners(byId.get(id)!, registry, codeowners),
     // A unit already in git with no tier counts as reviewed (spec §4.1).
-    tier: (id) => registry.units[byId.get(id)!.path]?.tier ?? 'reviewed',
+    tier: (id) => pinned.get(byId.get(id)!.path) ?? registry.units[byId.get(id)!.path]?.tier ?? 'reviewed',
   };
 }
 
@@ -180,4 +186,30 @@ export function impactOf(base: ScanResult, head: ScanResult): Impact {
     consumers: [...consumers.values()].sort(byName),
     owners: [...owners].sort(),
   };
+}
+
+export interface Pin {
+  repo: string;
+  lockPath: string;
+  upstream: string;
+  unit: string;
+  digest: string;
+}
+
+// A repository is named by a URL or a folder; a URL with or without .git, or a trailing slash, is the same one.
+const sameRepo = (url: string) => url.replace(/\/+$/, '').replace(/\.git$/, '');
+const isFolder = (repo: string) => /^\.\.?([\/]|$)/.test(repo) || isAbsolute(repo);
+
+// The repositories whose ctxlock.lock pins a changed unit of this one. `self` holds what this repository
+// goes by: its origin URL and its folder. A lock's ./ or ../ upstream is read from the lock's folder.
+export function pinnedBy(changed: string[], self: string[], locks: Array<{ repo: string; path: string; lock: Lock }>): Pin[] {
+  const names = new Set(self.map((s) => (isFolder(s) ? resolve(s) : sameRepo(s))));
+  const pins: Pin[] = [];
+  for (const { repo, path, lock } of locks) {
+    for (const u of lock.upstreams) {
+      if (!names.has(isFolder(u.repo) ? resolve(dirname(path), u.repo) : sameRepo(u.repo))) continue;
+      for (const x of u.units) if (changed.includes(x.path)) pins.push({ repo, lockPath: path, upstream: u.name, unit: x.path, digest: x.digest });
+    }
+  }
+  return pins.sort((a, b) => byKey(a.unit, b.unit) || byKey(a.repo, b.repo) || byKey(a.lockPath, b.lockPath));
 }

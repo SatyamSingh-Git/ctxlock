@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { graphRefs } from '../../src/lint/rules/l15-graph.js';
+import { lfDigest } from '../../src/units/digest.js';
 import { lintContext } from '../helpers/lint.js';
 
 const run = async (files: Record<string, string>) => (await graphRefs.check(await lintContext(files))).map((f) => [f.severity, f.path, f.message]);
@@ -46,6 +47,17 @@ consumers:
     evals: [evals/probes/payments.yaml, evals/probes, ./evals/probes/]
 `;
     expect(await run({ ...RULES, 'ctxlock.yaml': yaml, 'evals/probes/payments.yaml': PROBE })).toEqual([]);
+  });
+
+  it("reads a synced unit's tier from ctxlock.lock, which the consumer's own units: cannot raise", async () => {
+    const lock = (tier: string) =>
+      `lockfile_version: 1\nupstreams:\n  - name: platform\n    repo: ../org\n    ref: main\n    commit: ${'f'.repeat(40)}\n    units:\n      - path: .claude/rules/a.md\n        id: rule/.claude/rules/a.md\n        digest: sha256:${'a'.repeat(64)}\n        tier: ${tier}\n        files:\n          .claude/rules/a.md: ${lfDigest(Buffer.from(RULES['.claude/rules/a.md']))}\n`;
+    const yaml = (own: string) => `version: 1\n${own}consumers:\n  payments-api:\n    depends-on: [.claude/rules/a.md@certified]\n`;
+
+    expect(await run({ ...RULES, 'ctxlock.lock': lock('certified'), 'ctxlock.yaml': yaml('') })).toEqual([]);
+    expect(await run({ ...RULES, 'ctxlock.lock': lock('reviewed'), 'ctxlock.yaml': yaml('units:\n  .claude/rules/a.md:\n    tier: certified\n') })).toEqual([
+      ['should', 'ctxlock.yaml', 'consumer payments-api needs .claude/rules/a.md at certified; it is reviewed'],
+    ]);
   });
 
   it('reports a reference left behind when the unit it names is removed', async () => {

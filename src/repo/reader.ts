@@ -87,6 +87,16 @@ export async function gitTopLevel(root: string): Promise<string | null> {
   }
 }
 
+// The URL of the repository's origin remote, or null when it has none or is not in git.
+export async function gitOrigin(root: string): Promise<string | null> {
+  try {
+    return (await git(root, ['remote', 'get-url', 'origin'])).trim();
+  } catch (err) {
+    if (exitedNonZero(err)) return null;
+    throw err;
+  }
+}
+
 function listing(top: string, files: string[], links: Map<string, string | null>): Listing {
   files.sort();
   return { top, files, fileSet: new Set(files), links };

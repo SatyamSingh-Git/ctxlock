@@ -1,9 +1,8 @@
 import type { SyncChange, SyncPlan } from '../sync/sync.js';
-import { block } from './graph.js';
+import { block, shortDigest as short } from './graph.js';
 import { cell, code } from './markdown.js';
 
 const ADVICE = 'Make such a change upstream and move the file aside, or take its unit out of upstream units in ctxlock.yaml.';
-const short = (digest: string) => digest.slice(0, 'sha256:'.length + 12);
 const commits = (from: string | null, to: string) => (from === null || from === to ? [to.slice(0, 7)] : [from.slice(0, 7), to.slice(0, 7)]);
 const digests = (c: SyncChange) => (c.change === 'updated' ? [short(c.from!), short(c.to!)] : [short((c.to ?? c.from)!)]);
 

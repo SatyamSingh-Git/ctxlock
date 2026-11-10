@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { applyFill } from './build/apply.js';
@@ -10,7 +10,7 @@ import { GENERATED_FILE, generatedStatus } from './build/generated.js';
 import { BuildError, suggestIndex } from './build/index-suggest.js';
 import { eventsHome, readEvents } from './collect/events.js';
 import { joinSessions } from './collect/sessions.js';
-import { buildGraph, impactOf, resolveRef, whoUses } from './graph/graph.js';
+import { buildGraph, impactOf, pinnedBy, resolveRef, whoUses } from './graph/graph.js';
 import { renderImpact, renderWhoUses } from './report/graph.js';
 import { renderLoads } from './report/loads.js';
 import { planFill } from './build/plan.js';
@@ -22,7 +22,7 @@ import { EvalError, runEval } from './eval/eval.js';
 import { ProbeError } from './eval/probes.js';
 import { loadRegistry, type Registry, RegistryError, type Upstream } from './registry/registry.js';
 import { gitIgnored } from './repo/gitignore.js';
-import { fsReader, gitReader, gitTopLevel, RefNotFound } from './repo/reader.js';
+import { fsReader, gitOrigin, gitReader, gitTopLevel, RefNotFound } from './repo/reader.js';
 import { renderBuild } from './report/build.js';
 import { renderEval } from './report/eval.js';
 import { renderDiffMarkdown, renderErrorMarkdown } from './report/markdown.js';
@@ -30,7 +30,7 @@ import { renderDiff, renderScan } from './report/render.js';
 import { renderSync } from './report/sync.js';
 import { type ScanResult, scanRepo } from './scan.js';
 import { UpstreamError, fetchUpstream } from './sync/fetch.js';
-import { LockError, loadLock } from './sync/lock.js';
+import { LOCK_FILE, LockError, loadLock } from './sync/lock.js';
 import { applySync, planSync } from './sync/sync.js';
 
 interface Io {
@@ -59,6 +59,14 @@ async function scansAt(root: string, opts: { base: string; head?: string }) {
 const isDirectory = (dir: string) => statSync(dir, { throwIfNoEntry: false })?.isDirectory() ?? false;
 // A path with links and 8.3 short names expanded, or as it is when nothing is there any more.
 const real = (path: string) => (existsSync(path) ? realpathSync.native(path) : path);
+
+// Every ctxlock.lock in a folder and the folders below it, as they are on disk; no link is followed.
+function locksUnder(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    if (e.isDirectory()) return e.name === '.git' || e.name === 'node_modules' ? [] : locksUnder(join(dir, e.name));
+    return e.isFile() && e.name === LOCK_FILE ? [join(dir, e.name)] : [];
+  });
+}
 
 // Recorded sessions in a folder, matched under its real path and under the path as typed: Claude Code
 // reports the path its session was started in, and Windows can give a temp folder an 8.3 name.
@@ -278,13 +286,33 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .requiredOption('--base <ref>', 'the ref to compare against, such as origin/main')
     .option('--head <ref>', 'the ref to check (default: the working tree)')
     .addOption(new Option('--format <format>', 'output format').choices(['text', 'json', 'markdown']).default('text'))
-    .action(async (dir: string | undefined, opts: { base: string; head?: string; format: 'text' | 'json' | 'markdown' }) => {
+    .option('--locks <paths...>', 'also list the repositories under these folders whose ctxlock.lock pins a changed unit')
+    .action(async (dir: string | undefined, opts: { base: string; head?: string; format: 'text' | 'json' | 'markdown'; locks?: string[] }) => {
       markdown = opts.format === 'markdown';
       const root = resolve(dir ?? '.');
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
-      if ((await gitTopLevel(root)) === null) throw new UsageError(`ctxlock impact: ${dir ?? '.'} is not inside a git repository`);
+      const top = await gitTopLevel(root);
+      if (top === null) throw new UsageError(`ctxlock impact: ${dir ?? '.'} is not inside a git repository`);
       const { base, head } = await scansAt(root, opts);
-      io.stdout(renderImpact(impactOf(base, head), opts.format));
+      const impact = impactOf(base, head);
+      if (opts.locks) {
+        const locks = [];
+        const missing = opts.locks.find((p) => !isDirectory(resolve(p)));
+        if (missing !== undefined) throw new UsageError(`ctxlock: ${missing} is not a directory`);
+        for (const path of opts.locks.flatMap((p) => locksUnder(real(resolve(p))))) {
+          try {
+            const lock = await loadLock({ exists: async () => true, readFile: async () => readFileSync(path) });
+            locks.push({ repo: (await gitOrigin(dirname(path))) ?? dirname(path), path, lock });
+          } catch (err) {
+            // One unreadable lock among many repositories does not hide the others.
+            if (!(err instanceof LockError)) throw err;
+            io.stderr(`ctxlock: skipped ${path}: ${err.message}\n`);
+          }
+        }
+        const self = [await gitOrigin(top), top, real(top)].filter((s) => s !== null);
+        impact.pinned = pinnedBy(impact.changed.map((c) => c.id.slice(c.id.indexOf('/') + 1)), self, locks);
+      }
+      io.stdout(renderImpact(impact, opts.format));
     });
 
   program

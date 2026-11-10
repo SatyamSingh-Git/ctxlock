@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, symlinkSync, write
 import { join, relative, sep } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { main } from '../src/cli.js';
+import { serializeLock } from '../src/sync/lock.js';
 import { cleanup, git, gitRepo, tempDir, writeTree } from './helpers/repo.js';
 
 afterAll(cleanup);
@@ -13,6 +14,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllEnvs();
 });
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 async function cli(...argv: string[]) {
   let stdout = '';
@@ -372,6 +375,35 @@ describe('ctxlock who-uses and ctxlock impact', { timeout: 120_000 }, () => {
 
     const missing = await cli('impact', dir, '--base', 'nope');
     expect([missing.code, missing.stderr]).toEqual([2, 'base ref nope not found — in GitHub Actions use actions/checkout with fetch-depth: 0\n']);
+  });
+
+  it('impact --locks names the repositories whose ctxlock.lock pins a changed unit, by origin or by folder', async () => {
+    const { dir: org } = await gitRepo([files, { '.claude/rules/a.md': 'Use pnpm, always.\n' }]);
+    git(org, 'remote', 'add', 'origin', 'https://github.com/acme/org.git');
+    const D = `sha256:${'c'.repeat(64)}`;
+    const lockOf = (repo: string, path: string) =>
+      serializeLock({ upstreams: [{ name: 'platform', repo, ref: 'main', commit: 'f'.repeat(40), units: [{ path, id: `rule/${path}`, digest: D, tier: 'reviewed', files: { [path]: D } }] }] });
+    const others = tempDir();
+    writeTree(others, {
+      'payments/ctxlock.lock': lockOf('https://github.com/acme/org', '.claude/rules/a.md'),
+      'docs/ctxlock.lock': lockOf(org, '.claude/rules/a.md'),
+      'web/ctxlock.lock': lockOf(org, '.claude/rules/b.md'),
+      'web/node_modules/x/ctxlock.lock': lockOf(org, '.claude/rules/a.md'),
+    });
+    git(join(others, 'payments'), 'init', '-q');
+    git(join(others, 'payments'), 'remote', 'add', 'origin', 'https://github.com/acme/payments.git');
+
+    const { code, stdout } = await cli('impact', org, '--base', 'HEAD~1', '--locks', others);
+    expect(code).toBe(0);
+    const docs = realpathSync.native(join(others, 'docs'));
+    expect(stdout).toMatch(
+      new RegExp(`\nPinned by other repositories:\n  ${escape(docs)}\\s+\\.claude/rules/a\\.md  at sha256:cccccccccccc  from platform\n  https://github\\.com/acme/payments\\.git\\s+\\.claude/rules/a\\.md  at sha256:cccccccccccc  from platform\n`),
+    );
+    expect(stdout).not.toContain('web');
+
+    const none = await cli('impact', org, '--base', 'HEAD~1', '--locks', join(others, 'web'));
+    expect(none.stdout).toContain('\nNo repository under the --locks paths pins what changed.\n');
+    expect((await cli('impact', org, '--base', 'HEAD~1')).stdout).not.toContain('--locks');
   });
 });
 

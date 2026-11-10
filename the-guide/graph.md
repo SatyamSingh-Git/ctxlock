@@ -27,6 +27,7 @@ consumers:
   - Each entry is a unit's path, as the `units:` keys are, or its ID, as `ctxlock scan` and probes show it (`rule/.claude/rules/deps.md`).
   - A symlinked copy of a skill names the same unit.
   - `@<tier>` says the least trust it needs. A unit with no `tier` counts as `reviewed`.
+  - A unit [`ctxlock sync`](commands.md#ctxlock-sync) brought in has the tier it has upstream, as `ctxlock.lock` records it. Your own `units:` entry cannot raise it: the tier belongs to whoever owns the unit.
 - **A consumer** is an agent configuration that uses units. For a coding team it is usually this repository, run with the agents its developers use. Its fields are in [configuration](configuration.md#fields).
 
 [`L15-graph`](rules.md#l15-graph-should) reports a reference that names no unit, such as one left behind by a rename. It also reports a tier that is not met, and an `evals` path that holds no probe file.

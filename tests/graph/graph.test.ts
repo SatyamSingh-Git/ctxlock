@@ -1,7 +1,9 @@
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GENERATED_FILE, serializeGenerated } from '../../src/build/generated.js';
-import { buildGraph, impactOf, resolveRef, whoUses } from '../../src/graph/graph.js';
+import { buildGraph, impactOf, pinnedBy, resolveRef, whoUses } from '../../src/graph/graph.js';
 import { scanRepo } from '../../src/scan.js';
+import type { Lock } from '../../src/sync/lock.js';
 import { lfDigest } from '../../src/units/digest.js';
 import { memReader } from '../helpers/mem-reader.js';
 
@@ -167,5 +169,33 @@ describe('impactOf', () => {
   it('with no ctxlock.yaml, lists the changes and nothing they reach', async () => {
     const { 'ctxlock.yaml': _, '.github/CODEOWNERS': __, ...plain } = CHAIN;
     expect(await impact(plain, { ...plain, '.claude/rules/a.md': 'A2.\n' })).toEqual({ changed: [{ id: A, change: 'modified' }], dependents: [], consumers: [], owners: [] });
+  });
+});
+
+describe('pinnedBy', () => {
+  const D = `sha256:${'c'.repeat(64)}`;
+  const lockOf = (repo: string, name = 'platform', paths = ['.claude/rules/a.md']): Lock => ({
+    upstreams: [{ name, repo, ref: 'main', commit: '1'.repeat(40), units: paths.map((path) => ({ path, id: `rule/${path}`, digest: D, tier: 'reviewed', files: { [path]: D } })) }],
+  });
+  const org = resolve('/work/org');
+
+  it('names each repository whose lock pins a changed unit from this one, by URL or by a path beside it', () => {
+    const pins = pinnedBy(['.claude/rules/a.md'], ['https://github.com/acme/org.git', org], [
+      { repo: 'https://github.com/acme/payments', path: resolve('/work/payments/ctxlock.lock'), lock: lockOf('https://github.com/acme/org') },
+      { repo: '/work/web', path: resolve('/work/web/ctxlock.lock'), lock: lockOf('../org', 'shared') },
+    ]);
+    expect(pins).toEqual([
+      { repo: '/work/web', lockPath: resolve('/work/web/ctxlock.lock'), upstream: 'shared', unit: '.claude/rules/a.md', digest: D },
+      { repo: 'https://github.com/acme/payments', lockPath: resolve('/work/payments/ctxlock.lock'), upstream: 'platform', unit: '.claude/rules/a.md', digest: D },
+    ]);
+  });
+
+  it('ignores locks of other upstreams, and units that did not change', () => {
+    const locks = [
+      { repo: 'x', path: resolve('/work/x/ctxlock.lock'), lock: lockOf('https://github.com/acme/other') },
+      { repo: 'y', path: resolve('/work/y/ctxlock.lock'), lock: lockOf('../orgs', 'platform', ['.claude/rules/a.md']) },
+      { repo: 'z', path: resolve('/work/z/ctxlock.lock'), lock: lockOf('../org', 'platform', ['.claude/rules/b.md']) },
+    ];
+    expect(pinnedBy(['.claude/rules/a.md'], ['https://github.com/acme/org', org], locks)).toEqual([]);
   });
 });

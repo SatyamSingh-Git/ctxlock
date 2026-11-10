@@ -115,4 +115,14 @@ Owners to ask: \`@payments-team\`, \`@rules-team\`
     expect(renderImpact(plain, 'markdown')).toBe('### ctxlock · impact\n\n#### Changed units\n\n| Unit | Change |\n|---|---|\n| `.claude/rules/a.md` | modified |\n');
     expect(JSON.parse(renderImpact(impact, 'json'))).toEqual(impact);
   });
+
+  it('lists the repositories that pin a changed unit, every name as code in markdown, and says when none does', () => {
+    const plain: Impact = { changed: impact.changed, dependents: [], consumers: [], owners: [] };
+    const pin = { repo: 'https://github.com/acme/pay|ments', lockPath: '/w/p/ctxlock.lock', upstream: 'platform', unit: '.claude/rules/a.md', digest: `sha256:${'c'.repeat(64)}` };
+    expect(renderImpact({ ...plain, pinned: [pin] }, 'markdown')).toContain(
+      '\n\n#### Pinned by other repositories\n\n| Repository | Unit | Digest | Upstream |\n|---|---|---|---|\n| `https://github.com/acme/pay\\|ments` | `.claude/rules/a.md` | `sha256:cccccccccccc` | `platform` |\n',
+    );
+    expect(renderImpact({ ...plain, pinned: [] }, 'markdown')).toContain('\n\nNo repository under the --locks paths pins what changed.\n');
+    expect(renderImpact({ ...plain, pinned: [] }, 'text')).toBe('ctxlock impact\n\nChanged:\n  .claude/rules/a.md  modified\n\nNo repository under the --locks paths pins what changed.\n');
+  });
 });
