@@ -4,7 +4,7 @@ Every finding has a rule, a severity, a file and usually a line:
 
 | Severity | Meaning |
 |---|---|
-| **must** | Something an agent would read wrongly, or not at all, or that hides text from reviewers. Once the CLI ships, a `must` finding fails the check. |
+| **must** | Something an agent would read wrongly, or not at all, or that hides text from reviewers. `ctxlock lint` exits 1 on one, and `ctxlock diff` and the Action fail on a new one. |
 | **should** | Probably a mistake. Worth fixing; it does not fail the check. |
 | **info** | Worth knowing, nothing to fix. |
 
@@ -18,7 +18,7 @@ lint:
     - "vendor/**"
 ```
 
-> **Status:** the rules on this page are implemented and tested: L0–L11 and L13–L16. L12, a model-based contradiction check, is planned for later. The `ctxlock lint` command that runs them arrives with the first CLI release.
+> **Status:** the rules on this page are implemented and tested: L0–L11 and L13–L16. L12, a model-based contradiction check, is planned for later. `ctxlock lint` runs them ([commands](commands.md)).
 
 ## What the findings look like
 
@@ -419,4 +419,4 @@ When `ctxlock.yaml` drops the upstream altogether, the last line is instead `ctx
 
 A file is compared as LF, so a CRLF checkout is no edit. A lock that does not parse is one `must`, with the reason.
 
-**Fix:** make the change in the upstream repository, then sync. To keep a local version, take the unit out of `units:` under its upstream; sync then removes it, and you can add your own. A change to `ctxlock.lock` itself shows in a pull request like any other file, so you can review it with CODEOWNERS.
+**Fix:** make the change in the upstream repository, then sync. To keep a local version, edit it and take the unit out of `units:` under its upstream; sync then leaves the files you edited as yours, removes the ones nobody edited, and drops the unit from the lock. A change to `ctxlock.lock` itself shows in a pull request like any other file, so you can review it with CODEOWNERS.

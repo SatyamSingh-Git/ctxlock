@@ -4,7 +4,7 @@ The same repository looks different to each coding agent. Claude Code reads `CLA
 
 ctxlock predicts, for every agent your team uses, exactly which files end up in context and how many bytes of each. This page explains those predictions and how they are checked.
 
-> **Status:** the predictions for Claude Code and Codex are implemented and tested. The command that prints them, `ctxlock budget`, arrives with the first CLI release.
+> **Status:** the predictions for Claude Code and Codex are implemented and tested. `ctxlock scan` and `ctxlock budget` print them ([commands](commands.md)).
 
 ## Sites
 
