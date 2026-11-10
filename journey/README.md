@@ -3,9 +3,9 @@
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
 **Latest:** [13 — propagation: one skill, many repositories, pinned](13-propagation.md).
-- Plan 6: `upstream:` in `ctxlock.yaml`, `ctxlock sync` and `ctxlock.lock`, `L16-lock`, tiers from the lock, `impact --locks` across repositories, `ctxlock report`, and a workflow template; 571 tests.
+- Plan 6: `upstream:` in `ctxlock.yaml`, `ctxlock sync` and `ctxlock.lock`, `L16-lock`, tiers from the lock, `impact --locks` across repositories, `ctxlock report`, and a workflow template; 582 tests.
 - Live on an org repository and two consumers, a rule edited upstream named only the consumer that takes it, and a hand edit was refused by sync and flagged by `L16`.
-- Found: Windows 8.3 names broke CI again, in new code; and the live demo caught a lock that moved on every org commit, which would have opened hash-only pull requests everywhere.
+- Found: the final review broke sync's central promise twice, through a link and a file name in the upstream; Windows 8.3 names broke CI again, in new code; and the live demo caught a lock that moved on every org commit.
 
 **Earlier:** [12 — the collector: what Claude Code actually loaded](12-collector.md).
 - Plan 5: a Claude Code plugin that records which units developers' sessions load, as paths and digests only; `ctxlock loads`; observed sessions in `who-uses`; 522 tests.

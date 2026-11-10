@@ -18,7 +18,7 @@ Satyam asked to start the work without further design questions, so the open cal
 - **`ctxlock impact --locks`** names the repositories whose lock pins a changed unit (D73).
 - **`ctxlock report`** writes `loads`'s counts as JSON to share, with no session ID, local path, error message or credential in it (D74).
 - **A workflow template** keeps one sync pull request open in each consumer, using that repository's own token (D68).
-- **The suite** has 571 tests.
+- **The suite** has 582 tests.
 
 ## What worked
 
@@ -57,10 +57,22 @@ Satyam asked to start the work without further design questions, so the open cal
   - Found in the live demo: a consumer whose units hadn't changed still got the org's new commit in its lock, so the workflow would have opened a hash-only pull request everywhere.
   - Sync now keeps the old commit when nothing it pins has changed.
 - **A gap in the plan.** Its Review Focus asked that a unit deleted upstream be removed, while D69 and its own exit-2 rule implied an error. The ruling: a declared unit missing upstream stops sync with exit 2, and removal happens only when the consumer drops it from `units:`. A silent removal would hide that the org deleted something a repository relies on.
+- **The final review found sync's central promise broken, twice.** The plan's own tests didn't cover how an upstream could reach past a unit. A fresh reviewer did, and reproduced both end to end:
+  - **A link inside an upstream skill** made sync write whatever the link reached, `.claude/settings.json` with a hook included. A skill's linked member is listed by its target, and sync wrote targets as given. Now files outside the unit are left out and listed.
+  - **A file name git accepts but Windows reads as another place:** `..\..\settings.json` passes `git fsck --strict`, yet `join` on Windows walks out of the skill with it. Names with `.`/`..` segments, backslashes, colons or control characters now stop sync. `applySync` also refuses any path outside the repository, with the check `applyFill` already had.
+  - **Six more fixes:**
+    - Keeping your own version of a unit deadlocked: refused, with advice that led back to the refusal. Now an edited file sync no longer takes is left as the person's.
+    - The cache resolved a deleted branch to where it had been, and never moved a tag.
+    - A dropped unit's copy kept loading in the other agent. Fixing that found `applyFill` leaving a stale record.
+    - A skill's frontmatter hooks synced unnoticed (D76).
+    - The workflow re-pushed unchanged trees, dismissing approvals.
+    - `report` could carry a local-path origin.
+  - **Each fix** has a test that failed first, and a mutation check.
 - **YAML read a hand-written commit as a number.** A test lock had a commit of forty 1s, which YAML parses as a number. Real locks are safe: `serializeLock` quotes any string that would read as one.
 
 ## What was learned
 
 - **Pull beats push for a context tool.** Each repository runs `sync` with its own token. No credential that can write to every repository exists anywhere. That is Dependabot's model, and §7 asks for no less.
 - **A lock is only reviewed if it changes when something real changes.** A lock that moves on every upstream commit trains people to merge without reading. Keeping the pin when nothing pinned changed is what makes "every change arrives as a diff someone reviews" true in practice.
+- **Writing another repository's files is a security boundary, and the plan didn't treat it as one.** Its Review Focus listed hooks and settings by name, and the tests checked exactly those names. The breaks came through the shape of the upstream instead: a link, and a file name. Content from elsewhere has to be checked for where it lands, not only for what it is called.
 - **Lint and sync judge one file two ways.** Sync stops on a broken lock, since it can't safely act. Lint reports the same lock as a finding, since its job is to tell you, not to stop.
