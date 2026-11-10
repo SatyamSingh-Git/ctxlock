@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { linked } from '../build/apply.js';
+import { linked, outsideRepo } from '../build/apply.js';
 import { BuildError } from '../build/index-suggest.js';
 import type { Registry, Upstream } from '../registry/registry.js';
 import type { RepoReader } from '../repo/reader.js';
@@ -38,6 +38,12 @@ function never(unitPath: string, path: string): string | null {
   return null;
 }
 
+// A name git accepts can still mean another place to a file system: a . or .. segment, a backslash on
+// Windows, an NTFS stream after a colon. Control characters are refused with them.
+const cp = String.fromCodePoint;
+const ODD = new RegExp(`[\\\\:${cp(0)}-${cp(31)}${cp(127)}]`);
+const unsafe = (path: string) => ODD.test(path) || path.split('/').some((s) => s === '' || s === '.' || s === '..');
+
 const byPath = <T extends { path: string }>(a: T, b: T) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 
 // What syncing every upstream the registry declares would write, remove and pin. A unit lands at its
@@ -68,6 +74,12 @@ export async function planSync(
 
       const files: Record<string, string> = {};
       for (const f of unit.files) {
+        if (unsafe(f.path)) throw new UpstreamError(`upstream ${u.name}: ${unit.path} holds a file sync will not write: ${JSON.stringify(f.path)}`);
+        // A skill's member that is a link is listed by its target, which can be anywhere in the upstream.
+        if (unit.kind === 'skill' ? !f.path.startsWith(`${unit.path}/`) : f.path !== unit.path) {
+          plan.skipped.push({ path: f.path, reason: `outside ${unit.path}, reached through a link: never syncs` });
+          continue;
+        }
         const reason = never(unit.path, f.path);
         if (reason) {
           plan.skipped.push({ path: f.path, reason });
@@ -124,6 +136,7 @@ export async function planSync(
 // Writes a plan with no refusals. The lock is rewritten only when what it says changed.
 export async function applySync(top: string, plan: SyncPlan): Promise<void> {
   for (const path of [...plan.writes.map((w) => w.path), ...plan.removes, LOCK_FILE]) {
+    if (outsideRepo(top, path)) throw new BuildError(`${path} is outside the repository; ctxlock writes only inside it`);
     if (linked(top, path)) throw new BuildError(`${path} is reached through a link; ctxlock writes through none`);
   }
   for (const { path, bytes } of plan.writes) {

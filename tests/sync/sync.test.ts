@@ -1,11 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { existsSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterAll, describe, expect, it } from 'vitest';
 import { loadRegistry } from '../../src/registry/registry.js';
 import { scanRepo } from '../../src/scan.js';
 import { type Lock, serializeLock } from '../../src/sync/lock.js';
 import { UpstreamError } from '../../src/sync/fetch.js';
-import { planSync } from '../../src/sync/sync.js';
+import { applySync, planSync } from '../../src/sync/sync.js';
 import { lfDigest } from '../../src/units/digest.js';
 import { memReader } from '../helpers/mem-reader.js';
+import { cleanup, tempDir } from '../helpers/repo.js';
 
 const C1 = '1'.repeat(40);
 const C2 = '2'.repeat(40);
@@ -20,9 +23,9 @@ const ORG = {
 const yaml = (units = ['.agents/skills/api', '.claude/rules/testing.md']) =>
   `version: 1\nupstream:\n  platform:\n    repo: ../org\n    units: [${units.join(', ')}]\n`;
 
-async function sync(org: Record<string, string>, commit: string, consumer: Record<string, string | Buffer>, lock: Lock = { upstreams: [] }) {
+async function sync(org: Record<string, string>, commit: string, consumer: Record<string, string | Buffer>, lock: Lock = { upstreams: [] }, links: Record<string, string> = {}) {
   const local = memReader(consumer);
-  return planSync(await loadRegistry(local), lock, async () => ({ commit, reader: memReader(org) }), local);
+  return planSync(await loadRegistry(local), lock, async () => ({ commit, reader: memReader(org, links) }), local);
 }
 
 // The consumer after a plan is written: its files, and the lock.
@@ -176,11 +179,46 @@ describe('planSync', () => {
     expect(Object.keys(plan.lock.upstreams[0]!.units[0]!.files)).toEqual(['.agents/skills/api/SKILL.md', '.agents/skills/api/ref.md']);
   });
 
+  it('never writes a file outside the skill that a link inside it reaches, and says so', async () => {
+    const org = { ...ORG, '.claude/settings.json': '{"hooks":{}}\n', 'docs/reference.md': 'Docs.\n' };
+    const links = { '.agents/skills/api/cfg.json': '.claude/settings.json', '.agents/skills/api/reference.md': 'docs/reference.md' };
+    const plan = await sync({ ...org, '.agents/skills/api/cfg.json': '', '.agents/skills/api/reference.md': '' }, C1, { 'ctxlock.yaml': yaml(['.agents/skills/api']) }, undefined, links);
+
+    expect(plan.writes.map((w) => w.path)).toEqual(['.agents/skills/api/SKILL.md', '.agents/skills/api/ref.md']);
+    expect(plan.skipped).toEqual([
+      { path: '.claude/settings.json', reason: 'outside .agents/skills/api, reached through a link: never syncs' },
+      { path: 'docs/reference.md', reason: 'outside .agents/skills/api, reached through a link: never syncs' },
+    ]);
+  });
+
+  it('stops on an upstream file name that could reach outside the skill', async () => {
+    for (const name of ['..\\..\\settings.json', 'sub/../../../../outside.txt', 'notes.md:stream', `bad${String.fromCodePoint(7)}.md`]) {
+      const path = `.agents/skills/api/${name}`;
+      const error = await failure(sync({ ...ORG, [path]: 'x\n' }, C1, { 'ctxlock.yaml': yaml(['.agents/skills/api']) }));
+      expect(error).toBeInstanceOf(UpstreamError);
+      expect(error.message).toBe(`upstream platform: .agents/skills/api holds a file sync will not write: ${JSON.stringify(path)}`);
+    }
+  });
+
   it('a declared path that is no unit upstream, or an instructions file, is an UpstreamError naming it', async () => {
     const none = await failure(sync(ORG, C1, { 'ctxlock.yaml': yaml(['.claude/rules/nope.md']) }));
     expect(none).toBeInstanceOf(UpstreamError);
     expect(none.message).toContain('upstream platform: .claude/rules/nope.md is no unit at 1111111');
     const instructions = await failure(sync(ORG, C1, { 'ctxlock.yaml': yaml(['AGENTS.md']) }));
     expect(instructions.message).toContain('upstream platform: AGENTS.md is instructions; only skills and rules sync');
+  });
+});
+
+describe('applySync', () => {
+  afterAll(cleanup);
+
+  it('writes nothing to a path outside the repository, whatever the plan holds', async () => {
+    const top = join(tempDir(), 'repo');
+    mkdirSync(top);
+    for (const path of ['../outside.txt', 'a/../../outside.txt']) {
+      const plan = { lock: { upstreams: [] }, moved: [], writes: [{ path, bytes: Buffer.from('x') }], removes: [], changes: [], refused: [], skipped: [] };
+      await expect(applySync(top, plan)).rejects.toThrow(`${path} is outside the repository`);
+    }
+    expect(existsSync(join(top, '..', 'outside.txt'))).toBe(false);
   });
 });

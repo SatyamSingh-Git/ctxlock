@@ -16,6 +16,12 @@ export function linked(top: string, path: string): boolean {
   return false;
 }
 
+// Whether a path, given from the repository's top, lands outside it.
+export function outsideRepo(top: string, path: string): boolean {
+  const rel = relative(top, resolve(top, path));
+  return rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+}
+
 // Writes each planned file inside the repository, where nothing is yet or where ctxlock's own output
 // is unedited, checked again here since the plan was made; then records what it generated.
 export async function applyFill(top: string, plan: FillPlan, previous: GeneratedFile[]): Promise<{ written: string[]; removed: string[]; refused: string[] }> {
@@ -31,10 +37,8 @@ export async function applyFill(top: string, plan: FillPlan, previous: Generated
   };
   // ctxlock may change a path inside the repository, reached through no link, that holds nothing or
   // its own unedited output.
-  const mine = ({ path, full, now }: ReturnType<typeof at>) => {
-    const rel = relative(top, full);
-    const outside = rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
-    return !outside && !linked(top, path) && (now === null || recorded.get(path)?.sha256 === lfDigest(now));
+  const mine = ({ path, now }: ReturnType<typeof at>) => {
+    return !outsideRepo(top, path) && !linked(top, path) && (now === null || recorded.get(path)?.sha256 === lfDigest(now));
   };
   try {
     for (const action of plan.actions) {
