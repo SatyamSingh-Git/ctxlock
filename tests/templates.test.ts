@@ -14,7 +14,7 @@ const script = (name: string) => steps.find((s) => s.name === name)!.run!;
 
 // A consumer repository with a bare origin, a stand-in for ctxlock that writes `writes` and exits with
 // `exit`, and a stand-in gh that logs its arguments and lists `open` as the open pull request.
-async function workflow({ exit = 0, writes = {} as Record<string, string>, open = '', token = '', diverged = false } = {}) {
+async function workflow({ exit = 0, writes = {} as Record<string, string>, open = '', token = '', diverged = false, again = false } = {}) {
   const { dir } = await gitRepo([{ 'AGENTS.md': 'Use pnpm.\n' }]);
   const origin = tempDir();
   git(origin, 'init', '-q', '--bare');
@@ -44,9 +44,18 @@ process.exit(${exit});`,
   const run = (name: string) => spawnSync(BASH, ['-c', script(name)], { cwd: dir, env, encoding: 'utf8' }).status;
   const sync = run('Sync');
   const pr = sync === 0 ? run('Pull request') : null;
+  const head = () => spawnSync('git', ['-C', origin, 'rev-parse', '--verify', '-q', 'ctxlock/sync'], { encoding: 'utf8' }).stdout.trim();
+  let rerun = null;
+  if (again) {
+    // The next scheduled run starts from a fresh checkout of main, with nothing new upstream.
+    const before = head();
+    git(dir, 'checkout', '-q', '-f', 'main');
+    writeFileSync(join(temp, 'gh.log'), '');
+    rerun = { sync: run('Sync'), pr: run('Pull request'), pushed: head() !== before, log: readFileSync(join(temp, 'gh.log'), 'utf8') };
+  }
   const log = existsSync(join(temp, 'gh.log')) ? readFileSync(join(temp, 'gh.log'), 'utf8') : '';
   const pushed = spawnSync('git', ['-C', origin, 'show', 'ctxlock/sync:ctxlock.lock'], { encoding: 'utf8' });
-  return { sync, pr, log, body: readFileSync(join(temp, 'body.md'), 'utf8'), summary: readFileSync(join(temp, 'summary.md'), 'utf8'), pushed: pushed.status === 0 ? pushed.stdout : null };
+  return { sync, pr, log, body: readFileSync(join(temp, 'body.md'), 'utf8'), summary: readFileSync(join(temp, 'summary.md'), 'utf8'), pushed: pushed.status === 0 ? pushed.stdout : null, rerun };
 }
 
 describe('the sync workflow template', { timeout: 60_000 }, () => {
@@ -61,6 +70,11 @@ describe('the sync workflow template', { timeout: 60_000 }, () => {
     const updated = await workflow({ writes: { 'ctxlock.lock': 'lockfile_version: 1\n' }, open: '7', diverged: true });
     expect(updated.pushed).toBe('lockfile_version: 1\n');
     expect(updated.log).toMatch(/\npr edit ctxlock\/sync --body-file .*body\.md\n$/);
+  });
+
+  it('a run that would push what the pull request already has pushes nothing, so no approval is dismissed', async () => {
+    const { rerun } = await workflow({ writes: { 'ctxlock.lock': 'lockfile_version: 1\n' }, open: '7', again: true });
+    expect(rerun).toEqual({ sync: 0, pr: 0, pushed: false, log: '' });
   });
 
   it('with nothing changed, pushes nothing and calls no gh', async () => {
