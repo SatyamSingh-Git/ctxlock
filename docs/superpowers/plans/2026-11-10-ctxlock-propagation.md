@@ -27,13 +27,13 @@ Satyam asked on 2026-11-10 to start the work without further design questions. E
 
 | Task | Status | Commits |
 |---|---|---|
-| 1 | Not started | |
-| 2 | Not started | |
-| 3 | Not started | |
-| 4 | Not started | |
-| 5 | Not started | |
-| 6 | Not started | |
-| 7 | Not started | |
+| 1 | Done | 8448248 |
+| 2 | Done | efeae35 |
+| 3 | Done | cd2e096 |
+| 4 | Done | 5c5ff6b |
+| 5 | Done | b175fee, fe56769 (fix) |
+| 6 | Done | 45163f3 |
+| 7 | Done | 3a4b813, 9801def (fix), and the docs commit |
 
 ## Rulings this plan makes (my calls)
 

@@ -6,15 +6,16 @@
 ![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)
 ![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-339933.svg)
 
-> **Status: pre-alpha.** Two checks, a builder and the dependency graph within one repository work, from source:
+> **Status: pre-alpha.** Two checks, a builder, the dependency graph and propagation across repositories work, from source:
 > - **Static:** `ctxlock scan`, `lint`, `budget` and `diff`.
 > - **Behavioral:** `ctxlock eval` runs probes against Claude Code with the base and the head context, and `ctxlock probe draft` drafts them. On three public repositories it caught every planted edit ([report](docs/dogfood/2026-11-06-behavioral.md)).
 > - **Build:** `ctxlock build` reports the gaps between Claude Code and Codex, and `--fill-missing` writes the files that close them, never over a file a person wrote ([report](docs/dogfood/2026-11-07-build.md)).
 > - **Graph:**
 >   - `ctxlock who-uses` and `ctxlock impact` say what relies on a unit and what a change reaches ([report](docs/dogfood/2026-11-08-graph.md)).
 >   - A Claude Code plugin records what your sessions actually load, for `ctxlock loads` ([report](docs/dogfood/2026-11-08-collector.md)).
+> - **Propagation:** `ctxlock sync` brings an org repository's skills and rules in, pinned in `ctxlock.lock`, and `impact --locks` names the repositories a change upstream reaches ([report](docs/dogfood/2026-11-10-propagation.md)).
 >
-> A GitHub Action posts both checks on pull requests, and has run on a live pull request. Nothing is on npm yet, and there is no release tag. Propagation across repositories and the feedback loop are still being designed. Everything below that isn't marked as done is planned.
+> A GitHub Action posts both checks on pull requests, and has run on a live pull request. Nothing is on npm yet, and there is no release tag. The feedback loop is still being designed. Everything below that isn't marked as done is planned.
 
 ---
 
@@ -191,7 +192,7 @@ flowchart LR
 - [x] **`ctxlock build`:** each agent's budget, the gaps between Claude Code and Codex, and drift between hand-written files; `--fill-missing` writes what is missing and records it, and `L14` catches drift in what it wrote ([plan](docs/superpowers/plans/2026-11-07-ctxlock-build.md), [guide](the-guide/build.md), [report](docs/dogfood/2026-11-07-build.md)).
 - [x] **Dependency graph, in one repository:** `depends-on` and consumers in `ctxlock.yaml`, `ctxlock who-uses`, a change's blast radius in `ctxlock impact` and the pull request comment, `L15` for references to no unit, and `eval` running the probes of everything a change reaches ([plan](docs/superpowers/plans/2026-11-08-ctxlock-graph.md), [guide](the-guide/graph.md), [report](docs/dogfood/2026-11-08-graph.md)).
 - [x] **Loads seen in real sessions:** a Claude Code plugin records which units your sessions load, as paths and digests only. `ctxlock loads` lists what loaded and what never did, and `who-uses` shows it beside the prediction. Checked live against Claude Code's own load events ([plan](docs/superpowers/plans/2026-11-08-ctxlock-collectors.md), [guide](the-guide/collector.md), [report](docs/dogfood/2026-11-08-collector.md), [spike](docs/spikes/S5-collector-plugin.md)).
-- [ ] **Propagation:** update pull requests from an org context repository into the repositories that use it, pinned by `ctxlock.lock`.
+- [x] **Propagation:** `ctxlock sync` brings an org repository's skills and rules into each repository that names them under `upstream:`, pinned in `ctxlock.lock`, and a workflow keeps one pull request open with each update. Hooks, settings and MCP servers never sync, and a synced file edited by hand is refused by sync and flagged by `L16`. `ctxlock impact --locks` names the repositories a change upstream reaches, and `ctxlock report` shares what sessions loaded, with nothing local in it. Checked live on local repositories; the workflow has not run on GitHub yet ([plan](docs/superpowers/plans/2026-11-10-ctxlock-propagation.md), [guide](the-guide/propagation.md), [report](docs/dogfood/2026-11-10-propagation.md)).
 - [ ] **Feedback loop:** agent misses routed to the owner, fixed, validated by replay, and tracked for durability.
 - [ ] **Business context:** metrics, knowledge docs and procedures, served over MCP.
 

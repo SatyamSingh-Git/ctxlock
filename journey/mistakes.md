@@ -280,3 +280,13 @@ During Plan 5, an edit to the commands guide went through `node -e`, with the ne
 *Cost:* nothing shipped. `git diff` showed the damage, and `git checkout` restored the file before any commit. But the stray commands were whatever the text happened to contain, and they could as easily have been destructive.
 
 *Changed:* text that holds backticks, `$` or backslashes is written with the Edit or Write tool, never inside a shell string.
+
+### New code compared folders by name, after the 8.3 lesson was already learned
+
+During Plan 6, `impact --locks` matched a lock's upstream folder against this repository's folder by resolved path, as text. Windows CI failed: on GitHub's runner the temp folder has an 8.3 short name, so the lock named the org by `RUNNER~1` while git named it by the long path. Local runs passed, since this machine's temp folder has no short name.
+
+*Cause:* the fix from Plan 4 (compare by real path) was made where it was found, and the lesson stayed in this log instead of in a habit. Nothing prompted a check when new code compared folders.
+
+*Cost:* one red CI run on `main`, found within the hour and fixed in its own commit. A junction reproduced it locally, so the fix had a test that failed first.
+
+*Changed:* any new code that compares folders takes a real-path function, as `joinSessions` and now `pinnedBy` do, and its test reaches one folder through a link.
