@@ -65,6 +65,26 @@ describe('fetchUpstream', { timeout: 60_000 }, () => {
     expect(await text(later.reader, 'a.md')).toBe('three\n');
   });
 
+  it('a branch deleted upstream is gone from the cache too, and a moved tag moves', async () => {
+    const { dir, shas } = await gitRepo([{ 'a.md': 'one\n' }, { 'a.md': 'two\n' }]);
+    git(dir, 'tag', 'v1', shas[0]!);
+    const cache = tempDir();
+    expect((await fetchUpstream(up(dir), cache)).commit).toBe(shas[1]);
+    expect((await fetchUpstream(up(dir, 'v1'), cache)).commit).toBe(shas[0]);
+    git(dir, 'tag', 'old', shas[0]!);
+    expect((await fetchUpstream(up(dir, 'old'), cache)).commit).toBe(shas[0]);
+    git(dir, 'tag', '-d', 'old');
+    expect((await failure(fetchUpstream(up(dir, 'old'), cache))).message).toBe(`upstream platform: no ref old in ${dir}`);
+
+    git(dir, 'branch', '-m', 'main', 'trunk');
+    git(dir, 'tag', '-f', 'v1', shas[1]!);
+    const gone = await failure(fetchUpstream(up(dir), cache));
+    expect(gone.message).toBe(`upstream platform: no ref main in ${dir}`);
+    expect((await fetchUpstream(up(dir, 'v1'), cache)).commit).toBe(shas[1]);
+    expect((await fetchUpstream(up(dir, 'trunk'), cache)).commit).toBe(shas[1]);
+    expect((await fetchUpstream(up(dir, shas[0]!.slice(0, 10)), cache)).commit).toBe(shas[0]);
+  });
+
   it('the reader gives the files at the resolved commit, not the upstream working tree', async () => {
     const { dir } = await gitRepo([{ 'a.md': 'committed\n' }]);
     writeTree(dir, { 'a.md': 'not committed\n', 'b.md': 'new\n' });

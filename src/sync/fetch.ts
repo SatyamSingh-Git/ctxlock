@@ -24,14 +24,16 @@ export async function fetchUpstream(u: Upstream, cache: string): Promise<{ commi
   const git = (args: string[]) => run('git', ['-c', `core.hooksPath=${noHooks}`, '-c', 'protocol.ext.allow=never', ...args], { windowsHide: true });
 
   try {
-    if (existsSync(dir)) await git(['-C', dir, 'fetch', '--quiet', '--prune', 'origin']);
+    if (existsSync(dir)) await git(['-C', dir, 'fetch', '--quiet', '--prune', '--prune-tags', '--tags', '--force', 'origin']);
     else await git(['clone', '--no-checkout', '--quiet', '--', u.repo, dir]);
   } catch (err) {
     throw new UpstreamError(`upstream ${u.name}: cannot fetch ${u.repo}: ${said(err)}`);
   }
 
-  // A branch is read from what was just fetched; a tag or a commit as it is.
-  for (const candidate of [`origin/${u.ref}`, u.ref]) {
+  // Only what was just fetched: the clone's own branches never move, so a branch deleted upstream would
+  // still resolve, to where it was when the cache was made. A tag moved upstream is fetched with --force.
+  const candidates = [`refs/remotes/origin/${u.ref}`, `refs/tags/${u.ref}`, ...(/^[0-9a-f]{4,40}$/.test(u.ref) ? [u.ref] : [])];
+  for (const candidate of candidates) {
     let commit: string;
     try {
       commit = (await git(['-C', dir, 'rev-parse', '--verify', '--quiet', '--end-of-options', `${candidate}^{commit}`])).stdout.trim();
