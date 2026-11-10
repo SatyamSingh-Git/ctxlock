@@ -1,37 +1,152 @@
+<div align="center" markdown="1">
+
 # ctxlock
 
-**CI, a dependency graph, and a feedback loop for AI agent context.**
+### Your coding agents follow context nobody tests.<br/>This treats it like code.
 
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)
-![Node >= 22](https://img.shields.io/badge/node-%3E%3D22-339933.svg)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-339933.svg)](https://nodejs.org/)
+[![Agents](https://img.shields.io/badge/agents-Claude%20Code%20%C2%B7%20Codex-D97757.svg)](#agent-support)
+[![CI](https://github.com/SatyamSingh-Git/ctxlock/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/SatyamSingh-Git/ctxlock/actions/workflows/ci.yml)
+[![Status](https://img.shields.io/badge/status-pre--alpha-orange.svg)](#roadmap)
 
-> **Status: pre-alpha.** Two checks, a builder, the dependency graph and propagation across repositories work, from source:
-> - **Static:** `ctxlock scan`, `lint`, `budget` and `diff`.
-> - **Behavioral:** `ctxlock eval` runs probes against Claude Code with the base and the head context, and `ctxlock probe draft` drafts them. On three public repositories it caught every planted edit ([report](docs/dogfood/2026-11-06-behavioral.md)).
-> - **Build:** `ctxlock build` reports the gaps between Claude Code and Codex, and `--fill-missing` writes the files that close them, never over a file a person wrote ([report](docs/dogfood/2026-11-07-build.md)).
-> - **Graph:**
->   - `ctxlock who-uses` and `ctxlock impact` say what relies on a unit and what a change reaches ([report](docs/dogfood/2026-11-08-graph.md)).
->   - A Claude Code plugin records what your sessions actually load, for `ctxlock loads` ([report](docs/dogfood/2026-11-08-collector.md)).
-> - **Propagation:** `ctxlock sync` brings an org repository's skills and rules in, pinned in `ctxlock.lock`, and `impact --locks` names the repositories a change upstream reaches ([report](docs/dogfood/2026-11-10-propagation.md)).
->
-> A GitHub Action posts both checks on pull requests, and has run on a live pull request. Nothing is on npm yet, and there is no release tag. The feedback loop is still being designed. Everything below that isn't marked as done is planned.
+**[The idea](#the-thirty-second-version)** · **[What it does](#what-ctxlock-does)** · **[Usage](#usage)** · **[How it works](#how-it-works)** · **[Agents](#agent-support)** · **[Roadmap](#roadmap)** · **[Built on](#built-on)** · **[The journey](#follow-along)**
+
+Want to help? Start with **[Contributing](#contributing)**.
+
+</div>
 
 ---
 
-## The problem
+> **What this is.** CI, a dependency graph and a feedback loop for the context your coding agents read: `AGENTS.md`, `CLAUDE.md`, skills, rules and MCP config.
+> It predicts what each agent will load, checks every change to that context on the pull request, and runs the agent on both sides of the change to see whether it still does what the context says.
+> Skills and rules shared across repositories are **pinned in a lockfile**, so an upstream change arrives as a pull request someone reviews, and a hand edit is caught.
+> It adds no new file format. Your files stay exactly as they are.
 
-Teams now run several coding agents side by side: Claude Code, Codex, Copilot, Cursor. Every one of them reads **context**: `AGENTS.md`, `CLAUDE.md`, skills, rules and MCP tools. That context steers what the agent does, so it is a production dependency. Yet it is managed by hand:
+**What it can do today:**
 
-- **It drifts between tools.**
-  - Claude Code ignores `AGENTS.md` whenever a `CLAUDE.md` exists.
-  - Codex reads at most 32 KiB of instructions and drops the rest silently.
-  - Skills in `.agents/skills` are invisible to Claude Code.
-- **Nobody knows what depends on what.** Edit a shared skill and you can't tell which repos and agents just changed behavior.
-- **Changes ship untested, and context often hurts.**
-  - LLM-written context files *lower* task success and raise cost by about 20% ([ETH Zurich, 2026](https://arxiv.org/abs/2602.11988)).
-  - Self-generated skills score 8–11 points *below* having no skills ([SkillsBench](https://arxiv.org/abs/2602.12670)).
+1. **Context CI:** `scan`, `lint`, `budget` and `diff` show what each agent loads, where it breaks a tool's limits (Codex stops at 32 KiB), text reviewers can't see, and every new hook, MCP server or auto-approval. A GitHub Action posts the result on pull requests, and fails on a new `must` finding.
+2. **Behavioral checks:** `eval` runs probes against Claude Code with the base and the head context, denying every command and edit it tries, and `probe draft` drafts the probes. On three public repositories it caught every planted edit ([report](docs/dogfood/2026-11-06-behavioral.md)).
+3. **One context, every agent:** `build` reports the gaps between Claude Code and Codex, and `--fill-missing` writes the files that close them, never over a file a person wrote ([report](docs/dogfood/2026-11-07-build.md)).
+4. **Dependency graph:** `who-uses` and `impact` say what relies on a unit and what a change reaches, and `eval` runs the probes of everything it reaches ([report](docs/dogfood/2026-11-08-graph.md)).
+5. **What really loaded:** a Claude Code plugin records which units your sessions load, as paths and digests only, for `loads` ([report](docs/dogfood/2026-11-08-collector.md)).
+6. **Propagation:** `sync` brings an org repository's skills and rules in, pinned in `ctxlock.lock`. `L16` flags a synced file edited by hand, and `impact --locks` names the repositories a change upstream reaches ([report](docs/dogfood/2026-11-10-propagation.md)).
+7. **Shareable load reports:** `report` writes what sessions loaded as JSON to share with the org, with no session ID, local path or credential in it.
+8. **Two agents:** Claude Code and Codex loading is predicted. Claude Code is also observed in real sessions and evaluated.
+
+> [!NOTE]
+> Pre-alpha: everything above runs from source, and is tested on Windows and Linux. Nothing is on npm yet, and there is no release tag. The feedback loop is still being designed.
+
+---
+
+<div align="center" markdown="1">
+
+### *The path is ours to walk.*<br/>*Where it ends was never ours to choose.*
+
+**So check what your agents read, and lock what they share.**
+
+</div>
+
+---
+
+## The thirty-second version
+
+Teams now run several coding agents side by side: Claude Code, Codex, Copilot, Cursor. Before any of them does anything, it reads **context**: `AGENTS.md`, `CLAUDE.md`, skills, rules and MCP tools. That context steers what the agent does, so it is a production dependency.
+
+It is managed by hand, and it breaks without a sound:
+
+- **It drifts between tools.** Claude Code ignores `AGENTS.md` whenever a `CLAUDE.md` exists. Codex reads at most 32 KiB of instructions and drops the rest. Skills in `.agents/skills` are invisible to Claude Code.
+- **Nobody knows what depends on what.** Edit a shared skill and you can't tell which repositories and agents just changed behavior.
+- **Changes ship untested, and context often hurts.** LLM-written context files *lower* task success and raise cost by about 20% ([ETH Zurich, 2026](https://arxiv.org/abs/2602.11988)). Self-generated skills score 8–11 points *below* having no skills ([SkillsBench](https://arxiv.org/abs/2602.12670)).
 - **It is an attack surface.** Hidden Unicode in rules files, malicious skills in public registries, and hooks slipped into pull requests have all been used against coding agents in 2025–2026.
+
+Nothing fails when any of this happens. The agent just does something else.
+
+So manage context the way code is managed. ctxlock reads the files your agents read, splits them into **units** with a content digest, predicts what each agent will load, and checks every change before it merges:
+
+```mermaid
+flowchart LR
+    A["your repo<br/>AGENTS.md · CLAUDE.md<br/>skills · rules · MCP"] --> B["units<br/>each with a digest"]
+    B --> C["per agent:<br/>what loads, where,<br/>and what gets cut"]
+    C --> L["lint · diff<br/>limits · hidden text · hooks"]
+    C --> E["eval<br/>the agent, run on<br/>base and head"]
+    B --> G["graph<br/>who-uses · impact"]
+    B --> K[("ctxlock.lock<br/>shared units, pinned")]
+    L --> P{"pull request check"}
+    E --> P
+    G --> P
+
+    classDef check fill:#d4f4dd,stroke:#22a06b,color:#0b3d2c
+    classDef lock fill:#dfe6ee,stroke:#7b8a9b,color:#1f2d3a
+    class P check
+    class K lock
+```
+
+A skill or rule your org shares is brought in by `ctxlock sync` and pinned, the way a package manager pins a dependency:
+
+```text
+ctxlock sync
+
+Upstreams:
+  platform  main  a6f8b47
+
+Added:
+  .agents/skills/release  from platform
+  .claude/rules/deps.md   from platform
+
+Filled, so every agent loads it:
+  .claude/skills/release/SKILL.md
+
+Not synced:
+  .agents/skills/release/hooks/pre-release.sh  hooks never sync
+```
+
+When the org changes the rule, `impact` names the repositories that pin it, before the change merges:
+
+```text
+$ ctxlock impact --base HEAD~1 --locks ../payments ../web
+ctxlock impact
+
+Changed:
+  .claude/rules/deps.md  modified
+
+Pinned by other repositories:
+  F:\ctxlock-live\propagation\payments  .claude/rules/deps.md  at sha256:ec19be6a27ff  from platform
+```
+
+And because each synced file is bound to its digest, a quiet hand edit in one repository can't hide:
+
+```text
+must    L16-lock      .claude/rules/deps.md            .claude/rules/deps.md differs from ctxlock.lock (synced from platform at 9f36a0d); change it upstream, or remove it from upstream units
+```
+
+All three are real output, from an org repository and two consumers ([report](docs/dogfood/2026-11-10-propagation.md)).
+
+The closest analogue is not another prompt tool. It is a lockfile, with CI around it.
+
+| Finding | Meaning |
+|---|---|
+| `must` | An agent would read it wrongly or not at all, it hides text from reviewers, or it runs code. A new one fails the check. |
+| `should` | Probably a mistake. Worth fixing; it does not fail the check. |
+| `info` | Worth knowing, nothing to fix. |
+
+A shared unit moves between states on its own, as the org and the repository change it:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Pinned: sync brings it in
+    Pinned --> Behind: the org changes it upstream
+    Behind --> Pinned: the sync pull request is merged
+    Pinned --> Edited: someone edits it here
+    Edited --> Pinned: the edit is reverted
+    Edited --> Yours: dropped from units, kept as written
+```
+
+> [!NOTE]
+> ctxlock never writes new context and never merges it. `sync` and `build --fill-missing` only copy or assemble what people wrote, and never write over a file a person wrote or edited.
+
+---
 
 ## What ctxlock does
 
