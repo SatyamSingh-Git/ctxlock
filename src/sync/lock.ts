@@ -82,3 +82,13 @@ export function serializeLock(lock: Lock): string {
   }));
   return stringify({ lockfile_version: 1, upstreams });
 }
+
+// For lint, which reports a lock it cannot read rather than stopping on it.
+export async function readLock(reader: RepoReader): Promise<{ lock: Lock; error: string | null }> {
+  try {
+    return { lock: await loadLock(reader), error: null };
+  } catch (err) {
+    if (!(err instanceof LockError)) throw err;
+    return { lock: { upstreams: [] }, error: err.message };
+  }
+}

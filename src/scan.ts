@@ -10,6 +10,7 @@ import { type Codeowners, loadCodeowners } from './registry/codeowners.js';
 import { loadRegistry, type Registry } from './registry/registry.js';
 import type { RepoReader } from './repo/reader.js';
 import { type BudgetRow, budgetReport } from './report/budget.js';
+import { readLock } from './sync/lock.js';
 import { discoverUnits } from './units/discover.js';
 
 export interface ScanResult {
@@ -47,7 +48,8 @@ export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Prom
   const contexts = await resolveAll({ reader, units, limits }, registry.harnesses);
   const extra = opts.agnix ? await agnixFindings(reader.root, opts.runAgnix) : [];
   const generated = await loadGenerated(reader);
-  const ctx = { reader, units, registry, codeowners, contexts, limits, today: opts.today ?? localDate(), generated: generated.files, generatedError: generated.error };
+  const lock = await readLock(reader);
+  const ctx = { reader, units, registry, codeowners, contexts, limits, today: opts.today ?? localDate(), generated: generated.files, generatedError: generated.error, lock: lock.lock, lockError: lock.error };
   const findings = await runLint(ctx, [...problems, ...extra]);
   const inventory = (await execConfig.check(ctx)).filter((f) => f.rule === 'L2-exec-config');
   return { root: reader.root, ref: reader.ref, units, registry, contexts, budget: budgetReport(contexts, limits), findings, generated, codeowners, inventory };

@@ -18,7 +18,7 @@ lint:
     - "vendor/**"
 ```
 
-> **Status:** the rules on this page are implemented and tested: L0–L11 and L13–L15. L12, a model-based contradiction check, is planned for later. The `ctxlock lint` command that runs them arrives with the first CLI release.
+> **Status:** the rules on this page are implemented and tested: L0–L11 and L13–L16. L12, a model-based contradiction check, is planned for later. The `ctxlock lint` command that runs them arrives with the first CLI release.
 
 ## What the findings look like
 
@@ -301,7 +301,7 @@ Five or more gives an `info` finding. It is a heuristic until evals can measure 
 
 ---
 
-## L9, L10, L11, L13, L14, L15: context that drifts from the repository and the team
+## L9, L10, L11, L13, L14, L15, L16: context that drifts from the repository and the team
 
 Context is code that nobody runs. When a file is renamed or a script removed, the instruction that names it keeps telling agents to use it. When nobody owns a file, nobody notices. When two agents read different files, they work to different rules.
 
@@ -404,3 +404,19 @@ consumer payments-api lists evals evals/probes/payments.yaml, which holds no pro
 A reference names a unit by its path or its ID, so a renamed or deleted unit leaves its references behind. That is how a pull request that removes a unit is caught still being relied on. A requirement such as `@certified` is met by that tier or a more trusted one, and a unit with no `tier` counts as `reviewed`.
 
 **Fix:** point the reference at the unit's new path, or remove it. For a tier, raise the unit's `tier` once it has been reviewed to that level, or lower the requirement. For `evals`, name a probe file under `evals/probes/`, or a folder of them.
+
+### `L16-lock` (must, should)
+
+Checks each file `ctxlock sync` wrote against `ctxlock.lock`, which records what it wrote and from which upstream commit ([commands.md](commands.md#ctxlock-sync)). An edit to a synced file is lost at the next sync, and it would make this repository quietly differ from every other that syncs the same unit:
+
+```
+must    L16-lock       .agents/skills/release/SKILL.md  .agents/skills/release/SKILL.md is missing; ctxlock.lock has it synced from platform at 730e1f4; run ctxlock sync, or remove it from upstream units
+must    L16-lock       .claude/rules/deps.md            .claude/rules/deps.md differs from ctxlock.lock (synced from platform at 730e1f4); change it upstream, or remove it from upstream units
+should  L16-lock       ctxlock.lock                     ctxlock.lock pins .claude/rules/deps.md from platform, which ctxlock.yaml no longer lists; run ctxlock sync
+```
+
+When `ctxlock.yaml` drops the upstream altogether, the last line is instead `ctxlock.lock pins upstream platform, which ctxlock.yaml no longer declares; run ctxlock sync`.
+
+A file is compared as LF, so a CRLF checkout is no edit. A lock that does not parse is one `must`, with the reason.
+
+**Fix:** make the change in the upstream repository, then sync. To keep a local version, take the unit out of `units:` under its upstream; sync then removes it, and you can add your own. A change to `ctxlock.lock` itself shows in a pull request like any other file, so you can review it with CODEOWNERS.

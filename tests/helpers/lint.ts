@@ -4,6 +4,7 @@ import { resolveAll } from '../../src/harness/resolve.js';
 import type { LintContext } from '../../src/lint/types.js';
 import { loadCodeowners } from '../../src/registry/codeowners.js';
 import { loadRegistry } from '../../src/registry/registry.js';
+import { readLock } from '../../src/sync/lock.js';
 import { discoverUnits } from '../../src/units/discover.js';
 import { memReader } from './mem-reader.js';
 
@@ -16,6 +17,7 @@ export async function lintContext(
   const registry = await loadRegistry(reader);
   const limits = { ...LIMITS, ...registry.limits };
   const generated = await loadGenerated(reader);
+  const lock = await readLock(reader);
   return {
     reader,
     units,
@@ -26,5 +28,7 @@ export async function lintContext(
     today: '2026-11-05',
     generated: generated.files,
     generatedError: generated.error,
+    lock: lock.lock,
+    lockError: lock.error,
   };
 }

@@ -433,6 +433,9 @@ describe('ctxlock sync', { timeout: 120_000 }, () => {
     expect(refused.stdout).toContain('Refused, so nothing was written:\n  .claude/rules/testing.md  edited since the last sync');
     expect(read(dir, '.agents/skills/api/SKILL.md')).toBe(SKILL);
     expect(read(dir, 'ctxlock.lock')).toBe(lock);
+    const lint = await cli('lint', dir);
+    expect(lint.code).toBe(1);
+    expect(lint.stdout).toMatch(/must\s+L16-lock\s+\.claude\/rules\/testing\.md\s+\.claude\/rules\/testing\.md differs from ctxlock\.lock/);
 
     // A file git ignores is still a person's file.
     const ignoring = await consumer(org, undefined, { '.gitignore': '.claude/rules/\n' });
@@ -457,6 +460,10 @@ describe('ctxlock sync', { timeout: 120_000 }, () => {
     const locked = await cli('sync', badLock, '--cache', cache);
     expect(locked.code).toBe(2);
     expect(locked.stderr).toMatch(/^ctxlock\.lock: /);
+    // lint reports the same lock rather than stopping on it.
+    const linted = await cli('lint', badLock);
+    expect(linted.code).toBe(1);
+    expect(linted.stdout).toMatch(/must\s+L16-lock\s+ctxlock\.lock\s+ctxlock\.lock: lockfile_version/);
 
     const badRecord = await consumer(org);
     writeTree(badRecord, { '.ctxlock/generated.json': 'nope' });
