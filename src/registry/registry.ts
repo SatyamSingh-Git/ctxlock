@@ -40,11 +40,20 @@ export interface Consumer {
   maturity: 'experimental' | 'production' | 'deprecated';
 }
 
+// A repository this one takes units from (D69). Units are paths in it, and land at the same paths here.
+export interface Upstream {
+  name: string;
+  repo: string;
+  ref: string;
+  units: string[];
+}
+
 export interface Registry {
   present: boolean;
   harnesses: HarnessId[];
   units: Record<string, UnitMeta>;
   consumers: Consumer[];
+  upstreams: Upstream[];
   limits: Partial<Limits>;
   lint: { severity: Record<string, Severity | 'off'>; ignore: string[] };
   eval: { model: string; runs: number; maxRuns: number; maxMinutes: number };
@@ -109,6 +118,16 @@ const schema = z.strictObject({
       }),
     )
     .default({}),
+  upstream: z
+    .record(
+      z.string(),
+      z.strictObject({
+        repo: z.string().min(1),
+        ref: z.string().min(1).default('main'),
+        units: z.array(z.string().transform(repoPath)).default([]),
+      }),
+    )
+    .default({}),
   lint: z
     .strictObject({
       severity: z.record(z.string(), z.enum(['must', 'should', 'info', 'off'])).default({}),
@@ -135,7 +154,7 @@ export function describeIssue(issue: z.core.$ZodIssue): string {
 
 export async function loadRegistry(reader: RepoReader): Promise<Registry> {
   if (!(await reader.exists(FILE))) {
-    return { present: false, harnesses: ['claude-code', 'codex'], units: {}, consumers: [], limits: {}, lint: { severity: {}, ignore: [] }, eval: EVAL_DEFAULTS };
+    return { present: false, harnesses: ['claude-code', 'codex'], units: {}, consumers: [], upstreams: [], limits: {}, lint: { severity: {}, ignore: [] }, eval: EVAL_DEFAULTS };
   }
 
   let raw: unknown;
@@ -147,7 +166,7 @@ export async function loadRegistry(reader: RepoReader): Promise<Registry> {
   const result = schema.safeParse(raw ?? {});
   if (!result.success) throw new RegistryError(`${FILE}: ${result.error.issues.map(describeIssue).join('; ')}`);
 
-  const { harnesses, limits, units, consumers, lint, eval: settings } = result.data;
+  const { harnesses, limits, units, consumers, upstream, lint, eval: settings } = result.data;
   return {
     present: true,
     harnesses,
@@ -178,6 +197,9 @@ export async function loadRegistry(reader: RepoReader): Promise<Registry> {
         evals: c.evals,
         maturity: c.maturity,
       }))
+      .sort((a, b) => (a.name < b.name ? -1 : 1)),
+    upstreams: Object.entries(upstream)
+      .map(([name, u]): Upstream => ({ name, ...u }))
       .sort((a, b) => (a.name < b.name ? -1 : 1)),
     lint,
     eval: {

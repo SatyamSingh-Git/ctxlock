@@ -17,6 +17,7 @@ describe('loadRegistry', () => {
       harnesses: ['claude-code', 'codex'],
       units: {},
       consumers: [],
+      upstreams: [],
       limits: {},
       lint: { severity: {}, ignore: [] },
       eval: { model: 'sonnet', runs: 3, maxRuns: 24, maxMinutes: 20 },
@@ -100,6 +101,23 @@ units:
 
   it('invalid YAML is a RegistryError, not a raw parser error', async () => {
     expect(await errorOf('version: 1\nunits: [unclosed\n')).toBeInstanceOf(RegistryError);
+  });
+});
+
+describe('loadRegistry: upstream', () => {
+  it('reads upstreams, sorted by name, with ref defaulting to main and unit paths as people type them', async () => {
+    const registry = await load(
+      'version: 1\nupstream:\n  platform:\n    repo: https://github.com/acme/context.git\n    ref: v2\n    units: [./.agents/skills/api/, .claude\\rules\\testing.md]\n  base:\n    repo: ../org\n    units: [.claude/rules/a.md]\n',
+    );
+    expect(registry.upstreams).toEqual([
+      { name: 'base', repo: '../org', ref: 'main', units: ['.claude/rules/a.md'] },
+      { name: 'platform', repo: 'https://github.com/acme/context.git', ref: 'v2', units: ['.agents/skills/api', '.claude/rules/testing.md'] },
+    ]);
+  });
+
+  it('names the key of an unknown upstream field, and a missing repo', async () => {
+    expect((await errorOf('version: 1\nupstream:\n  platform:\n    repo: x\n    units: []\n    branch: main\n')).message).toContain('upstream.platform.branch: unknown key');
+    expect((await errorOf('version: 1\nupstream:\n  platform:\n    units: []\n')).message).toContain('upstream.platform.repo');
   });
 });
 
