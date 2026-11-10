@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { applyFill } from './build/apply.js';
@@ -9,6 +9,7 @@ import { findDrift } from './build/drift.js';
 import { GENERATED_FILE, generatedStatus } from './build/generated.js';
 import { BuildError, suggestIndex } from './build/index-suggest.js';
 import { eventsHome, readEvents } from './collect/events.js';
+import { buildReport } from './collect/report.js';
 import { joinSessions } from './collect/sessions.js';
 import { buildGraph, impactOf, pinnedBy, resolveRef, whoUses } from './graph/graph.js';
 import { renderImpact, renderWhoUses } from './report/graph.js';
@@ -278,6 +279,25 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const root = resolve(dir ?? '.');
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
       io.stdout(renderLoads(sessionsAt(root, await scanRepo(fsReader(root))), opts.format));
+    });
+
+  program
+    .command('report [dir]')
+    .description("write what Claude Code loaded in this repository's recorded sessions as JSON to share with your org; it holds no session ID, local path or error message")
+    .option('--out <file>', 'the file to write (default: stdout)')
+    .action(async (dir: string | undefined, opts: { out?: string }) => {
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      const scan = await scanRepo(fsReader(root));
+      const top = await gitTopLevel(root);
+      const origin = top ? await gitOrigin(top) : null;
+      const report = buildReport(sessionsAt(root, scan), scan, origin ?? basename(real(top ?? root)));
+      const text = `${JSON.stringify(report, null, 2)}\n`;
+      if (opts.out === undefined) io.stdout(text);
+      else {
+        writeFileSync(resolve(opts.out), text);
+        io.stdout(`ctxlock report: wrote ${opts.out}\n`);
+      }
     });
 
   program

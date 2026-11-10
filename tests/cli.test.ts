@@ -604,6 +604,29 @@ These sessions match no consumer in ctxlock.yaml. Declare one so impact can name
   });
 });
 
+describe('ctxlock report', () => {
+  const event = (cwd: string) =>
+    `${JSON.stringify({ v: 1, ts: '2026-11-08T10:00:00.000Z', harness: 'claude-code', session: 's1', cwd, event: 'load', file: join(cwd, 'CLAUDE.md'), sha256: null, reason: 'session_start' })}\n`;
+
+  it('names the repository by its origin, else by its folder, and --out writes the file', async () => {
+    const { dir } = await gitRepo([{ 'CLAUDE.md': 'Use pnpm.\n' }]);
+    const home = tempDir();
+    writeTree(home, { 'events/2026-11.jsonl': event(realpathSync.native(dir)) });
+    vi.stubEnv('CTXLOCK_HOME', home);
+
+    const bare = await cli('report', dir);
+    expect(bare.code).toBe(0);
+    expect(JSON.parse(bare.stdout)).toMatchObject({ version: 1, repo: realpathSync.native(dir).split(sep).at(-1), sessions: 1 });
+
+    git(dir, 'remote', 'add', 'origin', 'https://github.com/acme/payments.git');
+    const out = join(tempDir(), 'report.json');
+    const written = await cli('report', dir, '--out', out);
+    expect([written.code, written.stdout]).toEqual([0, `ctxlock report: wrote ${out}\n`]);
+    const report = JSON.parse(readFileSync(out, 'utf8'));
+    expect(report).toMatchObject({ repo: 'https://github.com/acme/payments.git', sessions: 1, units: [{ id: 'instructions/CLAUDE.md', sessions: 1 }] });
+  });
+});
+
 describe('ctxlock probe draft', { timeout: 120_000 }, () => {
   const draftReply = "```yaml\nprobes:\n  - id: deps-use-pnpm\n    prompt: Add zod as a dependency.\n    expect:\n      command: 'pnpm add'\n```\n";
 

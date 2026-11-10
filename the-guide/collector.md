@@ -51,10 +51,45 @@ Environment variables matter here: a hook inherits the environment of whatever s
 
 ## Where the events live, and how to remove them
 
-- **The events** live in `~/.ctxlock/events`. If `CTXLOCK_HOME` is set, they go in `$CTXLOCK_HOME/events` instead. They are never written into a repository, and they never leave your machine. Delete the folder to forget them.
+- **The events** live in `~/.ctxlock/events`. If `CTXLOCK_HOME` is set, they go in `$CTXLOCK_HOME/events` instead. They are never written into a repository, and they never leave your machine unless you send a [report](#sharing-what-was-loaded). Delete the folder to forget them.
 - **To pause the collector:** `claude plugin disable ctxlock@ctxlock`.
 - **To remove it:** `claude plugin uninstall ctxlock@ctxlock`.
 - **ctxlock's own eval runs are not recorded** when the plugin is installed for your user, as the commands above do. Eval runs start Claude Code with `--setting-sources project`, which loads no plugin installed for the user.
+
+## Sharing what was loaded
+
+The events stay on your machine. To tell the team that owns your shared context what your sessions loaded, `ctxlock report` writes `loads`'s counts as JSON for you to send:
+
+```
+ctxlock report [dir] [--out <file>]
+```
+
+This is its output for ctxlock's own repository:
+
+```json
+{
+  "version": 1,
+  "repo": "https://github.com/SatyamSingh-Git/ctxlock.git",
+  "harness": "claude-code",
+  "from": "2026-11-10T09:56:52.464Z",
+  "to": "2026-11-10T10:12:28.677Z",
+  "sessions": 3,
+  "units": [],
+  "collectorErrors": 0
+}
+```
+
+**What it holds:**
+- **`repo`:** the repository's `origin` URL, without any user name or token in it; with no `origin`, the folder's name.
+- **`units`:** each unit sessions loaded, with its ID, its digest now, how many sessions loaded it, when last, and whether the load was predicted.
+- **`collectorErrors`:** how many errors the collector recorded, from every repository.
+
+**What it never holds:**
+- session IDs;
+- paths outside the repository;
+- error messages, which can name a local path.
+
+Nothing reads these reports on the org's side yet.
 
 ## What it can't see
 

@@ -1,4 +1,4 @@
-# Commands: `scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`, `loads`, `sync`
+# Commands: `scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`, `loads`, `report`, `sync`
 
 ctxlock reads your repository's agent context and reports on it. The checks never change a file in the repository. Three commands write files when you ask them to: `ctxlock build --fill-missing`, `ctxlock probe draft` and `ctxlock sync`. Nothing leaves your machine except through `eval` and `probe draft`, which run Claude Code; `sync` only fetches.
 
@@ -280,6 +280,14 @@ These sessions match no consumer in ctxlock.yaml. Declare one so impact can name
 - Files outside the repository, such as your own `~/.claude/CLAUDE.md`, are never listed.
 - The JSON has counts per unit and no session IDs.
 
+## `ctxlock report`
+
+Writes what `loads` counts as JSON, to share with the team that owns your shared context. It holds no session ID, no path outside the repository and no error message. [The collector](collector.md#sharing-what-was-loaded) shows it.
+
+```
+ctxlock report [dir] [--out <file>]
+```
+
 ## `ctxlock sync`
 
 Brings shared skills and rules in from an upstream repository, such as your org's context repository, and pins what it brought in `ctxlock.lock`. You name the upstream and the units you want in `ctxlock.yaml`:
@@ -341,7 +349,7 @@ With `--dry-run` it shows what would change, and writes nothing. In markdown, th
 
 | Code | Meaning |
 |---|---|
-| 0 | Done, including every `build`, `who-uses`, `impact` and `loads`. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
+| 0 | Done, including every `build`, `who-uses`, `impact`, `loads` and `report`. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
 | 1 | `lint`: at least one `must` finding. `sync`: a file it refused, so it wrote nothing. `diff`: a new `must` finding or an execution-affecting change. `eval`: only with `--fail-on-regression`, a gated regression |
 | 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`, `eval`, `impact` and `sync`), a `who-uses` unit that is no unit, a `loads` folder that does not exist, a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` or `sync` cannot read, an upstream that cannot be fetched or lacks a unit or ref, an invalid `ctxlock.lock`, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
 
