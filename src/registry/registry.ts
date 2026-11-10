@@ -46,6 +46,8 @@ export interface Upstream {
   repo: string;
   ref: string;
   units: string[];
+  // Units this repository takes though their frontmatter runs hooks or grants tools (§7).
+  allowExec: string[];
 }
 
 export interface Registry {
@@ -125,6 +127,7 @@ const schema = z.strictObject({
         repo: z.string().min(1),
         ref: z.string().min(1).default('main'),
         units: z.array(z.string().transform(repoPath)).default([]),
+        'allow-exec': z.array(z.string().transform(repoPath)).default([]),
       }),
     )
     .default({}),
@@ -199,7 +202,7 @@ export async function loadRegistry(reader: RepoReader): Promise<Registry> {
       }))
       .sort((a, b) => (a.name < b.name ? -1 : 1)),
     upstreams: Object.entries(upstream)
-      .map(([name, u]): Upstream => ({ name, ...u }))
+      .map(([name, { 'allow-exec': allowExec, ...u }]): Upstream => ({ name, ...u, allowExec }))
       .sort((a, b) => (a.name < b.name ? -1 : 1)),
     lint,
     eval: {

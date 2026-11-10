@@ -7,7 +7,7 @@ import { cleanup, git, gitRepo, tempDir, writeTree } from '../helpers/repo.js';
 
 afterAll(cleanup);
 
-const up = (repo: string, ref = 'main') => ({ name: 'platform', repo, ref, units: [] });
+const up = (repo: string, ref = 'main') => ({ name: 'platform', repo, ref, units: [], allowExec: [] });
 const text = async (reader: RepoReader, path: string) => (await reader.readFile(path)).toString('utf8');
 const failure = (p: Promise<unknown>) => p.then(
   () => {

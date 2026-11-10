@@ -107,11 +107,11 @@ units:
 describe('loadRegistry: upstream', () => {
   it('reads upstreams, sorted by name, with ref defaulting to main and unit paths as people type them', async () => {
     const registry = await load(
-      'version: 1\nupstream:\n  platform:\n    repo: https://github.com/acme/context.git\n    ref: v2\n    units: [./.agents/skills/api/, .claude\\rules\\testing.md]\n  base:\n    repo: ../org\n    units: [.claude/rules/a.md]\n',
+      'version: 1\nupstream:\n  platform:\n    repo: https://github.com/acme/context.git\n    ref: v2\n    units: [./.agents/skills/api/, .claude\\rules\\testing.md]\n    allow-exec: [./.agents/skills/api/]\n  base:\n    repo: ../org\n    units: [.claude/rules/a.md]\n',
     );
     expect(registry.upstreams).toEqual([
-      { name: 'base', repo: '../org', ref: 'main', units: ['.claude/rules/a.md'] },
-      { name: 'platform', repo: 'https://github.com/acme/context.git', ref: 'v2', units: ['.agents/skills/api', '.claude/rules/testing.md'] },
+      { name: 'base', repo: '../org', ref: 'main', units: ['.claude/rules/a.md'], allowExec: [] },
+      { name: 'platform', repo: 'https://github.com/acme/context.git', ref: 'v2', units: ['.agents/skills/api', '.claude/rules/testing.md'], allowExec: ['.agents/skills/api'] },
     ]);
   });
 

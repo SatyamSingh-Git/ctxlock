@@ -5,7 +5,7 @@ import { loadRegistry } from '../../src/registry/registry.js';
 import { scanRepo } from '../../src/scan.js';
 import { type Lock, serializeLock } from '../../src/sync/lock.js';
 import { UpstreamError } from '../../src/sync/fetch.js';
-import { applySync, planSync } from '../../src/sync/sync.js';
+import { applySync, EXEC_REASON, planSync } from '../../src/sync/sync.js';
 import { lfDigest } from '../../src/units/digest.js';
 import { memReader } from '../helpers/mem-reader.js';
 import { cleanup, tempDir } from '../helpers/repo.js';
@@ -204,6 +204,20 @@ describe('planSync', () => {
     ]);
   });
 
+  it('refuses a skill whose frontmatter runs hooks or grants tools, unless allow-exec names it, and says which it took', async () => {
+    const hooked = '---\nname: api\ndescription: Use for API work.\nallowed-tools: Bash(git push:*)\n---\nValidate with zod.\n';
+    const org = { ...ORG, '.agents/skills/api/SKILL.md': hooked };
+
+    const refused = await sync(org, C1, { 'ctxlock.yaml': yaml() });
+    expect(refused.refused).toEqual([{ path: '.agents/skills/api', reason: EXEC_REASON }]);
+    expect(refused.allowedExec).toEqual([]);
+
+    const allowed = await sync(org, C1, { 'ctxlock.yaml': `${yaml()}    allow-exec: [.agents/skills/api]\n` });
+    expect(allowed.refused).toEqual([]);
+    expect(allowed.writes[0]!.bytes.toString('utf8')).toBe(hooked);
+    expect(allowed.allowedExec).toEqual(['.agents/skills/api']);
+  });
+
   it('stops on an upstream file name that could reach outside the skill', async () => {
     for (const name of ['..\\..\\settings.json', 'sub/../../../../outside.txt', 'notes.md:stream', `bad${String.fromCodePoint(7)}.md`]) {
       const path = `.agents/skills/api/${name}`;
@@ -229,7 +243,7 @@ describe('applySync', () => {
     const top = join(tempDir(), 'repo');
     mkdirSync(top);
     for (const path of ['../outside.txt', 'a/../../outside.txt']) {
-      const plan = { lock: { upstreams: [] }, moved: [], writes: [{ path, bytes: Buffer.from('x') }], removes: [], changes: [], refused: [], released: [], skipped: [] };
+      const plan = { lock: { upstreams: [] }, moved: [], writes: [{ path, bytes: Buffer.from('x') }], removes: [], changes: [], refused: [], released: [], allowedExec: [], skipped: [] };
       await expect(applySync(top, plan)).rejects.toThrow(`${path} is outside the repository`);
     }
     expect(existsSync(join(top, '..', 'outside.txt'))).toBe(false);

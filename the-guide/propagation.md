@@ -33,6 +33,7 @@ upstream:
 - **`repo`** is any git URL, or a path. A path starting `./` or `../` is beside this repository.
 - **`ref`** is a branch, a tag or a commit. It defaults to `main`.
 - **`units`** lists the units you take, as paths in the upstream. Each lands at the same path here.
+- **`allow-exec`** lists the units you take though their frontmatter runs hooks or grants tools ([below](#what-never-syncs)).
 
 Then run [`ctxlock sync`](commands.md#ctxlock-sync), and commit what it wrote together with `ctxlock.lock`.
 
@@ -40,6 +41,8 @@ Then run [`ctxlock sync`](commands.md#ctxlock-sync), and commit what it wrote to
 
 - **Instructions files** (`AGENTS.md`, `CLAUDE.md`) are each repository's own. Naming one in `units:` stops sync with exit 2.
 - **Config** never syncs: settings, hooks and MCP registrations. Inside a skill, sync leaves out any `hooks/` folder, `settings.json`, `settings.local.json` and `.mcp.json`, and lists each one it left out.
+- **A skill whose frontmatter runs hooks or grants tools** (`hooks:` or `allowed-tools:`) is refused, since Claude Code runs those without asking while the skill is active. To take one, name it under `allow-exec:` for its upstream, after reading what it runs. Sync then lists it in every report, so the pull request says so even when no check runs on it.
+- **A file inside a skill that is a link** to something outside the skill is left out, and listed.
 - **A file sync didn't write is never overwritten,** whether git tracks it, ignores it, or doesn't know it.
 - **A synced file edited here is never overwritten.** Sync refuses, writes nothing, and exits 1. Nor is it removed: when its unit leaves `units:`, or its skill no longer has it, sync leaves it as yours and drops it from the lock.
 

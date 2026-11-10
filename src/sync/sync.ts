@@ -29,6 +29,8 @@ export interface SyncPlan {
   // Files sync wrote and someone edited since, whose unit or skill file sync no longer takes: they
   // stay, as the person's, and leave the lock.
   released: string[];
+  // Units taken though they run hooks or grant tools, as allow-exec permits.
+  allowedExec: string[];
   // Files inside an upstream skill that configure the agent rather than instruct it (§7).
   skipped: Array<{ path: string; reason: string }>;
 }
@@ -47,6 +49,8 @@ const cp = String.fromCodePoint;
 const ODD = new RegExp(`[\\\\:${cp(0)}-${cp(31)}${cp(127)}]`);
 const unsafe = (path: string) => ODD.test(path) || path.split('/').some((s) => s === '' || s === '.' || s === '..');
 
+export const EXEC_REASON = 'its frontmatter runs hooks or grants tools; name it under allow-exec to take it';
+
 const byPath = <T extends { path: string }>(a: T, b: T) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 
 // What syncing every upstream the registry declares would write, remove and pin. A unit lands at its
@@ -62,7 +66,7 @@ export async function planSync(
   // Every file an earlier sync wrote, with what it wrote.
   const written = new Map(lock.upstreams.flatMap((u) => u.units.flatMap((x) => Object.entries(x.files))));
   const now = async (path: string) => ((await local.exists(path)) ? lfDigest(await local.readFile(path)) : null);
-  const plan: SyncPlan = { lock: { upstreams: [] }, moved: [], writes: [], removes: [], changes: [], refused: [], released: [], skipped: [] };
+  const plan: SyncPlan = { lock: { upstreams: [] }, moved: [], writes: [], removes: [], changes: [], refused: [], released: [], allowedExec: [], skipped: [] };
   const kept = new Set<string>();
 
   for (const u of registry.upstreams) {
@@ -75,6 +79,11 @@ export async function planSync(
       if (!unit) throw new UpstreamError(`upstream ${u.name}: ${path} is no unit at ${commit.slice(0, 7)}`);
       if (unit.kind !== 'skill' && unit.kind !== 'rule') throw new UpstreamError(`upstream ${u.name}: ${path} is ${unit.kind}; only skills and rules sync`);
 
+      // Claude Code runs a skill's hooks and grants its allowed-tools without asking (§7).
+      if (scan.inventory.some((f) => f.unitId === unit.id)) {
+        if (u.allowExec.includes(unit.path)) plan.allowedExec.push(unit.path);
+        else plan.refused.push({ path: unit.path, reason: EXEC_REASON });
+      }
       const files: Record<string, string> = {};
       for (const f of unit.files) {
         if (unsafe(f.path)) throw new UpstreamError(`upstream ${u.name}: ${unit.path} holds a file sync will not write: ${JSON.stringify(f.path)}`);
@@ -132,6 +141,7 @@ export async function planSync(
   plan.writes.sort(byPath);
   plan.removes.sort();
   plan.released.sort();
+  plan.allowedExec.sort();
   plan.refused.sort(byPath);
   plan.skipped.sort(byPath);
   plan.changes.sort((a, b) => (a.upstream < b.upstream ? -1 : a.upstream > b.upstream ? 1 : a.path < b.path ? -1 : a.path > b.path ? 1 : 0));

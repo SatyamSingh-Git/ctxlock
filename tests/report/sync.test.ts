@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderSync } from '../../src/report/sync.js';
-import type { SyncPlan } from '../../src/sync/sync.js';
+import { EXEC_REASON, type SyncPlan } from '../../src/sync/sync.js';
 
 const D1 = `sha256:${'a'.repeat(64)}`;
 const D2 = `sha256:${'b'.repeat(64)}`;
@@ -17,6 +17,7 @@ const plan: SyncPlan = {
   ],
   refused: [],
   released: [],
+  allowedExec: [],
   skipped: [{ path: '.agents/skills/api/hooks/pre.sh', reason: 'hooks never sync' }],
 };
 
@@ -62,6 +63,17 @@ Not synced:
     expect(md).toContain('| `.agents/skills/api` | `platform` | added | `sha256:aaaaaaaaaaaa` |');
     expect(md).toContain('- `.agents/skills/api/hooks/pre.sh`: hooks never sync');
     expect(md).not.toContain('same.md');
+  });
+
+  it('names each unit taken though it runs hooks or grants tools, and gives the edit advice only for an edited file', () => {
+    const exec: SyncPlan = { ...plan, allowedExec: ['.agents/skills/api'] };
+    expect(renderSync(exec, 'text', true)).toContain('\nRuns hooks or grants tools, as allow-exec permits:\n  .agents/skills/api\n');
+    expect(renderSync(exec, 'markdown', true)).toContain('\n#### Runs hooks or grants tools, as allow-exec permits\n\n- `.agents/skills/api`\n');
+
+    const refused: SyncPlan = { ...plan, refused: [{ path: '.agents/skills/api', reason: EXEC_REASON }] };
+    expect(renderSync(refused, 'text', false)).toContain(`Refused, so nothing was written:\n  .agents/skills/api  ${EXEC_REASON}\n`);
+    expect(renderSync(refused, 'text', false)).not.toContain('Make such a change upstream');
+    expect(renderSync(refused, 'markdown', false)).not.toContain('Make such a change upstream');
   });
 
   it("lists the edited files sync leaves as the person's", () => {
