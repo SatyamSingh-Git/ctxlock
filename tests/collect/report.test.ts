@@ -55,4 +55,12 @@ describe('buildReport', () => {
     expect(r.repo).toBe('https://github.com/acme/payments.git');
     for (const local of ['session-id', 'secret-folder', 'cannot read', 'token', 'user']) expect(text).not.toContain(local);
   });
+
+  it('names a repository whose origin is a local path by its folder, and drops a query from a URL', async () => {
+    for (const origin of ['/home/satyam/src/acme-web', 'C:\\Users\\satyam\\src\\acme-web', 'file:///home/satyam/src/acme-web/', '../acme-web']) {
+      expect((await report(origin)).report.repo).toBe('acme-web');
+    }
+    expect((await report('https://github.com/acme/web.git?access_token=abc#x')).report.repo).toBe('https://github.com/acme/web.git');
+    expect((await report('git@github.com:acme/web.git')).report.repo).toBe('git@github.com:acme/web.git');
+  });
 });

@@ -14,21 +14,30 @@ export interface Report {
   collectorErrors: number;
 }
 
-// An origin URL can carry a token, as https://user:token@host/org/repo does.
-function withoutCredentials(repo: string): string {
-  if (!URL.canParse(repo)) return repo;
-  const url = new URL(repo);
-  if (url.username === '' && url.password === '') return repo;
-  url.username = '';
-  url.password = '';
-  return url.href;
+const NETWORK = new Set(['http:', 'https:', 'ssh:', 'git:']);
+// git's scp-like form, as in git@github.com:acme/web.git.
+const SCP = /^[\w.-]+@[\w.-]+:/;
+
+// What the report may say of the repository: a network URL without the user, password, query or
+// fragment it can carry a token in; for a local origin, only the folder's name.
+function shareable(repo: string): string {
+  if (SCP.test(repo)) return repo;
+  if (URL.canParse(repo) && NETWORK.has(new URL(repo).protocol)) {
+    const url = new URL(repo);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.href;
+  }
+  return repo.split(/[\\/]/).filter(Boolean).at(-1) ?? repo;
 }
 
 export function buildReport(s: Sessions, scan: ScanResult, repo: string): Report {
   const digests = new Map(scan.units.map((u) => [u.id, u.digest]));
   return {
     version: 1,
-    repo: withoutCredentials(repo),
+    repo: shareable(repo),
     harness: 'claude-code',
     from: s.first,
     to: s.last,

@@ -80,7 +80,7 @@ This is its output for ctxlock's own repository:
 ```
 
 **What it holds:**
-- **`repo`:** the repository's `origin` URL, without any user name or token in it; with no `origin`, the folder's name.
+- **`repo`:** the repository's `origin` URL, without any user name, password, query or fragment, where a token can hide; with no `origin`, or one that is a local path, the folder's name.
 - **`units`:** each unit sessions loaded, with its ID, its digest now, how many sessions loaded it, when last, and whether the load was predicted.
 - **`collectorErrors`:** how many errors the collector recorded, from every repository.
 
