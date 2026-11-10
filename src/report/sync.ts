@@ -1,0 +1,51 @@
+import type { SyncChange, SyncPlan } from '../sync/sync.js';
+import { block } from './graph.js';
+import { cell, code } from './markdown.js';
+
+const ADVICE = 'Make such a change upstream and move the file aside, or take its unit out of upstream units in ctxlock.yaml.';
+const short = (digest: string) => digest.slice(0, 'sha256:'.length + 12);
+const commits = (from: string | null, to: string) => (from === null || from === to ? [to.slice(0, 7)] : [from.slice(0, 7), to.slice(0, 7)]);
+const digests = (c: SyncChange) => (c.change === 'updated' ? [short(c.from!), short(c.to!)] : [short((c.to ?? c.from)!)]);
+
+// What sync wrote, or would write; `applied` is false for a dry run or a refused sync. `filled` is what
+// build's fill wrote after it, so a synced skill reaches every agent.
+export function renderSync(plan: SyncPlan, format: 'text' | 'json' | 'markdown', applied: boolean, filled: string[] = []): string {
+  if (format === 'json') return `${JSON.stringify({ ...plan, writes: plan.writes.map((w) => w.path), applied, filled }, null, 2)}\n`;
+  const changed = plan.changes.filter((c) => c.change !== 'unchanged');
+
+  if (format === 'markdown') {
+    const lines = ['### ctxlock · sync', '', '| Upstream | Ref | Commit |', '|---|---|---|'];
+    for (const m of plan.moved) lines.push(`| ${cell(code(m.upstream))} | ${cell(code(m.ref))} | ${commits(m.from, m.to).map(code).join(' → ')} |`);
+    lines.push('', '#### Changes', '');
+    if (changed.length === 0) lines.push('Nothing changed.');
+    else {
+      lines.push(
+        '| Unit | Upstream | Change | Digest |',
+        '|---|---|---|---|',
+        ...changed.map((c) => `| ${cell(code(c.path))} | ${cell(code(c.upstream))} | ${c.change} | ${digests(c).map(code).join(' → ')} |`),
+      );
+    }
+    if (filled.length) lines.push('', '#### Filled, so every agent loads it', '', ...filled.map((f) => `- ${code(f)}`));
+    if (plan.skipped.length) lines.push('', '#### Not synced', '', ...plan.skipped.map((s) => `- ${code(s.path)}: ${s.reason}`));
+    if (plan.refused.length) lines.push('', '#### Refused, so nothing was written', '', ...plan.refused.map((r) => `- ${code(r.path)}: ${r.reason}`), '', ADVICE);
+    return `${lines.join('\n')}\n`;
+  }
+
+  const of = (change: SyncChange['change']) => changed.filter((c) => c.change === change);
+  const lines = [
+    'ctxlock sync',
+    ...block('Upstreams', plan.moved.map((m) => [m.upstream, m.ref, commits(m.from, m.to).join(' → ')])),
+    ...(changed.length === 0
+      ? ['', 'Nothing changed.']
+      : [
+          ...block('Added', of('added').map((c) => [c.path, `from ${c.upstream}`])),
+          ...block('Updated', of('updated').map((c) => [c.path, `from ${c.upstream}`, digests(c).join(' → ')])),
+          ...block('Removed', of('removed').map((c) => [c.path, `from ${c.upstream}`])),
+        ]),
+    ...block('Filled, so every agent loads it', filled.map((f) => [f])),
+    ...block('Not synced', plan.skipped.map((s) => [s.path, s.reason])),
+    ...(plan.refused.length ? [...block('Refused, so nothing was written', plan.refused.map((r) => [r.path, r.reason])), '', ADVICE] : []),
+    ...(!applied && plan.refused.length === 0 ? ['', 'A dry run: nothing was written.'] : []),
+  ];
+  return `${lines.join('\n')}\n`;
+}

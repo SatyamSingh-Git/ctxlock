@@ -1,6 +1,6 @@
-# Commands: `scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`, `loads`
+# Commands: `scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`, `loads`, `sync`
 
-ctxlock reads your repository's agent context and reports on it. The checks never change a file in the repository. Two commands write new files when you ask them to: `ctxlock build --fill-missing` and `ctxlock probe draft`. Nothing leaves your machine except through `eval` and `probe draft`, which run Claude Code.
+ctxlock reads your repository's agent context and reports on it. The checks never change a file in the repository. Three commands write files when you ask them to: `ctxlock build --fill-missing`, `ctxlock probe draft` and `ctxlock sync`. Nothing leaves your machine except through `eval` and `probe draft`, which run Claude Code; `sync` only fetches.
 
 > **Status:** these commands are implemented and tested. ctxlock is not on npm yet. To run it today, build it from source:
 >
@@ -271,6 +271,61 @@ These sessions match no consumer in ctxlock.yaml. Declare one so impact can name
 - Files outside the repository, such as your own `~/.claude/CLAUDE.md`, are never listed.
 - The JSON has counts per unit and no session IDs.
 
+## `ctxlock sync`
+
+Brings shared skills and rules in from an upstream repository, such as your org's context repository, and pins what it brought in `ctxlock.lock`. You name the upstream and the units you want in `ctxlock.yaml`:
+
+```yaml
+version: 1
+upstream:
+  platform:
+    repo: ../org-context        # a URL, or a path; one starting ./ or ../ is beside this repository
+    ref: main                   # a branch, a tag or a commit (default: main)
+    units: [.agents/skills/release, .claude/rules/deps.md]
+```
+
+```
+ctxlock sync [dir] [--dry-run] [--cache <dir>] [--format text|json|markdown]
+```
+
+```
+ctxlock sync
+
+Upstreams:
+  platform  main  730e1f4
+
+Added:
+  .agents/skills/release  from platform
+  .claude/rules/deps.md   from platform
+
+Filled, so every agent loads it:
+  .claude/skills/release/SKILL.md
+
+Not synced:
+  .agents/skills/release/hooks/pre.sh  hooks never sync
+```
+
+**What it does:**
+- Each unit lands at the path it has upstream. Only skills and rules sync. A path that is no unit upstream, or names an instructions file or config, stops sync with exit 2.
+- Inside a skill, hooks, `settings.json`, `settings.local.json` and `.mcp.json` never sync, since they run commands or configure the agent rather than instruct it. Sync lists each one it left out.
+- `ctxlock.lock` records each upstream's commit and, for each unit, its digest, its tier upstream, and a digest of each file sync wrote. Sync rewrites it only when that changes.
+- After writing, it fills what it brought in for the other agents, as `build --fill-missing` would. Other gaps stay for `build` to report.
+- A unit you take out of `units:`, or a file an upstream skill no longer has, is removed: exactly the files the lock says sync wrote.
+- Upstream clones are kept in ctxlock's cache folder, as `eval`'s results are. No hook runs in them.
+
+**What it refuses.** Sync never writes over a file it did not write, ignored by git or not, nor over a file it wrote that has been edited since. It never removes an edited one either. If any file is refused, it writes nothing and exits 1:
+
+```
+Refused, so nothing was written:
+  .claude/rules/deps.md  edited since the last sync
+
+Make such a change upstream and move the file aside, or take its unit out of upstream units in ctxlock.yaml.
+```
+
+A copy whose line endings git changed on checkout is not an edit.
+
+With `--dry-run` it shows what would change, and writes nothing. In markdown, the output is a pull request body, with every name and commit shown as code.
+
 ---
 
 ## Exit codes
@@ -278,7 +333,7 @@ These sessions match no consumer in ctxlock.yaml. Declare one so impact can name
 | Code | Meaning |
 |---|---|
 | 0 | Done, including every `build`, `who-uses`, `impact` and `loads`. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
-| 1 | `lint`: at least one `must` finding. `diff`: a new `must` finding or an execution-affecting change. `eval`: only with `--fail-on-regression`, a gated regression |
-| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`, `eval` and `impact`), a `who-uses` unit that is no unit, a `loads` folder that does not exist, a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` cannot read, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
+| 1 | `lint`: at least one `must` finding. `sync`: a file it refused, so it wrote nothing. `diff`: a new `must` finding or an execution-affecting change. `eval`: only with `--fail-on-regression`, a gated regression |
+| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`, `eval`, `impact` and `sync`), a `who-uses` unit that is no unit, a `loads` folder that does not exist, a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` or `sync` cannot read, an upstream that cannot be fetched or lacks a unit or ref, an invalid `ctxlock.lock`, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
 
 `scan` and `budget` exit 0 whatever they find, so you can run them anywhere without failing a build.

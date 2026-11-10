@@ -7,7 +7,7 @@ import type { FillPlan } from './plan.js';
 
 // Whether a part of the path, from the repository's top down, is a symlink or a Windows junction. The
 // plan saw only what git lists, and git lists no link it ignores.
-function linked(top: string, path: string): boolean {
+export function linked(top: string, path: string): boolean {
   let at = top;
   for (const part of path.split('/')) {
     at = join(at, part);

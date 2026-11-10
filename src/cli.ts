@@ -20,14 +20,18 @@ import { ClaudeNotFound } from './eval/claude.js';
 import { DraftError, draftProbes } from './eval/draft.js';
 import { EvalError, runEval } from './eval/eval.js';
 import { ProbeError } from './eval/probes.js';
-import { loadRegistry, type Registry, RegistryError } from './registry/registry.js';
+import { loadRegistry, type Registry, RegistryError, type Upstream } from './registry/registry.js';
 import { gitIgnored } from './repo/gitignore.js';
 import { fsReader, gitReader, gitTopLevel, RefNotFound } from './repo/reader.js';
 import { renderBuild } from './report/build.js';
 import { renderEval } from './report/eval.js';
 import { renderDiffMarkdown, renderErrorMarkdown } from './report/markdown.js';
 import { renderDiff, renderScan } from './report/render.js';
+import { renderSync } from './report/sync.js';
 import { type ScanResult, scanRepo } from './scan.js';
+import { UpstreamError, fetchUpstream } from './sync/fetch.js';
+import { LockError, loadLock } from './sync/lock.js';
+import { applySync, planSync } from './sync/sync.js';
 
 interface Io {
   stdout: (s: string) => void;
@@ -186,6 +190,44 @@ export async function main(argv: string[], io: Io): Promise<number> {
     });
 
   program
+    .command('sync [dir]')
+    .description("bring in the skills and rules ctxlock.yaml names from each upstream, pinned in ctxlock.lock; exits 1, writing nothing, rather than overwrite a person's file or an edited one")
+    .option('--dry-run', 'show what would change; nothing is written')
+    .option('--cache <dir>', 'where upstream clones are kept (default: ctxlock under $XDG_CACHE_HOME, else ~/.cache, or ~/AppData/Local on Windows)')
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json', 'markdown']).default('text'))
+    .action(async (dir: string | undefined, opts: { dryRun?: boolean; cache?: string; format: 'text' | 'json' | 'markdown' }) => {
+      markdown = opts.format === 'markdown';
+      const given = resolve(dir ?? '.');
+      if (!isDirectory(given)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      const top = await gitTopLevel(given);
+      if (!top) throw new UsageError(`ctxlock: ${given} is not in a git repository`);
+      const reader = fsReader(top, { local: false });
+      const scan = await scanRepo(reader);
+      const cache = cacheOf(opts.cache);
+      // A repository given as ./ or ../ is a folder beside this one, wherever sync runs from.
+      const read = (u: Upstream) => fetchUpstream({ ...u, repo: /^\.\.?([\\/]|$)/.test(u.repo) ? resolve(top, u.repo) : u.repo }, cache);
+      const disk = { exists: async (path: string) => existsSync(join(top, path)), readFile: async (path: string) => readFileSync(join(top, path)) };
+      const plan = await planSync(scan.registry, await loadLock(reader), read, disk);
+      if (plan.refused.length > 0 || opts.dryRun) {
+        io.stdout(renderSync(plan, opts.format, false));
+        if (plan.refused.length > 0) code = 1;
+        return;
+      }
+      if (scan.generated.error !== null) {
+        throw new BuildError(`${GENERATED_FILE} is not valid: ${scan.generated.error}; fix it first: sync fills what it brings in, which would replace it`);
+      }
+      await applySync(top, plan);
+      // Only fills of what sync wrote: any other gap is build's to report.
+      const wrote = new Set(plan.writes.map((w) => w.path));
+      const now = fsReader(top, { local: false });
+      const after = await scanRepo(now);
+      const fill = await planFill(after, now, (paths) => gitIgnored(top, paths));
+      const ours = fill.actions.filter((a) => a.files.some((f) => f.from.some((s) => wrote.has(s.path))));
+      const { written } = await applyFill(top, { ...fill, actions: ours }, after.generated.files);
+      io.stdout(renderSync(plan, opts.format, true, written));
+    });
+
+  program
     .command('diff [dir]')
     .description('compare context between two git refs, or a ref and the working tree; exits 1 on a new must finding')
     .requiredOption('--base <ref>', 'the ref to compare against, such as origin/main')
@@ -341,7 +383,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     // Commander has already printed its own message; help and version exit 0.
     if (err instanceof CommanderError) return err.exitCode === 0 ? 0 : 2;
     // Anything else is a bug or input ctxlock cannot handle. It still exits 2, because 1 means must-fix.
-    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, BuildError].some((type) => err instanceof type);
+    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, BuildError, UpstreamError, LockError].some((type) => err instanceof type);
     const reason = err instanceof Error ? err.message : String(err);
     io.stderr(known ? `${reason}\n` : `ctxlock could not run: ${reason}\n`);
     if (markdown) io.stdout(renderErrorMarkdown(reason));

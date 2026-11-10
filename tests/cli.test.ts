@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { existsSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { main } from '../src/cli.js';
-import { cleanup, gitRepo, tempDir, writeTree } from './helpers/repo.js';
+import { cleanup, git, gitRepo, tempDir, writeTree } from './helpers/repo.js';
 
 afterAll(cleanup);
 // No test reads the developer's own recorded sessions.
@@ -372,6 +372,103 @@ describe('ctxlock who-uses and ctxlock impact', { timeout: 120_000 }, () => {
 
     const missing = await cli('impact', dir, '--base', 'nope');
     expect([missing.code, missing.stderr]).toEqual([2, 'base ref nope not found — in GitHub Actions use actions/checkout with fetch-depth: 0\n']);
+  });
+});
+
+describe('ctxlock sync', { timeout: 120_000 }, () => {
+  const SKILL = '---\nname: api\ndescription: Use for API work.\n---\nValidate with zod.\n';
+  const ORG = { '.agents/skills/api/SKILL.md': SKILL, '.claude/rules/testing.md': 'Run pnpm test.\n', 'AGENTS.md': 'The org.\n' };
+  // A consumer whose ctxlock.yaml names the org by a path relative to itself.
+  async function consumer(org: string, units = ['.agents/skills/api', '.claude/rules/testing.md'], files: Record<string, string> = {}) {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'The service.\n', ...files }]);
+    const repo = relative(dir, org).split(sep).join('/');
+    writeTree(dir, { 'ctxlock.yaml': `version: 1\nupstream:\n  platform:\n    repo: ${repo}\n    units: [${units.join(', ')}]\n` });
+    return dir;
+  }
+  const read = (dir: string, path: string) => readFileSync(join(dir, path), 'utf8');
+
+  it('brings a skill and a rule in, pins them in ctxlock.lock, fills the skill for Claude Code, and a second sync changes nothing', async () => {
+    const { dir: org, shas } = await gitRepo([ORG]);
+    const own = '---\nname: own\ndescription: Ours.\n---\nOurs.\n';
+    const dir = await consumer(org, undefined, { '.agents/skills/own/SKILL.md': own });
+    const cache = tempDir();
+
+    const dry = await cli('sync', dir, '--dry-run', '--cache', cache);
+    expect(dry.code).toBe(0);
+    expect(dry.stdout).toContain('Added:\n  .agents/skills/api        from platform\n  .claude/rules/testing.md  from platform');
+    expect(dry.stdout).toContain('A dry run: nothing was written.');
+    expect(existsSync(join(dir, 'ctxlock.lock'))).toBe(false);
+    expect(existsSync(join(dir, '.agents/skills/api/SKILL.md'))).toBe(false);
+
+    const synced = await cli('sync', dir, '--cache', cache);
+    expect(synced.code).toBe(0);
+    expect(synced.stdout).toContain(`Upstreams:\n  platform  main  ${shas[0]!.slice(0, 7)}`);
+    expect(synced.stdout).toContain('Filled, so every agent loads it:\n  .claude/skills/api/SKILL.md');
+    expect(synced.stdout).not.toContain('dry run');
+    expect(read(dir, '.agents/skills/api/SKILL.md')).toBe(SKILL);
+    expect(read(dir, '.claude/rules/testing.md')).toBe('Run pnpm test.\n');
+    expect(read(dir, '.claude/skills/api/SKILL.md')).toBe(SKILL);
+    // A gap sync did not bring in is build's to fill.
+    expect(existsSync(join(dir, '.claude/skills/own'))).toBe(false);
+    const lock = read(dir, 'ctxlock.lock');
+    expect(lock).toContain(`commit: ${shas[0]}`);
+
+    const again = await cli('sync', dir, '--cache', cache);
+    expect([again.code, again.stdout]).toEqual([0, `ctxlock sync\n\nUpstreams:\n  platform  main  ${shas[0]!.slice(0, 7)}\n\nNothing changed.\n`]);
+    expect(read(dir, 'ctxlock.lock')).toBe(lock);
+  });
+
+  it('refuses a synced file edited by hand, exits 1 and writes nothing, the lock included', async () => {
+    const { dir: org } = await gitRepo([ORG]);
+    const dir = await consumer(org);
+    const cache = tempDir();
+    await cli('sync', dir, '--cache', cache);
+    const lock = read(dir, 'ctxlock.lock');
+    writeTree(org, { '.agents/skills/api/SKILL.md': `${SKILL}Upstream line.\n` });
+    git(org, 'commit', '-qam', 'skill');
+    writeTree(dir, { '.claude/rules/testing.md': 'Changed here.\n' });
+
+    const refused = await cli('sync', dir, '--cache', cache);
+    expect(refused.code).toBe(1);
+    expect(refused.stdout).toContain('Refused, so nothing was written:\n  .claude/rules/testing.md  edited since the last sync');
+    expect(read(dir, '.agents/skills/api/SKILL.md')).toBe(SKILL);
+    expect(read(dir, 'ctxlock.lock')).toBe(lock);
+
+    // A file git ignores is still a person's file.
+    const ignoring = await consumer(org, undefined, { '.gitignore': '.claude/rules/\n' });
+    writeTree(ignoring, { '.claude/rules/testing.md': 'Ours, ignored.\n' });
+    const ignored = await cli('sync', ignoring, '--cache', cache);
+    expect(ignored.code).toBe(1);
+    expect(ignored.stdout).toContain('.claude/rules/testing.md  a file sync did not write');
+    expect(read(ignoring, '.claude/rules/testing.md')).toBe('Ours, ignored.\n');
+  });
+
+  it('exits 2 naming a unit the upstream lacks, an unreadable lock, and a folder outside git', async () => {
+    const { dir: org } = await gitRepo([ORG]);
+    const cache = tempDir();
+
+    const missing = await cli('sync', await consumer(org, ['.claude/rules/nope.md']), '--cache', cache, '--format', 'markdown');
+    expect(missing.code).toBe(2);
+    expect(missing.stderr).toMatch(/^upstream platform: \.claude\/rules\/nope\.md is no unit at [0-9a-f]{7}\n$/);
+    expect(missing.stdout).toContain('ctxlock could not run: `upstream platform: .claude/rules/nope.md is no unit at');
+
+    const badLock = await consumer(org);
+    writeTree(badLock, { 'ctxlock.lock': 'lockfile_version: 2\n' });
+    const locked = await cli('sync', badLock, '--cache', cache);
+    expect(locked.code).toBe(2);
+    expect(locked.stderr).toMatch(/^ctxlock\.lock: /);
+
+    const badRecord = await consumer(org);
+    writeTree(badRecord, { '.ctxlock/generated.json': 'nope' });
+    const record = await cli('sync', badRecord, '--cache', cache);
+    expect(record.code).toBe(2);
+    expect(record.stderr).toMatch(/^\.ctxlock\/generated\.json is not valid: .*; fix it first/);
+    expect(existsSync(join(badRecord, '.agents/skills/api'))).toBe(false);
+
+    const outside = tempDir();
+    writeTree(outside, { 'ctxlock.yaml': 'version: 1\n' });
+    const notGit = await cli('sync', outside, '--cache', cache);
+    expect([notGit.code, notGit.stderr]).toEqual([2, `ctxlock: ${outside} is not in a git repository\n`]);
   });
 });
 
