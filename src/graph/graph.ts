@@ -202,12 +202,18 @@ const isFolder = (repo: string) => /^\.\.?([\/]|$)/.test(repo) || isAbsolute(rep
 
 // The repositories whose ctxlock.lock pins a changed unit of this one. `self` holds what this repository
 // goes by: its origin URL and its folder. A lock's ./ or ../ upstream is read from the lock's folder.
-export function pinnedBy(changed: string[], self: string[], locks: Array<{ repo: string; path: string; lock: Lock }>): Pin[] {
-  const names = new Set(self.map((s) => (isFolder(s) ? resolve(s) : sameRepo(s))));
+// `real` expands a folder's links and 8.3 short names, so each folder has one name.
+export function pinnedBy(
+  changed: string[],
+  self: string[],
+  locks: Array<{ repo: string; path: string; lock: Lock }>,
+  real: (path: string) => string = (path) => path,
+): Pin[] {
+  const names = new Set(self.map((s) => (isFolder(s) ? real(resolve(s)) : sameRepo(s))));
   const pins: Pin[] = [];
   for (const { repo, path, lock } of locks) {
     for (const u of lock.upstreams) {
-      if (!names.has(isFolder(u.repo) ? resolve(dirname(path), u.repo) : sameRepo(u.repo))) continue;
+      if (!names.has(isFolder(u.repo) ? real(resolve(dirname(path), u.repo)) : sameRepo(u.repo))) continue;
       for (const x of u.units) if (changed.includes(x.path)) pins.push({ repo, lockPath: path, upstream: u.name, unit: x.path, digest: x.digest });
     }
   }

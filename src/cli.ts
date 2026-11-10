@@ -309,8 +309,8 @@ export async function main(argv: string[], io: Io): Promise<number> {
             io.stderr(`ctxlock: skipped ${path}: ${err.message}\n`);
           }
         }
-        const self = [await gitOrigin(top), top, real(top)].filter((s) => s !== null);
-        impact.pinned = pinnedBy(impact.changed.map((c) => c.id.slice(c.id.indexOf('/') + 1)), self, locks);
+        const self = [await gitOrigin(top), top].filter((s) => s !== null);
+        impact.pinned = pinnedBy(impact.changed.map((c) => c.id.slice(c.id.indexOf('/') + 1)), self, locks, real);
       }
       io.stdout(renderImpact(impact, opts.format));
     });

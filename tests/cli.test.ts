@@ -401,6 +401,13 @@ describe('ctxlock who-uses and ctxlock impact', { timeout: 120_000 }, () => {
     );
     expect(stdout).not.toContain('web');
 
+    // A folder has more than one name: a link to it, or on Windows an 8.3 short name.
+    const link = join(tempDir(), 'org-link');
+    symlinkSync(realpathSync.native(org), link, 'junction');
+    const linked = tempDir();
+    writeTree(linked, { 'api/ctxlock.lock': lockOf(link, '.claude/rules/a.md') });
+    expect((await cli('impact', org, '--base', 'HEAD~1', '--locks', linked)).stdout).toMatch(/\nPinned by other repositories:\n {2}\S+api\s+\.claude\/rules\/a\.md/);
+
     const none = await cli('impact', org, '--base', 'HEAD~1', '--locks', join(others, 'web'));
     expect(none.stdout).toContain('\nNo repository under the --locks paths pins what changed.\n');
     expect((await cli('impact', org, '--base', 'HEAD~1')).stdout).not.toContain('--locks');

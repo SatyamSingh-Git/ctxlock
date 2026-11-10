@@ -190,6 +190,14 @@ describe('pinnedBy', () => {
     ]);
   });
 
+  it('matches a folder by its real path, whatever name the lock or this repository gives it', () => {
+    const real = (path: string) => path.replace('ORG~1', 'org');
+    const lock = { repo: 'p', path: resolve('/work/p/ctxlock.lock'), lock: lockOf(resolve('/work/ORG~1')) };
+    expect(pinnedBy(['.claude/rules/a.md'], [org], [lock], real)).toHaveLength(1);
+    expect(pinnedBy(['.claude/rules/a.md'], [resolve('/work/ORG~1')], [{ ...lock, lock: lockOf(org) }], real)).toHaveLength(1);
+    expect(pinnedBy(['.claude/rules/a.md'], [org], [lock])).toEqual([]);
+  });
+
   it('ignores locks of other upstreams, and units that did not change', () => {
     const locks = [
       { repo: 'x', path: resolve('/work/x/ctxlock.lock'), lock: lockOf('https://github.com/acme/other') },
