@@ -1,0 +1,62 @@
+# .github/workflows/ctxlock-sync.yml
+# Brings in the skills and rules ctxlock.yaml names from each upstream, once a week or when run by hand,
+# and keeps one pull request open with what changed. See the-guide/propagation.md.
+name: ctxlock sync
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency: ctxlock-sync
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Build ctxlock
+        run: |
+          git clone --quiet --depth 1 https://github.com/SatyamSingh-Git/ctxlock.git "$RUNNER_TEMP/ctxlock"
+          cd "$RUNNER_TEMP/ctxlock" && npm ci --no-audit --no-fund && npm run build
+      - name: Sync
+        env:
+          # A private upstream needs a token that can read it, saved as this secret.
+          UPSTREAM_TOKEN: ${{ secrets.CTXLOCK_UPSTREAM_TOKEN }}
+        run: |
+          # Only this step's git sees the token: the push below uses the checkout's own.
+          if [ -n "$UPSTREAM_TOKEN" ]; then
+            export GIT_CONFIG_COUNT=1
+            export GIT_CONFIG_KEY_0="url.https://x-access-token:${UPSTREAM_TOKEN}@github.com/.insteadOf"
+            export GIT_CONFIG_VALUE_0=https://github.com/
+          fi
+          code=0
+          node "$RUNNER_TEMP/ctxlock/dist/cli.js" sync --format markdown > "$RUNNER_TEMP/body.md" || code=$?
+          cat "$RUNNER_TEMP/body.md" >> "$GITHUB_STEP_SUMMARY"
+          # 1: a file was refused and nothing written; 2: sync could not run. Either needs a person.
+          exit "$code"
+      - name: Pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo 'Nothing changed upstream.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --quiet -C ctxlock/sync
+          git add -A
+          git commit --quiet -m 'chore: ctxlock sync'
+          git push --quiet --force origin ctxlock/sync
+          if [ -n "$(gh pr list --head ctxlock/sync --state open --json number --jq '.[].number')" ]; then
+            gh pr edit ctxlock/sync --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh pr create --head ctxlock/sync --title 'ctxlock sync' --body-file "$RUNNER_TEMP/body.md"
+          fi
