@@ -457,6 +457,38 @@ describe('ctxlock sync', { timeout: 120_000 }, () => {
     expect(read(dir, 'ctxlock.lock')).toBe(lock);
   });
 
+  it("a unit taken out of units goes with the copy sync's fill made of it, unless that copy was edited", async () => {
+    const { dir: org } = await gitRepo([ORG]);
+    const dir = await consumer(org);
+    const cache = tempDir();
+    await cli('sync', dir, '--cache', cache);
+    expect(existsSync(join(dir, '.claude/skills/api/SKILL.md'))).toBe(true);
+
+    writeTree(dir, { 'ctxlock.yaml': read(dir, 'ctxlock.yaml').replace('.agents/skills/api, ', '') });
+    const dropped = await cli('sync', dir, '--cache', cache);
+    expect(dropped.code).toBe(0);
+    expect(dropped.stdout).toContain('Removed from the other agents with it:\n  .claude/skills/api/SKILL.md');
+    expect(existsSync(join(dir, '.agents/skills/api/SKILL.md'))).toBe(false);
+    expect(existsSync(join(dir, '.claude/skills/api/SKILL.md'))).toBe(false);
+    expect(read(dir, '.ctxlock/generated.json')).not.toContain('.claude/skills/api');
+
+    // An edited copy is a person's, so it stays.
+    const kept = await consumer(org);
+    await cli('sync', kept, '--cache', cache);
+    writeTree(kept, { '.claude/skills/api/SKILL.md': `${SKILL}Ours.\n`, 'ctxlock.yaml': read(kept, 'ctxlock.yaml').replace('.agents/skills/api, ', '') });
+    expect((await cli('sync', kept, '--cache', cache)).stdout).not.toContain('Removed from the other agents');
+    expect(read(kept, '.claude/skills/api/SKILL.md')).toBe(`${SKILL}Ours.\n`);
+
+    // A file made from several sources stays while any of them does.
+    const { dir: claudeOnly } = await gitRepo([{ 'CLAUDE.md': 'The service.\n' }]);
+    const repo = relative(claudeOnly, org).split(sep).join('/');
+    writeTree(claudeOnly, { 'ctxlock.yaml': `version: 1\nupstream:\n  platform:\n    repo: ${repo}\n    units: [.claude/rules/testing.md]\n` });
+    expect((await cli('sync', claudeOnly, '--cache', cache)).stdout).toContain('Filled, so every agent loads it:\n  AGENTS.md');
+    writeTree(claudeOnly, { 'ctxlock.yaml': `version: 1\nupstream:\n  platform:\n    repo: ${repo}\n    units: []\n` });
+    expect((await cli('sync', claudeOnly, '--cache', cache)).code).toBe(0);
+    expect(existsSync(join(claudeOnly, 'AGENTS.md'))).toBe(true);
+  });
+
   it('refuses a synced file edited by hand, exits 1 and writes nothing, the lock included', async () => {
     const { dir: org } = await gitRepo([ORG]);
     const dir = await consumer(org);

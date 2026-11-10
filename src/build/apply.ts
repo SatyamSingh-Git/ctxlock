@@ -70,9 +70,10 @@ export async function applyFill(top: string, plan: FillPlan, previous: Generated
     }
   } finally {
     // Written even when a write fails partway, so files already written are never taken for a person's;
-    // but no record is started for a fill that generated nothing.
+    // and when the last entry goes, so the record names no file that is gone. But no record is started
+    // for a fill that generated nothing.
     const recordPath = join(top, GENERATED_FILE);
-    if (entries.size > 0) {
+    if (entries.size > 0 || recorded.size > 0) {
       mkdirSync(dirname(recordPath), { recursive: true });
       writeFileSync(recordPath, serializeGenerated([...entries.values()]));
     }

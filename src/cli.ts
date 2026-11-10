@@ -232,8 +232,13 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const after = await scanRepo(now);
       const fill = await planFill(after, now, (paths) => gitIgnored(top, paths));
       const ours = fill.actions.filter((a) => a.files.some((f) => f.from.some((s) => wrote.has(s.path))));
-      const { written } = await applyFill(top, { ...fill, actions: ours }, after.generated.files);
-      io.stdout(renderSync(plan, opts.format, true, written));
+      // A copy made from a unit sync removed would keep loading in the other agent. applyFill removes only
+      // ctxlock's own unedited output; the action's kind and harness are labels it does not read.
+      const gone = new Set(plan.removes);
+      const orphans = after.generated.files.filter((g) => g.from.length > 0 && g.from.every((s) => gone.has(s.path))).map((g) => g.path);
+      if (orphans.length > 0) ours.push({ kind: 'skill-copy', harness: 'claude-code', target: '', files: [], remove: orphans });
+      const { written, removed } = await applyFill(top, { ...fill, actions: ours }, after.generated.files);
+      io.stdout(renderSync(plan, opts.format, true, { written, removed }));
     });
 
   program
