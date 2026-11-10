@@ -87,6 +87,18 @@ describe('planSync', () => {
     expect(serializeLock(again.lock)).toBe(serializeLock(first.lock));
   });
 
+  it('an upstream commit that changes none of the units leaves the lock as it was', async () => {
+    const consumer = { 'ctxlock.yaml': yaml() };
+    const first = await sync(ORG, C1, consumer);
+    const next = await sync({ ...ORG, 'AGENTS.md': 'The org, edited.\n' }, C2, after(consumer, first), first.lock);
+
+    expect(serializeLock(next.lock)).toBe(serializeLock(first.lock));
+    expect(next.moved).toEqual([{ upstream: 'platform', ref: 'main', from: C1, to: C1 }]);
+    // A tier raised upstream is a change, though no file changed.
+    const raised = await sync({ ...ORG, 'ctxlock.yaml': `${ORG['ctxlock.yaml']}  .claude/rules/testing.md:\n    tier: certified\n` }, C2, after(consumer, first), first.lock);
+    expect(raised.lock.upstreams[0]!.commit).toBe(C2);
+  });
+
   it('an upstream edit updates the files and the lock, and reports from and to digests', async () => {
     const consumer = { 'ctxlock.yaml': yaml() };
     const first = await sync(ORG, C1, consumer);

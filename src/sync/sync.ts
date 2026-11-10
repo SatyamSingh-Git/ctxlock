@@ -59,7 +59,6 @@ export async function planSync(
   for (const u of registry.upstreams) {
     const { commit, reader } = await read(u);
     const scan = await scanRepo(reader);
-    plan.moved.push({ upstream: u.name, ref: u.ref, from: previous.get(u.name)?.commit ?? null, to: commit });
     const before = new Map((previous.get(u.name)?.units ?? []).map((x) => [x.path, x]));
     const units: LockedUnit[] = [];
     for (const path of u.units) {
@@ -92,7 +91,13 @@ export async function planSync(
       else plan.changes.push({ upstream: u.name, path: unit.path, change: 'updated', from: had.digest, to: unit.digest });
     }
     for (const [path, had] of before) if (!u.units.includes(path)) plan.changes.push({ upstream: u.name, path, change: 'removed', from: had.digest });
-    plan.lock.upstreams.push({ name: u.name, repo: u.repo, ref: u.ref, commit, units } satisfies LockedUpstream);
+    const last = previous.get(u.name);
+    const pinned: LockedUpstream = { name: u.name, repo: u.repo, ref: u.ref, commit, units };
+    // A commit that changed nothing this repository takes keeps the old pin: a pull request that only
+    // moves a hash, for every org commit, is noise.
+    if (last && serializeLock({ upstreams: [{ ...pinned, commit: last.commit }] }) === serializeLock({ upstreams: [last] })) pinned.commit = last.commit;
+    plan.moved.push({ upstream: u.name, ref: u.ref, from: last?.commit ?? null, to: pinned.commit });
+    plan.lock.upstreams.push(pinned);
   }
   for (const [name, had] of previous) {
     if (registry.upstreams.some((u) => u.name === name)) continue;
