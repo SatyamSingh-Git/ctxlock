@@ -42,12 +42,27 @@ async function setup() {
   return { scan, load, timeline };
 }
 
-const said = (session: string, prompts: number[], signals: Array<Partial<Signal> & { kind: Signal['kind']; ts: string }>): [string, SessionTranscript] => [
+const said = (session: string, prompts: number[], signals: Array<Partial<Signal> & { kind: Signal['kind']; ts: string }>, compactions: number[] = []): [string, SessionTranscript] => [
   session,
-  { session, prompts: prompts.map(t), signals: signals.map((s) => ({ untrusted: false, ...s })) },
+  { session, prompts: prompts.map(t), compactions: compactions.map(t), signals: signals.map((s) => ({ untrusted: false, ...s })) },
 ];
 
 describe('findMisses', () => {
+  it('a unit loaded before a compaction is out of context after it unless loaded again, while a predicted load stays', async () => {
+    const { scan, load, timeline } = await setup();
+    const agents = { ...load(CLAUDE, 0), observed: false, reason: 'session_start' };
+    // DB loaded before the compaction at 10 and was summarised away; API loaded again just after it.
+    const m = findMisses(
+      [timeline('s1', 0, [agents, load(DB, 3), load(API, 4), load(API, 10)])],
+      // The compaction at 20 comes after the interrupt, so it changes nothing.
+      new Map([said('s1', [1, 12], [{ kind: 'interrupted', ts: t(15) }], [10, 20])]),
+      scan,
+      { minSessions: 3 },
+    );
+
+    expect(m.units.map((u) => u.id)).toEqual([API, CLAUDE]);
+  });
+
   it('a correction is joined to every unit loaded before it, and inTurn counts it only for those loaded in its own turn', async () => {
     const { scan, load, timeline } = await setup();
     const m = findMisses(

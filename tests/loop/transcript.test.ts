@@ -37,6 +37,7 @@ describe('readTranscript', () => {
     expect(await readTranscript(file, 's1')).toEqual({
       session: 's1',
       prompts: [t(1), t(4)],
+      compactions: [],
       signals: [
         { kind: 'interrupted', ts: t(3), untrusted: false },
         { kind: 'correction', ts: t(4), untrusted: false, words: 'no, use pnpm add' },
@@ -107,6 +108,13 @@ describe('readTranscript', () => {
     // Older versions write the subagent's lines into the session's own file.
     const inline = transcript([typed(1, 'start'), said(2), interrupt(3), { ...tool(4, 'mcp__docs__search'), isSidechain: true }, interrupt(5)]);
     expect((await readTranscript(inline, 's1')).signals.map((s) => s.untrusted)).toEqual([false, true]);
+  });
+
+  it("records when the session was compacted, and not when a subagent's was", async () => {
+    const boundary = (second: number) => ({ ...base(second), type: 'system', subtype: 'compact_boundary', content: 'Conversation compacted' });
+    const file = transcript([typed(1, 'start'), said(2), boundary(3), { ...boundary(4), isSidechain: true }, said(5), boundary(6)]);
+
+    expect((await readTranscript(file, 's1')).compactions).toEqual([t(3), t(6)]);
   });
 
   it('a last line cut short is skipped and the rest is read', async () => {

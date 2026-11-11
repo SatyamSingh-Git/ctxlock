@@ -18,6 +18,8 @@ export interface SessionTranscript {
   session: string;
   // When the person typed each prompt, in order.
   prompts: string[];
+  // When the session was compacted: what loaded before is summarised away.
+  compactions: string[];
   signals: Signal[];
 }
 
@@ -49,6 +51,7 @@ export function findTranscript(home: string, session: string): string | null {
 
 interface Line {
   type?: string;
+  subtype?: string;
   timestamp?: string;
   isMeta?: boolean;
   isSidechain?: boolean;
@@ -90,12 +93,13 @@ async function firstUntrustedInSubagents(file: string, session: string): Promise
 // Transcripts run past 100 MB, so they are streamed. Only user and assistant lines matter.
 export async function readTranscript(file: string, session: string): Promise<SessionTranscript> {
   const prompts: string[] = [];
+  const compactions: string[] = [];
   const signals: Signal[] = [];
   const fromSubagent = await firstUntrustedInSubagents(file, session);
   let answered = false;
   let untrusted = false;
   for await (const text of lines(file)) {
-    if (!text.includes('"type":"user"') && !text.includes('"type":"assistant"')) continue;
+    if (!text.includes('"type":"user"') && !text.includes('"type":"assistant"') && !text.includes('"compact_boundary"')) continue;
     let line: Line;
     try {
       line = JSON.parse(text) as Line;
@@ -110,6 +114,7 @@ export async function readTranscript(file: string, session: string): Promise<Ses
     const ts = line.timestamp;
     const content = line.message?.content;
     if (fromSubagent !== null && fromSubagent <= ts) untrusted = true;
+    if (line.type === 'system' && line.subtype === 'compact_boundary') compactions.push(ts);
 
     if (line.type === 'assistant') {
       answered = true;
@@ -129,5 +134,5 @@ export async function readTranscript(file: string, session: string): Promise<Ses
     const opening = prompt.replace(PASTED, ' ').trim().slice(0, 160);
     if (CORRECTION.some((r) => r.test(opening))) signals.push({ kind: 'correction', ts, untrusted, words: opening });
   }
-  return { session, prompts, signals };
+  return { session, prompts, compactions, signals };
 }

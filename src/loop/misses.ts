@@ -60,12 +60,15 @@ const none = (): Record<SignalKind, number> => ({ interrupted: 0, correction: 0 
 
 const ids = (loads: SessionLoad[]) => [...new Set(loads.map((l) => l.unit.id))].sort();
 
-// D80: everything loaded before the signal was in context. Its turn runs from the person's prompt before
-// it; loads before the first prompt belong to the first turn.
-function inPlay(loads: SessionLoad[], prompts: string[], ts: string): { context: string[]; turn: string[] } {
-  const before = prompts.filter((p) => p < ts);
+// D80a: everything loaded since the last compaction before the signal was in context. Claude Code loads
+// instruction files again when it compacts, and the collector sees that; a predicted load it can't see,
+// so that one stays. The turn runs from the person's prompt before the signal; loads before the first
+// prompt belong to the first turn.
+function inPlay(loads: SessionLoad[], t: SessionTranscript, ts: string): { context: string[]; turn: string[] } {
+  const before = t.prompts.filter((p) => p < ts);
   const start = before.length > 1 ? before.at(-1)! : '';
-  const loaded = loads.filter((l) => l.ts <= ts);
+  const compacted = t.compactions.filter((c) => c < ts).at(-1) ?? '';
+  const loaded = loads.filter((l) => l.ts <= ts && (l.ts >= compacted || !l.observed));
   return { context: ids(loaded), turn: ids(loaded.filter((l) => l.ts >= start)) };
 }
 
@@ -93,7 +96,7 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
         unrecorded++;
         continue;
       }
-      const { context, turn } = inPlay(timeline.loads, transcript.prompts, s.ts);
+      const { context, turn } = inPlay(timeline.loads, transcript, s.ts);
       if (context.length === 0) unattributed++;
       const signal: MissSignal = { session: timeline.session, kind: s.kind, ts: s.ts, untrusted: s.untrusted, ...(s.words !== undefined && { words: s.words }), context, turn };
       for (const id of context) reached.set(id, [...(reached.get(id) ?? []), signal]);

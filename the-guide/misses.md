@@ -43,7 +43,7 @@ Routed at 1 session or more: 1 unit. Write drafts with --drafts <folder>.
 That is real output, from one of the author's repositories, run with `--min-sessions 1`.
 
 **Units in context:**
-- **Which units:** everything the collector saw load in the session before the signal. Claude Code keeps a loaded file in context for the rest of the session.
+- **Which units:** everything the collector saw load in the session before the signal, since the last time Claude Code compacted the session. Claude Code keeps a loaded file in context until then, and loads instruction files again when it compacts, which the collector sees.
 - **"In its turn":** counts the signals that came in the same turn the unit loaded, since the prompt before the signal. That is the closer link: a rule that loaded because the agent opened a file, followed by a correction, says more than a `CLAUDE.md` loaded an hour earlier.
 
 **Sessions, not signals, decide what is routed:**
