@@ -32,12 +32,26 @@ export interface Sessions {
   skipped: number;
 }
 
-interface Load {
+export interface SessionLoad {
   unit: Unit;
   ts: string;
   reason: string;
+  // The bytes loaded differ from the scanned unit's.
   other: boolean;
+  // A fallback load comes from the prediction, not from an event.
   observed: boolean;
+}
+
+export interface Timeline {
+  session: string;
+  // The folder the session started in, from the repository's top.
+  folder: string;
+  begun: string;
+  last: string;
+  // In time order.
+  loads: SessionLoad[];
+  // What the session could have been seen loading: the site's units, and the skills offered there.
+  seeable: Sessions['unseen'];
 }
 
 // The path from a root, with / separators, or null when the path is under none of them.
@@ -51,44 +65,32 @@ function within(path: string, roots: string[]): string | null {
 
 // real gives a path's real one. A session started through a junction or an 8.3 name records that name,
 // and a path the agent typed can differ in case below the top.
-export function joinSessions(
+export function sessionTimelines(
   read: { events: RecordedEvent[]; skipped: number },
   scan: ScanResult,
   roots: string[],
   real: (path: string) => string = (path) => path,
-): Sessions {
+): Timeline[] {
   const folderOf = (cwd: string) => within(real(cwd), roots) ?? within(cwd, roots);
   const fileOf = (file: string) => within(file, roots) ?? within(real(file), roots);
   const byPath = unitsByPath(scan);
   const unitAt = (file: string) => byPath.get(within(file, roots) ?? '') ?? byPath.get(within(real(file), roots) ?? '');
   const byId = new Map(scan.units.map((u) => [u.id, u]));
   const contexts = new Map(scan.contexts.filter((c) => c.harness === 'claude-code').map((c) => [c.site, c.entries]));
-  // What some session could have been seen loading.
-  const seeable = new Map<string, Sessions['unseen'][number]>();
 
   const bySession = new Map<string, Exclude<RecordedEvent, { event: 'error' }>[]>();
-  let errors = 0;
-  let lastError: { ts: string; message: string } | undefined;
   for (const e of read.events) {
-    if (e.event === 'error') {
-      errors++;
-      if (!lastError || e.ts >= lastError.ts) lastError = { ts: e.ts, message: e.message };
-    } else {
-      const lines = bySession.get(e.session) ?? [];
-      lines.push(e);
-      bySession.set(e.session, lines);
-    }
+    if (e.event === 'error') continue;
+    const lines = bySession.get(e.session) ?? [];
+    lines.push(e);
+    bySession.set(e.session, lines);
   }
 
-  const tally = new Map<string, Omit<UnitLoads, 'reasons' | 'predicted'> & { reasons: Set<string>; observed: boolean }>();
-  let sessions = 0;
-  const stamps: string[] = [];
-  for (const events of bySession.values()) {
+  const timelines: Timeline[] = [];
+  for (const [session, events] of bySession) {
     if (!events.some((e) => folderOf(e.cwd) !== null || (e.event === 'load' && fileOf(e.file) !== null))) continue;
-    sessions++;
     const ordered = [...events].sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0));
     const begun = ordered[0]!.ts;
-    stamps.push(begun, ordered.at(-1)!.ts);
 
     // A session sees what the folder it started in sees. The deepest site above that folder has the
     // same instruction files above it, and Claude Code offers the skills of the folder and every folder
@@ -98,25 +100,50 @@ export function joinSessions(
     const above = ancestry(folder);
     const offered = (e: LoadEntry) => above.includes(ownerDir(e.path, '.claude/skills')!);
     const skills = new Map<string, Unit>();
+    const seeable: Timeline['seeable'] = [];
     for (const e of contexts.get(site) ?? []) {
       const unit = byId.get(e.unitId);
       // Claude Code reports nothing for an AGENTS.md it reads through its fallback.
       if (!unit || e.reason === 'nested-agents-md' || (unit.kind === 'skill' && !offered(e))) continue;
       if (unit.kind === 'skill') skills.set(unit.name, unit);
-      seeable.set(unit.id, { id: unit.id, path: e.path, mode: unit.kind === 'skill' ? 'listed' : e.mode });
+      seeable.push({ id: unit.id, path: e.path, mode: unit.kind === 'skill' ? 'listed' : e.mode });
     }
 
-    const loads: Load[] = [];
+    const loads: SessionLoad[] = [];
     for (const e of ordered) {
       const unit = e.event === 'load' ? unitAt(e.file) : e.event === 'skill' ? skills.get(e.skill) : undefined;
       if (!unit) continue;
       const other = e.event === 'load' && e.sha256 !== null && e.sha256 !== unit.files[0]!.sha256;
       loads.push({ unit, ts: e.ts, reason: e.event === 'load' ? loadReason(e.reason) : 'skill_invoked', other, observed: true });
     }
-    for (const { unit, reason } of fallbackLoads(scan, new Set(loads.map((l) => l.unit.id)), site)) {
-      loads.push({ unit, ts: begun, reason, other: false, observed: false });
-    }
+    // At the session's start, so before every observed load.
+    const predicted = fallbackLoads(scan, new Set(loads.map((l) => l.unit.id)), site).map(({ unit, reason }) => ({ unit, ts: begun, reason, other: false, observed: false }));
+    timelines.push({ session, folder, begun, last: ordered.at(-1)!.ts, loads: [...predicted, ...loads], seeable });
+  }
+  return timelines;
+}
 
+export function joinSessions(
+  read: { events: RecordedEvent[]; skipped: number },
+  scan: ScanResult,
+  roots: string[],
+  real: (path: string) => string = (path) => path,
+): Sessions {
+  const timelines = sessionTimelines(read, scan, roots, real);
+  let errors = 0;
+  let lastError: { ts: string; message: string } | undefined;
+  for (const e of read.events) {
+    if (e.event !== 'error') continue;
+    errors++;
+    if (!lastError || e.ts >= lastError.ts) lastError = { ts: e.ts, message: e.message };
+  }
+  // What some session could have been seen loading.
+  const seeable = new Map(timelines.flatMap((t) => t.seeable).map((u) => [u.id, u]));
+
+  const tally = new Map<string, Omit<UnitLoads, 'reasons' | 'predicted'> & { reasons: Set<string>; observed: boolean }>();
+  const sessions = timelines.length;
+  const stamps = timelines.flatMap((t) => [t.begun, t.last]);
+  for (const { loads } of timelines) {
     for (const id of new Set(loads.map((l) => l.unit.id))) {
       const mine = loads.filter((l) => l.unit.id === id);
       const t = tally.get(id) ?? { id, path: mine[0]!.unit.path, sessions: 0, reasons: new Set(), lastSeen: '', otherVersion: 0, observed: false };
@@ -144,7 +171,7 @@ export function joinSessions(
     units,
     unseen,
     undeclared: sessions > 0 && !scan.registry.consumers.some((c) => c.harnesses.includes('claude-code')),
-    elsewhere: bySession.size - sessions,
+    elsewhere: new Set(read.events.flatMap((e) => (e.event === 'error' ? [] : [e.session]))).size - sessions,
     errors: { count: errors, ...(lastError !== undefined && { last: lastError }) },
     skipped: read.skipped,
   };

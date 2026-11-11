@@ -1,7 +1,7 @@
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { RecordedEvent } from '../../src/collect/events.js';
-import { joinSessions } from '../../src/collect/sessions.js';
+import { joinSessions, sessionTimelines } from '../../src/collect/sessions.js';
 import { scanRepo } from '../../src/scan.js';
 import { lfDigest } from '../../src/units/digest.js';
 import { memReader } from '../helpers/mem-reader.js';
@@ -221,5 +221,38 @@ describe('joinSessions', () => {
     expect((await join_(yaml('consumers:\n  api:\n    harnesses: [codex]\n'), seen)).undeclared).toBe(true);
     expect((await join_(yaml('consumers:\n  web:\n    harnesses: [claude-code]\n'), seen)).undeclared).toBe(false);
     expect((await join_(yaml(''), [])).undeclared).toBe(false);
+  });
+});
+
+describe('joinSessions, its dates', () => {
+  it("ends at a session's last event, not at its start", async () => {
+    const s = await join_({ 'CLAUDE.md': 'c\n' }, [start('s1', t(1)), load('s1', t(9), at('CLAUDE.md'), 'compact', sha('c\n'))]);
+
+    expect(s).toMatchObject({ first: t(1), last: t(9) });
+  });
+});
+
+describe('sessionTimelines', () => {
+  it('gives each session in the repository its folder, first and last times, and its loads in time order, including predicted fallback loads; a session elsewhere is left out', async () => {
+    const files = { 'AGENTS.md': 'Use pnpm.\n', '.claude/rules/api.md': RULE, 'packages/api/h.ts': 'x' };
+    const scan = await scanRepo(memReader(files));
+    const timelines = sessionTimelines(
+      {
+        events: [
+          load('s1', t(3), at('.claude/rules/api.md'), 'path_glob_match', sha('older\n'), at('packages/api')),
+          start('s1', t(1), at('packages/api')),
+          start('far', t(2), resolve('/elsewhere')),
+        ],
+        skipped: 0,
+      },
+      scan,
+      [ROOT],
+    );
+
+    expect(timelines.map(({ session, folder, begun, last }) => ({ session, folder, begun, last }))).toEqual([{ session: 's1', folder: 'packages/api', begun: t(1), last: t(3) }]);
+    expect(timelines[0]!.loads.map((l) => ({ id: l.unit.id, ts: l.ts, reason: l.reason, other: l.other, observed: l.observed }))).toEqual([
+      { id: 'instructions/AGENTS.md', ts: t(1), reason: 'session_start', other: false, observed: false },
+      { id: 'rule/.claude/rules/api.md', ts: t(3), reason: 'glob', other: true, observed: true },
+    ]);
   });
 });
