@@ -23,7 +23,7 @@ export function renderMisses(m: Misses, format: 'text' | 'json', excerpts: boole
   if (total === 0) return `${[...lines, 'Signals: none'].join('\n')}\n`;
 
   const kinds = [m.signals.interrupted ? `${m.signals.interrupted} interrupted` : '', m.signals.correction ? plural(m.signals.correction, 'correction') : ''].filter(Boolean);
-  lines.push(`Signals: ${kinds.join(' · ')}, in ${sessions(m.withSignal)}${m.untrusted ? ` · ${m.untrusted} after web or MCP content, counted at half` : ''}`);
+  lines.push(`Signals: ${kinds.join(' · ')}, in ${sessions(m.withSignal)}${m.untrusted ? ` · ${m.untrusted} after web or MCP content` : ''}`);
   lines.push(...block('Units in context when the agent was stopped or corrected', rows(m.units.filter((u) => !u.everySession))));
   lines.push(...block("In every session, so exposure can't single them out", rows(m.units.filter((u) => u.everySession))));
   if (excerpts) {

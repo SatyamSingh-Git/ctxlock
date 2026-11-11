@@ -45,7 +45,7 @@ describe('renderMisses', () => {
   it('text lists units by sessions, marks routed and everySession, and names an upstream', () => {
     expect(renderMisses(MISSES, 'text', false)).toBe(`ctxlock misses · 9 sessions, 7 with a transcript
 
-Signals: 1 interrupted · 2 corrections, in 3 sessions · 1 after web or MCP content, counted at half
+Signals: 1 interrupted · 2 corrections, in 3 sessions · 1 after web or MCP content
 
 Units in context when the agent was stopped or corrected:
   rule/.claude/rules/testing.md  3 sessions  2 in its turn  loaded in 5  owner @platform  routed
