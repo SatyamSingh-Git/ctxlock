@@ -77,7 +77,13 @@ These are signals, not a diagnosis: the unit was in context when the agent was s
 - **Where it belongs:** the owners come from `ctxlock.yaml` or CODEOWNERS. A unit synced from an upstream ([propagation](propagation.md)) belongs in that upstream, so its note names that repository.
 - **A file in the folder without the marker line** is someone's own, and is left alone.
 - **With `--excerpts`,** each note also has the opening of each correction you typed:
-  - **Redacted:** tokens (GitHub, Anthropic, OpenAI, Slack and AWS keys, JWTs and private keys, by the shapes [gitleaks](https://github.com/gitleaks/gitleaks) uses), emails, absolute paths (a Windows drive, `/home`, `/Users` or `/root`) down to their last part, URL credentials and queries, and long runs that look like keys.
+  - **Redacted:**
+    - **Tokens, by the shapes [gitleaks](https://github.com/gitleaks/gitleaks) uses:** GitHub, GitLab, Anthropic, OpenAI and Slack tokens, Slack webhooks, AWS access key IDs, JWTs, and private keys, even cut short.
+    - **Values named as secrets:** the value after a word like "secret", "password", "token" or "api key", as in `password: …` or `the secret is …`. An AWS secret key has no shape of its own, so this is how it is caught.
+    - **Emails.**
+    - **Absolute paths, down to their last part:** a Windows drive, a share (`\\server\…`), `/home`, `/Users`, `/root` and WSL's `/mnt/c/Users`, folders with spaces included.
+    - **URL credentials and queries.**
+    - **Long runs that look like keys.**
   - **Fenced:** a code fence longer than any run of backticks inside, so no `@mention`, link or markup in it renders.
   - **Read it before you pass it on:** redaction catches shapes, not meaning.
 
