@@ -2,7 +2,7 @@ import type { Sessions } from '../collect/sessions.js';
 import { block, howLoaded, sessions } from './graph.js';
 
 const NONE = 'ctxlock loads · no Claude Code sessions recorded for this repository';
-const INSTALL = [
+export const INSTALL = [
   'The collector records which units Claude Code loads in your sessions. To install it:',
   '  claude plugin marketplace add SatyamSingh-Git/ctxlock',
   '  claude plugin install ctxlock@ctxlock',

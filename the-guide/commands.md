@@ -280,6 +280,43 @@ These sessions match no consumer in ctxlock.yaml. Declare one so impact can name
 - Files outside the repository, such as your own `~/.claude/CLAUDE.md`, are never listed.
 - The JSON has counts per unit and no session IDs.
 
+## `ctxlock misses`
+
+Lists the units that were in play when you stopped or corrected Claude Code. It reads the transcripts Claude Code keeps, in `~/.claude/projects` or `$CLAUDE_CONFIG_DIR/projects`, for the sessions the collector recorded in this repository. It joins what it finds to the units the collector saw load. It stores nothing, and sends nothing anywhere. [Misses](misses.md) has the details.
+
+```
+ctxlock misses [dir] [--format text|json] [--since YYYY-MM-DD] [--min-sessions <n>] [--excerpts]
+```
+
+```
+ctxlock misses · 9 sessions, 7 with a transcript
+
+Signals: 1 interrupted · 2 corrections, in 3 sessions · 1 after web or MCP content, counted at half
+
+Units in the turn when the agent was stopped or corrected:
+  rule/.claude/rules/testing.md  3 sessions  loaded in 5  owner @platform  routed
+  skill/.claude/skills/release   1 session   loaded in 2  from platform
+
+In every session, so exposure can't single them out:
+  instructions/CLAUDE.md  2.5 sessions  loaded in 9
+
+No load in the turn: 1 signal
+Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
+```
+
+**What counts as a signal:**
+- **An interrupt:** you stopped the agent.
+- **A correction:** a prompt you typed after the agent answered, opening with words such as "no", "actually" or "I meant".
+
+**What it reports:**
+- **The units in a signal's turn** are those loaded since your prompt before it. A session counts once per unit, however many signals it had, and counts half when every one of them came after the agent read a web page or an MCP tool's output.
+- **A unit reached in `--min-sessions` sessions (default 3) is routed:** it is worth its owner's attention. For a unit synced from an upstream, the owner is in that upstream, which `from` names.
+- **Units loaded in every session** are listed apart: exposure alone can't tell them from the rest.
+
+**What it holds:**
+- Your words appear only with `--excerpts`.
+- The JSON names the sessions, since it stays on your machine.
+
 ## `ctxlock report`
 
 Writes what `loads` counts as JSON, to share with the team that owns your shared context. It holds no session ID, no path outside the repository and no error message. [The collector](collector.md#sharing-what-was-loaded) shows it.

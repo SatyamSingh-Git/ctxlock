@@ -717,3 +717,86 @@ describe('ctxlock probe draft', { timeout: 120_000 }, () => {
     expect(stderr).toMatch(/^evals\/probes\/agents-md\.yaml already exists/);
   });
 });
+
+describe('ctxlock misses', () => {
+  const ts = (second: number) => `2026-11-11T10:00:${String(second).padStart(2, '0')}.000Z`;
+
+  // A repository, the collector's record of one session in it at cwd, and that session's transcript.
+  function recorded(cwd: (real: string) => string) {
+    const dir = tempDir();
+    writeTree(dir, { 'CLAUDE.md': 'Use pnpm.\n', '.claude/rules/api.md': 'API rule.\n' });
+    const real = realpathSync.native(dir);
+    const top = cwd(real);
+    const event = (second: number, o: object) => JSON.stringify({ v: 1, ts: ts(second), harness: 'claude-code', session: 's1', cwd: top, ...o });
+    const home = tempDir();
+    writeTree(home, {
+      'events/2026-11.jsonl': [
+        event(0, { event: 'session_start', source: 'startup' }),
+        event(0, { event: 'load', file: join(top, 'CLAUDE.md'), sha256: null, reason: 'session_start' }),
+        event(3, { event: 'load', file: join(top, '.claude', 'rules', 'api.md'), sha256: null, reason: 'session_start' }),
+        '',
+      ].join('\n'),
+    });
+    vi.stubEnv('CTXLOCK_HOME', home);
+    const config = tempDir();
+    const line = (second: number, o: object) => JSON.stringify({ parentUuid: null, isSidechain: false, timestamp: ts(second), sessionId: 's1', cwd: top, ...o });
+    writeTree(config, {
+      'projects/F--repo/s1.jsonl': [
+        line(1, { type: 'user', origin: { kind: 'human' }, message: { role: 'user', content: [{ type: 'text', text: 'add the endpoint' }] } }),
+        line(2, { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Adding it.' }] } }),
+        line(4, { type: 'user', message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] } }),
+        line(5, { type: 'user', origin: { kind: 'human' }, message: { role: 'user', content: [{ type: 'text', text: 'no, the v2 endpoint' }] } }),
+        '',
+      ].join('\n'),
+    });
+    vi.stubEnv('CLAUDE_CONFIG_DIR', config);
+    return dir;
+  }
+
+  it("misses joins a recorded session's transcript to the repository's units", async () => {
+    const dir = recorded((real) => real);
+
+    const { code, stdout } = await cli('misses', dir, '--format', 'json', '--excerpts');
+    expect(code).toBe(0);
+    const m = JSON.parse(stdout);
+    expect(m).toMatchObject({ sessions: 1, withTranscript: 1, withSignal: 1, signals: { interrupted: 1, correction: 1 }, minSessions: 3 });
+    expect(m.units.map((u: { id: string; sessions: number; kinds: object }) => [u.id, u.sessions, u.kinds])).toEqual([
+      ['rule/.claude/rules/api.md', 1, { interrupted: 1, correction: 1 }],
+      ['instructions/CLAUDE.md', 1, { interrupted: 1, correction: 1 }],
+    ]);
+    expect(m.units[0].signals.map((s: { words?: string }) => s.words)).toEqual([undefined, 'no, the v2 endpoint']);
+    expect((await cli('misses', dir, '--min-sessions', '1')).stdout).toContain('Routed at 1 session or more: 2 units.');
+  });
+
+  it('a session recorded through a junction is joined', async () => {
+    const dir = recorded((real) => {
+      const link = join(tempDir(), 'link');
+      symlinkSync(real, link, 'junction');
+      return link;
+    });
+
+    expect(JSON.parse((await cli('misses', dir, '--format', 'json')).stdout)).toMatchObject({ sessions: 1, withTranscript: 1, withSignal: 1 });
+  });
+
+  it.runIf(process.platform === 'win32')('a session recorded with a lowercase drive is joined', async () => {
+    const dir = recorded((real) => real[0]!.toLowerCase() + real.slice(1));
+
+    expect(JSON.parse((await cli('misses', dir, '--format', 'json')).stdout).units).toHaveLength(2);
+  });
+
+  it('no recorded sessions is exit 0 with the collector pointer', async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'CLAUDE.md': 'Use pnpm.\n' });
+
+    const { code, stdout } = await cli('misses', dir);
+    expect(code).toBe(0);
+    expect(stdout).toContain('ctxlock misses · no Claude Code sessions recorded for this repository');
+  });
+
+  it('a bad --since is exit 2', async () => {
+    const dir = tempDir();
+    for (const since of ['yesterday', '2026-13-01', '2026-11-1']) expect((await cli('misses', dir, '--since', since)).code, since).toBe(2);
+    expect((await cli('misses', dir, '--since', 'yesterday')).stderr).toContain('expected a date as YYYY-MM-DD');
+    expect((await cli('misses', dir, '--since', '2026-11-01')).code).toBe(0);
+  });
+});

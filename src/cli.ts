@@ -10,7 +10,10 @@ import { GENERATED_FILE, generatedStatus } from './build/generated.js';
 import { BuildError, suggestIndex } from './build/index-suggest.js';
 import { eventsHome, readEvents } from './collect/events.js';
 import { buildReport } from './collect/report.js';
-import { joinSessions } from './collect/sessions.js';
+import { joinSessions, sessionTimelines } from './collect/sessions.js';
+import { findMisses } from './loop/misses.js';
+import { findTranscript, readTranscript, type SessionTranscript, transcriptsHome } from './loop/transcript.js';
+import { renderMisses } from './report/misses.js';
 import { buildGraph, impactOf, pinnedBy, resolveRef, whoUses } from './graph/graph.js';
 import { renderImpact, renderWhoUses } from './report/graph.js';
 import { renderLoads } from './report/loads.js';
@@ -71,13 +74,23 @@ function locksUnder(dir: string): string[] {
 
 // Recorded sessions in a folder, matched under its real path and under the path as typed: Claude Code
 // reports the path its session was started in, and Windows can give a temp folder an 8.3 name.
-function sessionsAt(root: string, scan: ScanResult) {
+function recordedAt(root: string) {
   const known = new Map<string, string>();
   const realOf = (path: string) => {
     if (!known.has(path)) known.set(path, real(path));
     return known.get(path)!;
   };
-  return joinSessions(readEvents(eventsHome()), scan, [...new Set([real(root), root])], realOf);
+  return { read: readEvents(eventsHome()), roots: [...new Set([real(root), root])], real: realOf };
+}
+
+function sessionsAt(root: string, scan: ScanResult) {
+  const r = recordedAt(root);
+  return joinSessions(r.read, scan, r.roots, r.real);
+}
+
+function day(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || new Date(value).toISOString().slice(0, 10) !== value) throw new InvalidArgumentError('expected a date as YYYY-MM-DD');
+  return value;
 }
 
 function count(value: string): number {
@@ -284,6 +297,29 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const root = resolve(dir ?? '.');
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
       io.stdout(renderLoads(sessionsAt(root, await scanRepo(fsReader(root))), opts.format));
+    });
+
+  program
+    .command('misses [dir]')
+    .description("list the units in play when you stopped or corrected Claude Code, read from the transcripts of the sessions the collector recorded here; nothing is stored")
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
+    .option('--since <date>', 'only sessions begun on or after this date, as YYYY-MM-DD', day)
+    .option('--min-sessions <n>', 'the sessions a unit needs to be routed to its owner', count, 3)
+    .option('--excerpts', "include the opening of each correction you typed")
+    .action(async (dir: string | undefined, opts: { format: 'text' | 'json'; since?: string; minSessions: number; excerpts?: boolean }) => {
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      const scan = await scanRepo(fsReader(root));
+      const r = recordedAt(root);
+      const timelines = sessionTimelines(r.read, scan, r.roots, r.real);
+      const home = transcriptsHome();
+      const transcripts = new Map<string, SessionTranscript>();
+      for (const { session } of timelines) {
+        const file = findTranscript(home, session);
+        if (file) transcripts.set(session, await readTranscript(file, session));
+      }
+      const misses = findMisses(timelines, transcripts, scan, { minSessions: opts.minSessions, ...(opts.since !== undefined && { since: opts.since }) });
+      io.stdout(renderMisses(misses, opts.format, opts.excerpts ?? false));
     });
 
   program
