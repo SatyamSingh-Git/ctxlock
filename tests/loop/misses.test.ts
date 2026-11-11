@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { SessionLoad, Timeline } from '../../src/collect/sessions.js';
 import { findMisses } from '../../src/loop/misses.js';
 import type { SessionTranscript, Signal } from '../../src/loop/transcript.js';
@@ -154,6 +154,20 @@ describe('findMisses', () => {
 
     expect(m).toMatchObject({ unrecorded: 1, unattributed: 0, signals: { interrupted: 1, correction: 1 } });
     expect(m.units.map((u) => [u.id, u.kinds])).toEqual([[API, { interrupted: 1, correction: 0 }]]);
+  });
+
+  it('since is a date where the person is, not in UTC', async () => {
+    vi.stubEnv('TZ', 'Asia/Kolkata');
+    try {
+      const { scan, load, timeline } = await setup();
+      // 00:30 on 10 November in Kolkata is 19:00 on 9 November in UTC; 23:30 on the 9th is still the 9th.
+      const justAfter = { ...timeline('s1', 0, [load(API, 2)]), begun: new Date(2026, 10, 10, 0, 30).toISOString() };
+      const justBefore = { ...timeline('s2', 0, [load(API, 2)]), begun: new Date(2026, 10, 9, 23, 30).toISOString() };
+
+      expect(findMisses([justAfter, justBefore], new Map(), scan, { minSessions: 3, since: '2026-11-10' }).sessions).toBe(1);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('since leaves out sessions begun before it', async () => {

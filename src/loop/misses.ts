@@ -1,6 +1,6 @@
 import type { SessionLoad, Timeline } from '../collect/sessions.js';
 import { unitOwners } from '../registry/codeowners.js';
-import type { ScanResult } from '../scan.js';
+import { localDate, type ScanResult } from '../scan.js';
 import type { SessionTranscript, SignalKind } from './transcript.js';
 
 export interface MissSignal {
@@ -70,7 +70,8 @@ function inPlay(loads: SessionLoad[], prompts: string[], ts: string): { context:
 }
 
 export function findMisses(timelines: Timeline[], transcripts: Map<string, SessionTranscript>, scan: ScanResult, opts: { minSessions: number; since?: string }): Misses {
-  const kept = timelines.filter((t) => opts.since === undefined || t.begun >= opts.since);
+  // A date the person gives is theirs, not UTC's.
+  const kept = timelines.filter((t) => opts.since === undefined || localDate(new Date(t.begun)) >= opts.since);
   const byId = new Map(scan.units.map((u) => [u.id, u]));
   const signals = none();
   let withTranscript = 0;

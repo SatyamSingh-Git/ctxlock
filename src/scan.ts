@@ -29,7 +29,7 @@ export interface ScanResult {
   inventory: Finding[];
 }
 
-const localDate = (d = new Date()) => [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
+export const localDate = (d = new Date()) => [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
 
 export interface ScanOptions {
   agnix?: boolean;
