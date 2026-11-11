@@ -67,6 +67,8 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
     }
     expect(JSON.parse(renderMisses(MISSES, 'json', false)).units[0].signals[0]).toEqual({ session: 's1', kind: 'correction', ts: t(10), untrusted: false, context: ['rule/.claude/rules/testing.md'], turn: ['rule/.claude/rules/testing.md'] });
     expect(renderMisses(MISSES, 'text', true)).toContain('\nCorrections:\n  2026-11-10  no, use pnpm test\n');
+    const broken = { ...MISSES, units: [unit({ signals: [{ ...correction, words: 'no,\r\nuse pnpm\ntest' }] })] };
+    expect(renderMisses(broken, 'text', true)).toContain('\nCorrections:\n  2026-11-10  no, use pnpm test\n');
   });
 
   it('says when nothing is routed, when there are no signals, and when no session was recorded', () => {

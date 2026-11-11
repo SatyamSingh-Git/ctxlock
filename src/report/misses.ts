@@ -28,7 +28,7 @@ export function renderMisses(m: Misses, format: 'text' | 'json', excerpts: boole
   lines.push(...block("In every session, so exposure can't single them out", rows(m.units.filter((u) => u.everySession))));
   if (excerpts) {
     const said = new Map(m.units.flatMap((u) => u.signals).filter((s) => s.words !== undefined).map((s) => [`${s.session} ${s.ts}`, s]));
-    lines.push(...block('Corrections', [...said.values()].sort((a, b) => (a.ts < b.ts ? -1 : 1)).map((s) => [s.ts.slice(0, 10), s.words!])));
+    lines.push(...block('Corrections', [...said.values()].sort((a, b) => (a.ts < b.ts ? -1 : 1)).map((s) => [s.ts.slice(0, 10), s.words!.replace(/\r\n|\r|\n/g, ' ')])));
   }
 
   const footer = [
