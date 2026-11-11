@@ -3,7 +3,7 @@
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
 **Latest:** [14 — misses: when the agent was stopped or corrected, what was in its context](14-misses.md).
-- Plan 7, the feedback loop's first part: `ctxlock misses` reads Claude Code's transcripts for interrupts and corrections, joins each to the units in context from the collector, counts distinct sessions per unit, and drafts a redacted note to the owner of a unit that keeps turning up; 618 tests.
+- Plan 7, the feedback loop's first part: `ctxlock misses` reads Claude Code's transcripts for interrupts and corrections, joins each to the units in context from the collector, counts distinct sessions per unit, and drafts a redacted note to the owner of a unit that keeps turning up; 622 tests.
 - Live on three of the author's repositories, an independent scan found the same signals at the same times.
 - Found: the plan's rule for which units were in play joined no real signal to any unit, since files load at a session's start; and two situations hid behind one name.
 

@@ -344,7 +344,9 @@ Each also goes into `journey/decisions.md` in Task 6.
 
 ## Deferred minors (final review)
 
-Not fixed:
+All 11 were fixed on 2026-11-11 at Satyam's request, one commit each (54fad57..fb0af3b): 1 4c64b43, 2 d2e87b2, 3 44993a2, 4 be8dcd5, 5 c28860b, 6 2793caf, 7 802b5ff, 8 3072f21, 9 fb0af3b, 10 54fad57, 11 8daf158.
+
+As found:
 1. "N after web or MCP content, counted at half" counts signals, while the half weight applies to a session only when every signal in it is untrusted.
 2. Two unit IDs that map to one `draftName` keep one draft, and the second is listed as "not a ctxlock draft".
 3. A correction with line breaks breaks the indentation of the text output's "Corrections" block.

@@ -13,7 +13,7 @@
 - **`--drafts`** writes a note for each routed unit's owner, in the repository that owns it: for a synced unit, its upstream (D82). With `--excerpts`, the note holds the person's corrections, redacted and fenced.
 - **Nothing is stored and nothing is sent.** Transcripts are read where Claude Code keeps them.
 - **`sessionTimelines`** is the per-session part of `joinSessions`, now shared by `loads` and `misses`.
-- **The suite** has 618 tests.
+- **The suite** has 622 tests.
 
 ## What worked
 
@@ -52,7 +52,23 @@ Each survivor got a test, and the mutant was run again.
   - **Why it mattered:** a draft exists to be passed on, so this was the one way personal or secret text could leave the machine.
   - **The fix:** every such shape now has a rule, and a value is caught when a word like "secret" or "password" names it.
   - **One more fix:** a rerun overwrote a draft the person had edited. Its marker now carries a digest of the rest, as `build`'s record does for what it writes.
-- **Shell strings, twice more.** A test with backticks went through `bash`, which ran them as commands, and a `\n` in a `node -e` edit arrived as a real newline. Both were redone with the Edit tool, as the rule from Plan 6 says. They happened anyway.
+- **The review's eleven minors, fixed at Satyam's request ("fux these too"), one commit each.** Three changed what `misses` concludes, not just how it says it:
+  - **Web content a subagent read now halves the session too.** Subagents keep their own transcripts in the session's `subagents` folder.
+  - **What a compaction summarised away leaves context.** Claude Code writes a `compact_boundary` line, then loads its instruction files again about 60 ms later, as the collector records.
+  - **`--since` is the person's own date, not UTC's.**
+
+  The rest:
+  - every signal is now listed once in the JSON, joined to a unit or not, and units point into that list;
+  - a note's file name can't be shared by two units;
+  - a synced unit's note says its owners are the upstream's;
+  - a wrong claim, "counted at half", is gone from the text;
+  - the wording and layout fixes.
+
+  The live cross-check matched again afterwards.
+- **Shell strings, five more times.**
+  - **What happened:** a test with backticks went through `bash`, which ran them as commands; a `\n` in a `node -e` edit arrived as a real newline, twice; and in the minors' fix pass, a mutation list built in `node -e` lost its backslashes. Two of those mutants were the code unchanged, and "survived".
+  - **What was done:** each was redone with the Edit tool or a script file, as the rule from Plan 6 says. They happened anyway.
+  - **Now:** the mutation script skips, and counts as a failure, any mutant equal to the original.
 
 ## What was learned
 
