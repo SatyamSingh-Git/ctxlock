@@ -45,8 +45,10 @@ export interface Misses {
   withSignal: number;
   signals: Record<SignalKind, number>;
   untrusted: number;
-  // Signals before any unit loaded.
+  // Signals with no unit of the repository in context.
   unattributed: number;
+  // Signals before the collector's first record of their session: what was in context is unknown.
+  unrecorded: number;
   since: string | null;
   minSessions: number;
   units: UnitMiss[];
@@ -73,6 +75,7 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
   let withSignal = 0;
   let untrusted = 0;
   let unattributed = 0;
+  let unrecorded = 0;
   const reached = new Map<string, MissSignal[]>();
 
   for (const timeline of kept) {
@@ -83,6 +86,10 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
     for (const s of transcript.signals) {
       signals[s.kind]++;
       if (s.untrusted) untrusted++;
+      if (s.ts < timeline.begun) {
+        unrecorded++;
+        continue;
+      }
       const { context, turn } = inPlay(timeline.loads, transcript.prompts, s.ts);
       if (context.length === 0) unattributed++;
       const signal: MissSignal = { session: timeline.session, kind: s.kind, ts: s.ts, untrusted: s.untrusted, ...(s.words !== undefined && { words: s.words }), context, turn };
@@ -121,5 +128,5 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
   });
   units.sort((a, b) => b.sessions - a.sessions || (a.path < b.path ? -1 : 1));
 
-  return { sessions: kept.length, withTranscript, withSignal, signals, untrusted, unattributed, since: opts.since ?? null, minSessions: opts.minSessions, units };
+  return { sessions: kept.length, withTranscript, withSignal, signals, untrusted, unattributed, unrecorded, since: opts.since ?? null, minSessions: opts.minSessions, units };
 }

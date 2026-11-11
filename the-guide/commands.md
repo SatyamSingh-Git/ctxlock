@@ -300,7 +300,7 @@ Units in context when the agent was stopped or corrected:
 In every session, so exposure can't single them out:
   instructions/CLAUDE.md  2.5 sessions    loaded in 9
 
-Before any unit loaded: 1 signal
+With no unit of this repository in context: 1 signal
 Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 ```
 
@@ -312,6 +312,7 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 - **The units in context at a signal** are all those loaded in the session before it: Claude Code keeps a loaded file in context. "In its turn" counts the signals that came in the turn the unit loaded, since your prompt before it, which is the closer link. A session counts once per unit, however many signals it had, and counts half when every one of them came after the agent read a web page or an MCP tool's output.
 - **A unit reached in `--min-sessions` sessions (default 3) is routed:** it is worth its owner's attention. For a unit synced from an upstream, the owner is in that upstream, which `from` names.
 - **Units loaded in every session** are listed apart: exposure alone can't tell them from the rest.
+- **Signals it can't join** are counted: those with no unit of this repository in context, and those from before the collector recorded the session, when what was in context is unknown.
 
 **Drafts:** `--drafts <folder>` writes a note for each routed unit's owner, one Markdown file per unit.
 - **What a note holds:** where the unit belongs, its owners, the counts, the dates and its digest.

@@ -30,6 +30,7 @@ const MISSES: Misses = {
   signals: { interrupted: 1, correction: 2 },
   untrusted: 1,
   unattributed: 1,
+  unrecorded: 2,
   since: null,
   minSessions: 3,
   units: [
@@ -52,7 +53,8 @@ Units in context when the agent was stopped or corrected:
 In every session, so exposure can't single them out:
   instructions/CLAUDE.md  2.5 sessions    loaded in 9
 
-Before any unit loaded: 1 signal
+With no unit of this repository in context: 1 signal
+Before the collector recorded the session: 2 signals
 Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 `);
   });
@@ -67,7 +69,7 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
   });
 
   it('says when nothing is routed, when there are no signals, and when no session was recorded', () => {
-    const quiet: Misses = { ...MISSES, withSignal: 0, signals: { interrupted: 0, correction: 0 }, untrusted: 0, unattributed: 0, units: [], since: '2026-11-10' };
+    const quiet: Misses = { ...MISSES, withSignal: 0, signals: { interrupted: 0, correction: 0 }, untrusted: 0, unattributed: 0, unrecorded: 0, units: [], since: '2026-11-10' };
     expect(renderMisses(quiet, 'text', false)).toBe(`ctxlock misses · 9 sessions, 7 with a transcript · since 2026-11-10
 
 Signals: none

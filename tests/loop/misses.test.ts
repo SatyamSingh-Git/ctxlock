@@ -147,6 +147,14 @@ describe('findMisses', () => {
     expect(m).toMatchObject({ sessions: 3, withTranscript: 2, withSignal: 1, signals: { interrupted: 0, correction: 1 }, unattributed: 1, units: [] });
   });
 
+  it('a signal before the collector recorded its session is counted apart: what was in context then is unknown', async () => {
+    const { scan, load, timeline } = await setup();
+    const m = findMisses([timeline('s1', 10, [load(API, 10)])], new Map([said('s1', [1, 5, 12], [{ kind: 'correction', ts: t(5) }, { kind: 'interrupted', ts: t(13) }])]), scan, { minSessions: 3 });
+
+    expect(m).toMatchObject({ unrecorded: 1, unattributed: 0, signals: { interrupted: 1, correction: 1 } });
+    expect(m.units.map((u) => [u.id, u.kinds])).toEqual([[API, { interrupted: 1, correction: 0 }]]);
+  });
+
   it('since leaves out sessions begun before it', async () => {
     const { scan, load, timeline } = await setup();
     const early = { ...timeline('s1', 0, [load(API, 2)]), begun: '2026-11-09T10:00:00.000Z' };

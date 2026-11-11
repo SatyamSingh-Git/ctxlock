@@ -33,7 +33,8 @@ export function renderMisses(m: Misses, format: 'text' | 'json', excerpts: boole
   }
 
   const footer = [
-    ...(m.unattributed ? [`Before any unit loaded: ${plural(m.unattributed, 'signal')}`] : []),
+    ...(m.unattributed ? [`With no unit of this repository in context: ${plural(m.unattributed, 'signal')}`] : []),
+    ...(m.unrecorded ? [`Before the collector recorded the session: ${plural(m.unrecorded, 'signal')}`] : []),
     ...(m.units.length === 0
       ? []
       : m.units.some((u) => u.routed)
