@@ -6,6 +6,7 @@ const t = (day: number) => `2026-11-${String(day).padStart(2, '0')}T10:00:00.000
 const unit = (over: Partial<UnitMiss>): UnitMiss => ({
   id: 'rule/.claude/rules/testing.md',
   path: '.claude/rules/testing.md',
+  digest: 'sha256:' + 'a'.repeat(64),
   owners: [],
   upstream: null,
   sessions: 1,

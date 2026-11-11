@@ -285,7 +285,7 @@ These sessions match no consumer in ctxlock.yaml. Declare one so impact can name
 Lists the units that were in play when you stopped or corrected Claude Code. It reads the transcripts Claude Code keeps, in `~/.claude/projects` or `$CLAUDE_CONFIG_DIR/projects`, for the sessions the collector recorded in this repository. It joins what it finds to the units the collector saw load. It stores nothing, and sends nothing anywhere. [Misses](misses.md) has the details.
 
 ```
-ctxlock misses [dir] [--format text|json] [--since YYYY-MM-DD] [--min-sessions <n>] [--excerpts]
+ctxlock misses [dir] [--format text|json] [--since YYYY-MM-DD] [--min-sessions <n>] [--excerpts] [--drafts <folder>]
 ```
 
 ```
@@ -312,6 +312,12 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 - **The units in a signal's turn** are those loaded since your prompt before it. A session counts once per unit, however many signals it had, and counts half when every one of them came after the agent read a web page or an MCP tool's output.
 - **A unit reached in `--min-sessions` sessions (default 3) is routed:** it is worth its owner's attention. For a unit synced from an upstream, the owner is in that upstream, which `from` names.
 - **Units loaded in every session** are listed apart: exposure alone can't tell them from the rest.
+
+**Drafts:** `--drafts <folder>` writes a note for each routed unit's owner, one Markdown file per unit.
+- **What a note holds:** where the unit belongs, its owners, the counts, the dates and its digest.
+- **With `--excerpts`:** it also holds the opening of each correction you typed, with tokens, emails, home paths and URL credentials redacted, inside a fence so nothing in it renders or mentions anyone.
+- **What it never touches:** a file in the folder that doesn't start with ctxlock's marker line is someone's own, and is left as it is.
+- **Nothing is sent:** the notes are for you to read, and to pass on if they hold up.
 
 **What it holds:**
 - Your words appear only with `--excerpts`.

@@ -20,7 +20,7 @@ const SCP = /^[\w.-]+@[\w.-]+:/;
 
 // What the report may say of the repository: a network URL without the user, password, query or
 // fragment it can carry a token in; for a local origin, only the folder's name.
-function shareable(repo: string): string {
+export function shareable(repo: string): string {
   if (SCP.test(repo)) return repo;
   if (URL.canParse(repo) && NETWORK.has(new URL(repo).protocol)) {
     const url = new URL(repo);

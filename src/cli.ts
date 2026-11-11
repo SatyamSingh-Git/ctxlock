@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,8 +9,9 @@ import { findDrift } from './build/drift.js';
 import { GENERATED_FILE, generatedStatus } from './build/generated.js';
 import { BuildError, suggestIndex } from './build/index-suggest.js';
 import { eventsHome, readEvents } from './collect/events.js';
-import { buildReport } from './collect/report.js';
+import { buildReport, shareable } from './collect/report.js';
 import { joinSessions, sessionTimelines } from './collect/sessions.js';
+import { DRAFT_MARK, draftName, renderDraft } from './loop/draft.js';
 import { findMisses } from './loop/misses.js';
 import { findTranscript, readTranscript, type SessionTranscript, transcriptsHome } from './loop/transcript.js';
 import { renderMisses } from './report/misses.js';
@@ -305,8 +306,9 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
     .option('--since <date>', 'only sessions begun on or after this date, as YYYY-MM-DD', day)
     .option('--min-sessions <n>', 'the sessions a unit needs to be routed to its owner', count, 3)
-    .option('--excerpts', "include the opening of each correction you typed")
-    .action(async (dir: string | undefined, opts: { format: 'text' | 'json'; since?: string; minSessions: number; excerpts?: boolean }) => {
+    .option('--excerpts', 'include the opening of each correction you typed, redacted in drafts')
+    .option('--drafts <folder>', "write a note to each routed unit's owner into this folder")
+    .action(async (dir: string | undefined, opts: { format: 'text' | 'json'; since?: string; minSessions: number; excerpts?: boolean; drafts?: string }) => {
       const root = resolve(dir ?? '.');
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
       const scan = await scanRepo(fsReader(root));
@@ -320,6 +322,32 @@ export async function main(argv: string[], io: Io): Promise<number> {
       }
       const misses = findMisses(timelines, transcripts, scan, { minSessions: opts.minSessions, ...(opts.since !== undefined && { since: opts.since }) });
       io.stdout(renderMisses(misses, opts.format, opts.excerpts ?? false));
+      if (opts.drafts === undefined) return;
+
+      // JSON on stdout stays parseable.
+      const say = opts.format === 'json' ? io.stderr : io.stdout;
+      const routed = misses.units.filter((u) => u.routed);
+      if (routed.length === 0) {
+        say('\nNo unit is routed, so no draft was written.\n');
+        return;
+      }
+      const folder = resolve(opts.drafts);
+      mkdirSync(folder, { recursive: true });
+      const top = await gitTopLevel(root);
+      const here = (top ? await gitOrigin(top) : null) ?? basename(real(top ?? root));
+      const written: string[] = [];
+      const left: string[] = [];
+      for (const u of routed) {
+        const file = join(folder, draftName(u.id));
+        if (existsSync(file) && readFileSync(file, 'utf8').split('\n')[0] !== DRAFT_MARK(u.id)) {
+          left.push(file);
+          continue;
+        }
+        writeFileSync(file, renderDraft(u, shareable(u.upstream?.repo ?? here), opts.excerpts ?? false));
+        written.push(file);
+      }
+      const list = (title: string, files: string[]) => (files.length ? ['', `${title}:`, ...files.map((f) => `  ${f}`)] : []);
+      say(`${[...list('Drafts written', written), ...list('Left as it is, not a ctxlock draft', left)].join('\n')}\n`);
     });
 
   program

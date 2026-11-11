@@ -16,6 +16,8 @@ export interface MissSignal {
 export interface UnitMiss {
   id: string;
   path: string;
+  // Its digest as scanned now.
+  digest: string;
   owners: string[];
   // From ctxlock.lock, for a unit synced from an upstream: its owner is there.
   upstream: { name: string; repo: string } | null;
@@ -94,6 +96,7 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
     return {
       id,
       path: unit.path,
+      digest: unit.digest,
       owners: unitOwners(unit, scan.registry, scan.codeowners),
       upstream: pinned ? { name: pinned.name, repo: pinned.repo } : null,
       sessions: weight,

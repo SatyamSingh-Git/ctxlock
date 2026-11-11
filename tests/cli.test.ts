@@ -793,6 +793,28 @@ describe('ctxlock misses', () => {
     expect(stdout).toContain('ctxlock misses · no Claude Code sessions recorded for this repository');
   });
 
+  it("--drafts writes one file per routed unit, rewrites its own drafts, and leaves a person's file of the same name", async () => {
+    const dir = recorded((real) => real);
+    const drafts = join(tempDir(), 'drafts');
+    const rule = join(drafts, 'rule-.claude-rules-api.md.md');
+    const claude = join(drafts, 'instructions-CLAUDE.md.md');
+
+    const first = await cli('misses', dir, '--min-sessions', '1', '--drafts', drafts);
+    expect(first.code).toBe(0);
+    expect(first.stdout).toContain(`Drafts written:\n  ${rule}\n  ${claude}\n`);
+    expect(readFileSync(rule, 'utf8').startsWith('<!-- ctxlock:miss rule/.claude/rules/api.md -->\n')).toBe(true);
+    expect(readFileSync(rule, 'utf8')).not.toContain('v2 endpoint');
+
+    writeFileSync(claude, 'My own notes.\n');
+    const again = await cli('misses', dir, '--min-sessions', '1', '--drafts', drafts, '--excerpts');
+    expect(again.stdout).toContain(`Drafts written:\n  ${rule}\n`);
+    expect(again.stdout).toContain(`Left as it is, not a ctxlock draft:\n  ${claude}\n`);
+    expect(readFileSync(claude, 'utf8')).toBe('My own notes.\n');
+    expect(readFileSync(rule, 'utf8')).toContain('no, the v2 endpoint');
+
+    expect((await cli('misses', dir, '--drafts', drafts)).stdout).toContain('No unit is routed, so no draft was written.');
+  });
+
   it('a bad --since is exit 2', async () => {
     const dir = tempDir();
     for (const since of ['yesterday', '2026-13-01', '2026-11-1']) expect((await cli('misses', dir, '--since', since)).code, since).toBe(2);
