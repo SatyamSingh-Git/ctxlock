@@ -1,6 +1,6 @@
 import { createReadStream, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
 export type SignalKind = 'interrupted' | 'correction';
@@ -62,13 +62,39 @@ type Block = { type?: string; text?: string; name?: string };
 const texts = (content: unknown): string[] =>
   typeof content === 'string' ? [content] : Array.isArray(content) ? (content as Block[]).filter((b) => b.type === 'text' && typeof b.text === 'string').map((b) => b.text!) : [];
 
+const lines = (file: string) => createInterface({ input: createReadStream(file), crlfDelay: Infinity });
+const readsUntrusted = (line: Line) =>
+  line.type === 'assistant' && Array.isArray(line.message?.content) && (line.message.content as Block[]).some((b) => b.type === 'tool_use' && typeof b.name === 'string' && untrustedTool(b.name));
+
+// A subagent keeps its own transcript beside the session's, and what it read reaches the session in its
+// report: the earliest web or MCP read there marks every signal after it.
+async function firstUntrustedInSubagents(file: string, session: string): Promise<string | null> {
+  const folder = join(dirname(file), session, 'subagents');
+  if (!statSync(folder, { throwIfNoEntry: false })?.isDirectory()) return null;
+  let first: string | null = null;
+  for (const name of readdirSync(folder).filter((n) => n.endsWith('.jsonl'))) {
+    for await (const text of lines(join(folder, name))) {
+      if (!text.includes('"type":"assistant"')) continue;
+      let line: Line;
+      try {
+        line = JSON.parse(text) as Line;
+      } catch {
+        continue;
+      }
+      if (typeof line.timestamp === 'string' && readsUntrusted(line) && (first === null || line.timestamp < first)) first = line.timestamp;
+    }
+  }
+  return first;
+}
+
 // Transcripts run past 100 MB, so they are streamed. Only user and assistant lines matter.
 export async function readTranscript(file: string, session: string): Promise<SessionTranscript> {
   const prompts: string[] = [];
   const signals: Signal[] = [];
+  const fromSubagent = await firstUntrustedInSubagents(file, session);
   let answered = false;
   let untrusted = false;
-  for await (const text of createInterface({ input: createReadStream(file), crlfDelay: Infinity })) {
+  for await (const text of lines(file)) {
     if (!text.includes('"type":"user"') && !text.includes('"type":"assistant"')) continue;
     let line: Line;
     try {
@@ -77,13 +103,16 @@ export async function readTranscript(file: string, session: string): Promise<Ses
       // The session is still writing its last line.
       continue;
     }
-    if (line.isSidechain || typeof line.timestamp !== 'string') continue;
+    if (typeof line.timestamp !== 'string') continue;
+    // Older versions write a subagent's lines into the session's own file.
+    if (readsUntrusted(line)) untrusted = true;
+    if (line.isSidechain) continue;
     const ts = line.timestamp;
     const content = line.message?.content;
+    if (fromSubagent !== null && fromSubagent <= ts) untrusted = true;
 
     if (line.type === 'assistant') {
       answered = true;
-      if (Array.isArray(content) && (content as Block[]).some((b) => b.type === 'tool_use' && typeof b.name === 'string' && untrustedTool(b.name))) untrusted = true;
       continue;
     }
     if (line.type !== 'user') continue;

@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CORRECTION, findTranscript, readTranscript, transcriptsHome } from '../../src/loop/transcript.js';
 import { cleanup, tempDir } from '../helpers/repo.js';
@@ -90,6 +90,23 @@ describe('readTranscript', () => {
     }
     const file = transcript([typed(1, 'start'), tool(2, 'Read'), interrupt(3)]);
     expect((await readTranscript(file, 's1')).signals[0]!.untrusted).toBe(false);
+  });
+
+  it("a signal after a subagent's web fetch is untrusted too, read from the session's subagent transcripts", async () => {
+    const file = transcript([typed(1, 'start'), said(2), interrupt(3), interrupt(5)]);
+    const subagents = join(dirname(file), 's1', 'subagents');
+    mkdirSync(subagents, { recursive: true });
+    writeFileSync(join(subagents, 'agent-a1.jsonl'), `${JSON.stringify({ ...tool(4, 'WebFetch'), isSidechain: true })}\n`);
+    writeFileSync(join(subagents, 'agent-a1.meta.json'), '{}');
+
+    expect((await readTranscript(file, 's1')).signals.map((s) => s.untrusted)).toEqual([false, true]);
+    // A second subagent, read after the first, fetched earlier still.
+    writeFileSync(join(subagents, 'agent-b2.jsonl'), `${JSON.stringify({ ...tool(2, 'WebSearch'), isSidechain: true })}\n`);
+    expect((await readTranscript(file, 's1')).signals.map((s) => s.untrusted)).toEqual([true, true]);
+
+    // Older versions write the subagent's lines into the session's own file.
+    const inline = transcript([typed(1, 'start'), said(2), interrupt(3), { ...tool(4, 'mcp__docs__search'), isSidechain: true }, interrupt(5)]);
+    expect((await readTranscript(inline, 's1')).signals.map((s) => s.untrusted)).toEqual([false, true]);
   });
 
   it('a last line cut short is skipped and the rest is read', async () => {
