@@ -13,6 +13,8 @@ export interface MissSignal {
   context: string[];
   // Of those, the ones loaded in the signal's own turn.
   turn: string[];
+  // Before the collector's first record of the session, so context is unknown and joined to nothing.
+  unrecorded?: true;
 }
 
 export interface UnitMiss {
@@ -53,6 +55,8 @@ export interface Misses {
   unrecorded: number;
   since: string | null;
   minSessions: number;
+  // Every signal, joined to a unit or not, in the order the sessions are read.
+  found: MissSignal[];
   units: UnitMiss[];
 }
 
@@ -82,6 +86,7 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
   let untrusted = 0;
   let unattributed = 0;
   let unrecorded = 0;
+  const found: MissSignal[] = [];
   const reached = new Map<string, MissSignal[]>();
 
   for (const timeline of kept) {
@@ -92,13 +97,16 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
     for (const s of transcript.signals) {
       signals[s.kind]++;
       if (s.untrusted) untrusted++;
+      const said = { session: timeline.session, kind: s.kind, ts: s.ts, untrusted: s.untrusted, ...(s.words !== undefined && { words: s.words }) };
       if (s.ts < timeline.begun) {
         unrecorded++;
+        found.push({ ...said, context: [], turn: [], unrecorded: true });
         continue;
       }
       const { context, turn } = inPlay(timeline.loads, transcript, s.ts);
       if (context.length === 0) unattributed++;
-      const signal: MissSignal = { session: timeline.session, kind: s.kind, ts: s.ts, untrusted: s.untrusted, ...(s.words !== undefined && { words: s.words }), context, turn };
+      const signal: MissSignal = { ...said, context, turn };
+      found.push(signal);
       for (const id of context) reached.set(id, [...(reached.get(id) ?? []), signal]);
     }
   }
@@ -136,5 +144,5 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
   });
   units.sort((a, b) => b.sessions - a.sessions || (a.path < b.path ? -1 : 1));
 
-  return { sessions: kept.length, withTranscript, withSignal, signals, untrusted, unattributed, unrecorded, since: opts.since ?? null, minSessions: opts.minSessions, units };
+  return { sessions: kept.length, withTranscript, withSignal, signals, untrusted, unattributed, unrecorded, since: opts.since ?? null, minSessions: opts.minSessions, found, units };
 }

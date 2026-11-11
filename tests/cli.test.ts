@@ -765,7 +765,7 @@ describe('ctxlock misses', () => {
       ['rule/.claude/rules/api.md', 1, { interrupted: 1, correction: 1 }],
       ['instructions/CLAUDE.md', 1, { interrupted: 1, correction: 1 }],
     ]);
-    expect(m.units[0].signals.map((s: { words?: string }) => s.words)).toEqual([undefined, 'no, the v2 endpoint']);
+    expect(m.found.map((s: { words?: string }) => s.words)).toEqual([undefined, 'no, the v2 endpoint']);
     expect((await cli('misses', dir, '--min-sessions', '1')).stdout).toContain('Routed at 1 session or more: 2 units.');
   });
 

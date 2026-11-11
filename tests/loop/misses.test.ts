@@ -168,6 +168,11 @@ describe('findMisses', () => {
     const m = findMisses([timeline('s1', 10, [load(API, 10)])], new Map([said('s1', [1, 5, 12], [{ kind: 'correction', ts: t(5) }, { kind: 'interrupted', ts: t(13) }])]), scan, { minSessions: 3 });
 
     expect(m).toMatchObject({ unrecorded: 1, unattributed: 0, signals: { interrupted: 1, correction: 1 } });
+    // Every signal is listed, joined or not.
+    expect(m.found.map((s) => [s.kind, s.ts, s.unrecorded ?? false, s.context])).toEqual([
+      ['correction', t(5), true, []],
+      ['interrupted', t(13), false, [API]],
+    ]);
     expect(m.units.map((u) => [u.id, u.kinds])).toEqual([[API, { interrupted: 1, correction: 0 }]]);
   });
 
