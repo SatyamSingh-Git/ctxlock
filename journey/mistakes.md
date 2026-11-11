@@ -290,3 +290,13 @@ During Plan 6, `impact --locks` matched a lock's upstream folder against this re
 *Cost:* one red CI run on `main`, found within the hour and fixed in its own commit. A junction reproduced it locally, so the fix had a test that failed first.
 
 *Changed:* any new code that compares folders takes a real-path function, as `joinSessions` and now `pinnedBy` do, and its test reaches one folder through a link.
+
+### A rule for "in play" checked against transcripts, but not against when files load
+
+Plan 7's first rule joined a signal to the units loaded in its turn, since the person's prompt before it. Before writing the plan, the transcripts were checked closely: how a typed prompt is marked, what an interrupt looks like, how often the phrase list matched. When the collector records loads was never checked. The first live run joined none of 6 real signals to a unit: `CLAUDE.md` and rules load at a session's start, and people stop the agent many turns later, while the file is still in context.
+
+*Cause:* the rule was reasoned from what a turn means, not from the data it would meet. The collector's events were already on disk, a short look away.
+
+*Cost:* two fix commits in the plan's last task, and a reversed decision (D80). The live run caught it before any review or release.
+
+*Changed:* before a plan fixes a rule that joins two sources, it checks a few real records of each against the other, timestamps included.

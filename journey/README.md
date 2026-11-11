@@ -2,7 +2,12 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [13 — propagation: one skill, many repositories, pinned](13-propagation.md).
+**Latest:** [14 — misses: when the agent was stopped or corrected, what was in its context](14-misses.md).
+- Plan 7, the feedback loop's first part: `ctxlock misses` reads Claude Code's transcripts for interrupts and corrections, joins each to the units in context from the collector, counts distinct sessions per unit, and drafts a redacted note to the owner of a unit that keeps turning up; 615 tests.
+- Live on three of the author's repositories, an independent scan found the same signals at the same times.
+- Found: the plan's rule for which units were in play joined no real signal to any unit, since files load at a session's start; and two situations hid behind one name.
+
+**Earlier:** [13 — propagation: one skill, many repositories, pinned](13-propagation.md).
 - Plan 6: `upstream:` in `ctxlock.yaml`, `ctxlock sync` and `ctxlock.lock`, `L16-lock`, tiers from the lock, `impact --locks` across repositories, `ctxlock report`, and a workflow template; 582 tests.
 - Live on an org repository and two consumers, a rule edited upstream named only the consumer that takes it, and a hand edit was refused by sync and flagged by `L16`.
 - Found: the final review broke sync's central promise twice, through a link and a file name in the upstream; Windows 8.3 names broke CI again, in new code; and the live demo caught a lock that moved on every org commit.

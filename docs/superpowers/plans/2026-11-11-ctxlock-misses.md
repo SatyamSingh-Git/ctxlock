@@ -26,12 +26,12 @@ Satyam asked on 2026-11-11 to "start the work, move to next part" without design
 
 | Task | Status | Commits |
 |---|---|---|
-| 1 | Not started | |
-| 2 | Not started | |
-| 3 | Not started | |
-| 4 | Not started | |
-| 5 | Not started | |
-| 6 | Not started | |
+| 1 | Done | 4bc1996 |
+| 2 | Done | 23ecef6 |
+| 3 | Done | b9b9e6f |
+| 4 | Done | b1829ff |
+| 5 | Done | f34e462 |
+| 6 | Done | db10ae3 (fix), 7ac841f (fix), and the docs commit |
 
 ## What was checked before writing this plan
 
