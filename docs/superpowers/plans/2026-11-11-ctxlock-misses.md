@@ -31,7 +31,7 @@ Satyam asked on 2026-11-11 to "start the work, move to next part" without design
 | 3 | Done | b9b9e6f |
 | 4 | Done | b1829ff |
 | 5 | Done | f34e462 |
-| 6 | Done | db10ae3 (fix), 7ac841f (fix), and the docs commit |
+| 6 | Done | db10ae3 (fix), 7ac841f (fix), 29ccc79; final review fixes c3f6f4e, b5d50b7 |
 
 ## What was checked before writing this plan
 
@@ -341,6 +341,21 @@ Each also goes into `journey/decisions.md` in Task 6.
   - **`journey/14-misses.md`.**
   - **`journey/decisions.md`:** D77–D82.
 - [ ] **Step 3: Run** `npm run ci`. Expected: PASS. **Commit** `docs: ctxlock misses in the guide, the live run, and D77-D82`, push, and watch both operating systems' CI.
+
+## Deferred minors (final review)
+
+Not fixed:
+1. "N after web or MCP content, counted at half" counts signals, while the half weight applies to a session only when every signal in it is untrusted.
+2. Two unit IDs that map to one `draftName` keep one draft, and the second is listed as "not a ctxlock draft".
+3. A correction with line breaks breaks the indentation of the text output's "Corrections" block.
+4. `--since 2026-13-01` prints "Invalid time value" instead of the usage message. The exit code, 2, is right.
+5. `--since` compares UTC dates.
+6. Untrusted content read by a subagent never halves the session.
+7. Units loaded before a compaction still count as in context after it.
+8. Signals joined to no unit have no times or words in the JSON.
+9. A synced unit's draft lists this repository's owners next to the upstream it belongs in.
+10. The per-session trust map is computed in both `misses.ts` and `draft.ts`, and `plural` now has a third copy.
+11. The JSON repeats every signal, with its context, under every unit in that context.
 
 ## After this plan
 

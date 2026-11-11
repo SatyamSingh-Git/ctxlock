@@ -13,7 +13,7 @@
 - **`--drafts`** writes a note for each routed unit's owner, in the repository that owns it: for a synced unit, its upstream (D82). With `--excerpts`, the note holds the person's corrections, redacted and fenced.
 - **Nothing is stored and nothing is sent.** Transcripts are read where Claude Code keeps them.
 - **`sessionTimelines`** is the per-session part of `joinSessions`, now shared by `loads` and `misses`.
-- **The suite** has 615 tests.
+- **The suite** has 618 tests.
 
 ## What worked
 
@@ -47,6 +47,11 @@ Each survivor got a test, and the mutant was run again.
   - **The fix:** every unit loaded before the signal is in play. "In its turn" is kept as the closer link (D80a).
   - **Why it hurts:** the transcripts were checked closely before the plan, and the collector's timing was not ([mistakes](mistakes.md)).
 - **One name for two situations.** Signals that joined nothing were all "before any unit loaded". In ctxlock's own repository, which has no `CLAUDE.md` of its own, no unit is ever in context. In the other two, the signals came before the collector was recording at all. Now each is counted under its own name, and a signal from before recording is joined to nothing.
+- **The final review found the redaction thinner than the guide said.**
+  - **What got through:** a fresh reviewer showed paths whose folders hold spaces keeping everything after the space, a user's name and a client's folder included. AWS secret keys, Slack webhooks, GitLab tokens, shares and WSL paths passed unchanged, and so did a private key cut short at 160 characters.
+  - **Why it mattered:** a draft exists to be passed on, so this was the one way personal or secret text could leave the machine.
+  - **The fix:** every such shape now has a rule, and a value is caught when a word like "secret" or "password" names it.
+  - **One more fix:** a rerun overwrote a draft the person had edited. Its marker now carries a digest of the rest, as `build`'s record does for what it writes.
 - **Shell strings, twice more.** A test with backticks went through `bash`, which ran them as commands, and a `\n` in a `node -e` edit arrived as a real newline. Both were redone with the Edit tool, as the rule from Plan 6 says. They happened anyway.
 
 ## What was learned
