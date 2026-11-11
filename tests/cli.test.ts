@@ -826,7 +826,7 @@ describe('ctxlock misses', () => {
   it('a bad --since is exit 2', async () => {
     const dir = tempDir();
     for (const since of ['yesterday', '2026-13-01', '2026-11-1']) expect((await cli('misses', dir, '--since', since)).code, since).toBe(2);
-    expect((await cli('misses', dir, '--since', 'yesterday')).stderr).toContain('expected a date as YYYY-MM-DD');
+    for (const since of ['yesterday', '2026-13-01', '2026-00-10']) expect((await cli('misses', dir, '--since', since)).stderr, since).toContain('expected a date as YYYY-MM-DD');
     expect((await cli('misses', dir, '--since', '2026-11-01')).code).toBe(0);
   });
 });

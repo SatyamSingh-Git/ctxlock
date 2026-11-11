@@ -90,7 +90,8 @@ function sessionsAt(root: string, scan: ScanResult) {
 }
 
 function day(value: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || new Date(value).toISOString().slice(0, 10) !== value) throw new InvalidArgumentError('expected a date as YYYY-MM-DD');
+  const at = new Date(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(at.getTime()) || at.toISOString().slice(0, 10) !== value) throw new InvalidArgumentError('expected a date as YYYY-MM-DD');
   return value;
 }
 
