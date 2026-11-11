@@ -317,7 +317,7 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 **Drafts:** `--drafts <folder>` writes a note for each routed unit's owner, one Markdown file per unit.
 - **What a note holds:** where the unit belongs, its owners, the counts, the dates and its digest.
 - **With `--excerpts`:** it also holds the opening of each correction you typed, with tokens, emails, home paths and URL credentials redacted, inside a fence so nothing in it renders or mentions anyone.
-- **What it never touches:** a file in the folder that doesn't start with ctxlock's marker line is someone's own, and is left as it is.
+- **What it never touches:** a note edited since ctxlock wrote it, and a file in the folder that doesn't start with ctxlock's marker line, which is someone's own. Both are left as they are and listed.
 - **Nothing is sent:** the notes are for you to read, and to pass on if they hold up.
 
 **What it holds:**

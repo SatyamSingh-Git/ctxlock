@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { UnitMiss } from '../../src/loop/misses.js';
-import { DRAFT_MARK, draftName, renderDraft } from '../../src/loop/draft.js';
+import { draftName, draftState, renderDraft } from '../../src/loop/draft.js';
 
 const t = (day: number) => `2026-11-${String(day).padStart(2, '0')}T10:00:00.000Z`;
 const ID = 'rule/.claude/rules/testing.md';
@@ -27,7 +27,7 @@ describe('renderDraft', () => {
   it("a draft names the unit's owners and repository, counts sessions and signals, and holds no words without excerpts", () => {
     const draft = renderDraft(MISS, 'https://github.com/acme/web.git', false);
 
-    expect(draft.split('\n')[0]).toBe(DRAFT_MARK(ID));
+    expect(draft.split('\n')[0]).toMatch(/^<!-- ctxlock:miss rule\/\.claude\/rules\/testing\.md \S+ -->$/);
     expect(draft).toContain('# ctxlock: `rule/.claude/rules/testing.md` was in play when the agent was stopped or corrected');
     expect(draft).toContain('- **Belongs in:** `https://github.com/acme/web.git`');
     expect(draft).toContain('- **Owners:** @platform');
@@ -56,6 +56,18 @@ describe('renderDraft', () => {
     const draft = renderDraft({ ...MISS, owners: [], upstream: { name: 'platform', repo: 'https://github.com/acme/context.git' } }, 'https://github.com/acme/context.git', false);
 
     expect(draft).toContain('- **Belongs in:** `https://github.com/acme/context.git`, the upstream `platform` this repository syncs it from');
+  });
+});
+
+describe('draftState', () => {
+  it("tells a draft as ctxlock wrote it from one edited since, and from a file that is not this unit's draft", () => {
+    const draft = renderDraft(MISS, 'web', false);
+
+    expect(draftState(draft, ID)).toBe('unedited');
+    expect(draftState(draft.replaceAll('\n', '\r\n'), ID)).toBe('unedited');
+    expect(draftState(draft.replace('These are signals', 'Fixed in #12. These are signals'), ID)).toBe('edited');
+    expect(draftState(draft, 'rule/.claude/rules/other.md')).toBe('other');
+    expect(draftState('My own notes.\n', ID)).toBe('other');
   });
 });
 

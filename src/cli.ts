@@ -11,7 +11,7 @@ import { BuildError, suggestIndex } from './build/index-suggest.js';
 import { eventsHome, readEvents } from './collect/events.js';
 import { buildReport, shareable } from './collect/report.js';
 import { joinSessions, sessionTimelines } from './collect/sessions.js';
-import { DRAFT_MARK, draftName, renderDraft } from './loop/draft.js';
+import { draftName, draftState, renderDraft } from './loop/draft.js';
 import { findMisses } from './loop/misses.js';
 import { findTranscript, readTranscript, type SessionTranscript, transcriptsHome } from './loop/transcript.js';
 import { renderMisses } from './report/misses.js';
@@ -336,18 +336,21 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const top = await gitTopLevel(root);
       const here = (top ? await gitOrigin(top) : null) ?? basename(real(top ?? root));
       const written: string[] = [];
-      const left: string[] = [];
+      const left = { edited: [] as string[], other: [] as string[] };
       for (const u of routed) {
         const file = join(folder, draftName(u.id));
-        if (existsSync(file) && readFileSync(file, 'utf8').split('\n')[0] !== DRAFT_MARK(u.id)) {
-          left.push(file);
+        const state = existsSync(file) ? draftState(readFileSync(file, 'utf8'), u.id) : 'unedited';
+        if (state !== 'unedited') {
+          left[state].push(file);
           continue;
         }
         writeFileSync(file, renderDraft(u, shareable(u.upstream?.repo ?? here), opts.excerpts ?? false));
         written.push(file);
       }
       const list = (title: string, files: string[]) => (files.length ? ['', `${title}:`, ...files.map((f) => `  ${f}`)] : []);
-      say(`${[...list('Drafts written', written), ...list('Left as it is, not a ctxlock draft', left)].join('\n')}\n`);
+      say(
+        `${[...list('Drafts written', written), ...list('Left as it is, edited since ctxlock wrote it', left.edited), ...list('Left as it is, not a ctxlock draft', left.other)].join('\n')}\n`,
+      );
     });
 
   program

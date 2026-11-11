@@ -75,7 +75,7 @@ These are signals, not a diagnosis: the unit was in context when the agent was s
 ```
 
 - **Where it belongs:** the owners come from `ctxlock.yaml` or CODEOWNERS. A unit synced from an upstream ([propagation](propagation.md)) belongs in that upstream, so its note names that repository.
-- **A file in the folder without the marker line** is someone's own, and is left alone.
+- **What a rerun rewrites:** only a note still exactly as ctxlock wrote it. Its marker line carries a digest of the rest. A note you have edited since, say to add who you sent it to, is left as it is and listed, and so is a file without the marker, which is someone's own. To have ctxlock rewrite an edited note, delete it.
 - **With `--excerpts`,** each note also has the opening of each correction you typed:
   - **Redacted:**
     - **Tokens, by the shapes [gitleaks](https://github.com/gitleaks/gitleaks) uses:** GitHub, GitLab, Anthropic, OpenAI and Slack tokens, Slack webhooks, AWS access key IDs, JWTs, and private keys, even cut short.

@@ -1,9 +1,17 @@
 import { code } from '../report/markdown.js';
+import { lfDigest } from '../units/digest.js';
 import type { UnitMiss } from './misses.js';
 import { redact } from './redact.js';
 
-// The first line of every draft: a file without it in the drafts folder is someone's own, and stays.
-export const DRAFT_MARK = (id: string) => `<!-- ctxlock:miss ${id} -->`;
+// The first line of every draft, with the digest of what follows it. A file in the drafts folder without
+// it is someone's own, and one whose text no longer matches was edited since: both stay as they are.
+const MARK = /^<!-- ctxlock:miss (\S+) (\S+) -->\r?\n/;
+
+export function draftState(text: string, id: string): 'unedited' | 'edited' | 'other' {
+  const mark = MARK.exec(text);
+  if (!mark || mark[1] !== id) return 'other';
+  return lfDigest(Buffer.from(text.slice(mark[0].length))) === mark[2] ? 'unedited' : 'edited';
+}
 
 export const draftName = (id: string) => `${id.replace(/[^A-Za-z0-9._-]/g, '-')}.md`;
 
@@ -25,7 +33,6 @@ export function renderDraft(m: UnitMiss, repo: string, excerpts: boolean): strin
   const [first, last] = [m.first.slice(0, 10), m.last.slice(0, 10)];
 
   const lines = [
-    DRAFT_MARK(m.id),
     `# ctxlock: ${code(m.id)} was in play when the agent was stopped or corrected`,
     '',
     `- **Belongs in:** ${code(repo)}${m.upstream ? `, the upstream ${code(m.upstream.name)} this repository syncs it from` : ''}`,
@@ -44,5 +51,6 @@ export function renderDraft(m: UnitMiss, repo: string, excerpts: boolean): strin
     '',
     'These are signals, not a diagnosis: the unit was in context when the agent was stopped or corrected. Check whether it says something wrong, leaves something out, or was not followed.',
   );
-  return `${lines.join('\n')}\n`;
+  const body = `${lines.join('\n')}\n`;
+  return `<!-- ctxlock:miss ${m.id} ${lfDigest(Buffer.from(body))} -->\n${body}`;
 }

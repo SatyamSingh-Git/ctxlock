@@ -802,7 +802,7 @@ describe('ctxlock misses', () => {
     const first = await cli('misses', dir, '--min-sessions', '1', '--drafts', drafts);
     expect(first.code).toBe(0);
     expect(first.stdout).toContain(`Drafts written:\n  ${rule}\n  ${claude}\n`);
-    expect(readFileSync(rule, 'utf8').startsWith('<!-- ctxlock:miss rule/.claude/rules/api.md -->\n')).toBe(true);
+    expect(readFileSync(rule, 'utf8')).toMatch(/^<!-- ctxlock:miss rule\/\.claude\/rules\/api\.md \S+ -->\n/);
     expect(readFileSync(rule, 'utf8')).not.toContain('v2 endpoint');
 
     writeFileSync(claude, 'My own notes.\n');
@@ -811,6 +811,13 @@ describe('ctxlock misses', () => {
     expect(again.stdout).toContain(`Left as it is, not a ctxlock draft:\n  ${claude}\n`);
     expect(readFileSync(claude, 'utf8')).toBe('My own notes.\n');
     expect(readFileSync(rule, 'utf8')).toContain('no, the v2 endpoint');
+
+    // An owner's note added to a draft survives the next run.
+    const edited = readFileSync(rule, 'utf8').replace('These are signals', 'Sent to @api-team on 2026-11-12. These are signals');
+    writeFileSync(rule, edited);
+    const third = await cli('misses', dir, '--min-sessions', '1', '--drafts', drafts);
+    expect(third.stdout).toContain(`Left as it is, edited since ctxlock wrote it:\n  ${rule}\n`);
+    expect(readFileSync(rule, 'utf8')).toBe(edited);
 
     expect((await cli('misses', dir, '--drafts', drafts)).stdout).toContain('No unit is routed, so no draft was written.');
   });
