@@ -4,7 +4,7 @@ import { DRAFT_MARK, draftName, renderDraft } from '../../src/loop/draft.js';
 
 const t = (day: number) => `2026-11-${String(day).padStart(2, '0')}T10:00:00.000Z`;
 const ID = 'rule/.claude/rules/testing.md';
-const signal = (session: string, kind: 'interrupted' | 'correction', day: number, words?: string, untrusted = false) => ({ session, kind, ts: t(day), untrusted, turn: [ID], ...(words !== undefined && { words }) });
+const signal = (session: string, kind: 'interrupted' | 'correction', day: number, words?: string, untrusted = false) => ({ session, kind, ts: t(day), untrusted, context: [ID], turn: [ID], ...(words !== undefined && { words }) });
 const MISS: UnitMiss = {
   id: ID,
   path: '.claude/rules/testing.md',
@@ -12,6 +12,7 @@ const MISS: UnitMiss = {
   owners: ['@platform'],
   upstream: null,
   sessions: 2.5,
+  inTurn: 2,
   loadedIn: 5,
   everySession: false,
   olderVersion: 1,
@@ -31,7 +32,8 @@ describe('renderDraft', () => {
     expect(draft).toContain('- **Belongs in:** `https://github.com/acme/web.git`');
     expect(draft).toContain('- **Owners:** @platform');
     expect(draft).toContain('- **Sessions:** 2.5, of 5 that loaded it; 1 counted at half, since it had read web or MCP content first');
-    expect(draft).toContain('- **Signals:** 2 interrupted, 1 correction, from 2026-11-08 to 2026-11-11');
+    expect(draft).toContain('- **Signals:** 2 interrupted, 1 correction, from 2026-11-08 to 2026-11-11; 2 came in the turn it loaded');
+    expect(renderDraft({ ...MISS, inTurn: 0 }, 'web', false)).toContain('from 2026-11-08 to 2026-11-11\n');
     expect(draft).toContain(`- **Digest today:** \`sha256:${'c'.repeat(64)}\`; 1 of these sessions loaded other bytes`);
     expect(draft).toContain('These are signals, not a diagnosis');
     expect(draft).not.toContain('octocat');

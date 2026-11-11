@@ -10,6 +10,7 @@ const unit = (over: Partial<UnitMiss>): UnitMiss => ({
   owners: [],
   upstream: null,
   sessions: 1,
+  inTurn: 0,
   loadedIn: 2,
   everySession: false,
   olderVersion: 0,
@@ -20,7 +21,7 @@ const unit = (over: Partial<UnitMiss>): UnitMiss => ({
   signals: [],
   ...over,
 });
-const correction = { session: 's1', kind: 'correction' as const, ts: t(10), untrusted: false, words: 'no, use pnpm test', turn: ['rule/.claude/rules/testing.md'] };
+const correction = { session: 's1', kind: 'correction' as const, ts: t(10), untrusted: false, words: 'no, use pnpm test', context: ['rule/.claude/rules/testing.md'], turn: ['rule/.claude/rules/testing.md'] };
 
 const MISSES: Misses = {
   sessions: 9,
@@ -32,7 +33,7 @@ const MISSES: Misses = {
   since: null,
   minSessions: 3,
   units: [
-    unit({ sessions: 3, loadedIn: 5, owners: ['@platform'], routed: true, kinds: { interrupted: 1, correction: 2 }, signals: [correction] }),
+    unit({ sessions: 3, inTurn: 2, loadedIn: 5, owners: ['@platform'], routed: true, kinds: { interrupted: 1, correction: 2 }, signals: [correction] }),
     unit({ id: 'skill/.claude/skills/release', path: '.claude/skills/release', upstream: { name: 'platform', repo: '../org' } }),
     unit({ id: 'instructions/CLAUDE.md', path: 'CLAUDE.md', sessions: 2.5, loadedIn: 9, everySession: true }),
   ],
@@ -44,14 +45,14 @@ describe('renderMisses', () => {
 
 Signals: 1 interrupted · 2 corrections, in 3 sessions · 1 after web or MCP content, counted at half
 
-Units in the turn when the agent was stopped or corrected:
-  rule/.claude/rules/testing.md  3 sessions  loaded in 5  owner @platform  routed
-  skill/.claude/skills/release   1 session   loaded in 2  from platform
+Units in context when the agent was stopped or corrected:
+  rule/.claude/rules/testing.md  3 sessions  2 in its turn  loaded in 5  owner @platform  routed
+  skill/.claude/skills/release   1 session                  loaded in 2  from platform
 
 In every session, so exposure can't single them out:
-  instructions/CLAUDE.md  2.5 sessions  loaded in 9
+  instructions/CLAUDE.md  2.5 sessions    loaded in 9
 
-No load in the turn: 1 signal
+Before any unit loaded: 1 signal
 Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 `);
   });
@@ -61,7 +62,7 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
       expect(renderMisses(MISSES, format, false), format).not.toContain('use pnpm test');
       expect(renderMisses(MISSES, format, true), format).toContain('no, use pnpm test');
     }
-    expect(JSON.parse(renderMisses(MISSES, 'json', false)).units[0].signals[0]).toEqual({ session: 's1', kind: 'correction', ts: t(10), untrusted: false, turn: ['rule/.claude/rules/testing.md'] });
+    expect(JSON.parse(renderMisses(MISSES, 'json', false)).units[0].signals[0]).toEqual({ session: 's1', kind: 'correction', ts: t(10), untrusted: false, context: ['rule/.claude/rules/testing.md'], turn: ['rule/.claude/rules/testing.md'] });
     expect(renderMisses(MISSES, 'text', true)).toContain('\nCorrections:\n  2026-11-10  no, use pnpm test\n');
   });
 

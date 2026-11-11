@@ -48,18 +48,27 @@ const said = (session: string, prompts: number[], signals: Array<Partial<Signal>
 ];
 
 describe('findMisses', () => {
-  it('a correction is joined to the rule that loaded in its turn, not to one from an earlier turn', async () => {
+  it('a correction is joined to every unit loaded before it, and inTurn counts it only for those loaded in its own turn', async () => {
     const { scan, load, timeline } = await setup();
     const m = findMisses(
-      // The CLAUDE.md load comes after the correction, so it was not in play.
+      // DB loaded two turns earlier and stays in context; the CLAUDE.md load comes after the correction.
       [timeline('s1', 0, [load(DB, 3), load(API, 12), load(CLAUDE, 16)])],
-      new Map([said('s1', [1, 10, 15], [{ kind: 'correction', ts: t(15), words: 'no, the other endpoint' }])]),
+      // The interrupt's turn, from 18, loaded nothing new, yet three units were in context.
+      new Map([said('s1', [1, 10, 15, 18], [{ kind: 'correction', ts: t(15), words: 'no, the other endpoint' }, { kind: 'interrupted', ts: t(20) }])]),
       scan,
       { minSessions: 3 },
     );
 
-    expect(m.units.map((u) => u.id)).toEqual([API]);
-    expect(m.units[0]!.signals).toEqual([{ session: 's1', kind: 'correction', ts: t(15), untrusted: false, words: 'no, the other endpoint', turn: [API] }]);
+    expect(m.units.map((u) => [u.id, u.inTurn])).toEqual([
+      [API, 1],
+      [DB, 0],
+      [CLAUDE, 0],
+    ]);
+    expect(m.units[0]!.signals).toEqual([
+      { session: 's1', kind: 'correction', ts: t(15), untrusted: false, words: 'no, the other endpoint', context: [API, DB], turn: [API] },
+      { session: 's1', kind: 'interrupted', ts: t(20), untrusted: false, context: [CLAUDE, API, DB], turn: [] },
+    ]);
+    expect(m.unattributed).toBe(0);
   });
 
   it('loads before the first prompt belong to the first turn', async () => {
@@ -126,10 +135,10 @@ describe('findMisses', () => {
     ]);
   });
 
-  it('a session with no transcript, and a signal whose turn loaded nothing, are counted and attributed to no unit', async () => {
+  it('a session with no transcript, and a signal before any load, are counted and attributed to no unit', async () => {
     const { scan, load, timeline } = await setup();
     const m = findMisses(
-      [timeline('s1', 0, [load(API, 2)]), timeline('s2', 0, [load(API, 2)]), timeline('s3', 0, [load(API, 2)])],
+      [timeline('s1', 0, [load(API, 9)]), timeline('s2', 0, [load(API, 2)]), timeline('s3', 0, [load(API, 2)])],
       new Map([said('s1', [1, 5], [{ kind: 'correction', ts: t(8) }]), said('s3', [1], [])]),
       scan,
       { minSessions: 3 },

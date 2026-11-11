@@ -9,7 +9,9 @@ export interface MissSignal {
   ts: string;
   untrusted: boolean;
   words?: string;
-  // The units loaded in the signal's turn.
+  // The units loaded in the session before the signal: Claude Code keeps a loaded file in context.
+  context: string[];
+  // Of those, the ones loaded in the signal's own turn.
   turn: string[];
 }
 
@@ -21,8 +23,11 @@ export interface UnitMiss {
   owners: string[];
   // From ctxlock.lock, for a unit synced from an upstream: its owner is there.
   upstream: { name: string; repo: string } | null;
-  // Distinct sessions with a signal in its turn: 1 each, or 0.5 when all of them came after untrusted content.
+  // Distinct sessions with a signal while it was in context: 1 each, or 0.5 when all of them came after
+  // untrusted content.
   sessions: number;
+  // Signals that came in the turn it loaded.
+  inTurn: number;
   loadedIn: number;
   everySession: boolean;
   // Of those sessions, the ones that loaded bytes other than today's.
@@ -40,7 +45,7 @@ export interface Misses {
   withSignal: number;
   signals: Record<SignalKind, number>;
   untrusted: number;
-  // Signals whose turn loaded no unit.
+  // Signals before any unit loaded.
   unattributed: number;
   since: string | null;
   minSessions: number;
@@ -49,12 +54,15 @@ export interface Misses {
 
 const none = (): Record<SignalKind, number> => ({ interrupted: 0, correction: 0 });
 
-// D80: a turn runs from the person's prompt before the signal up to it. Loads before the first prompt
-// belong to the first turn.
-function turnOf(loads: SessionLoad[], prompts: string[], ts: string): string[] {
+const ids = (loads: SessionLoad[]) => [...new Set(loads.map((l) => l.unit.id))].sort();
+
+// D80: everything loaded before the signal was in context. Its turn runs from the person's prompt before
+// it; loads before the first prompt belong to the first turn.
+function inPlay(loads: SessionLoad[], prompts: string[], ts: string): { context: string[]; turn: string[] } {
   const before = prompts.filter((p) => p < ts);
   const start = before.length > 1 ? before.at(-1)! : '';
-  return [...new Set(loads.filter((l) => l.ts >= start && l.ts <= ts).map((l) => l.unit.id))].sort();
+  const loaded = loads.filter((l) => l.ts <= ts);
+  return { context: ids(loaded), turn: ids(loaded.filter((l) => l.ts >= start)) };
 }
 
 export function findMisses(timelines: Timeline[], transcripts: Map<string, SessionTranscript>, scan: ScanResult, opts: { minSessions: number; since?: string }): Misses {
@@ -75,10 +83,10 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
     for (const s of transcript.signals) {
       signals[s.kind]++;
       if (s.untrusted) untrusted++;
-      const turn = turnOf(timeline.loads, transcript.prompts, s.ts);
-      if (turn.length === 0) unattributed++;
-      const signal: MissSignal = { session: timeline.session, kind: s.kind, ts: s.ts, untrusted: s.untrusted, ...(s.words !== undefined && { words: s.words }), turn };
-      for (const id of turn) reached.set(id, [...(reached.get(id) ?? []), signal]);
+      const { context, turn } = inPlay(timeline.loads, transcript.prompts, s.ts);
+      if (context.length === 0) unattributed++;
+      const signal: MissSignal = { session: timeline.session, kind: s.kind, ts: s.ts, untrusted: s.untrusted, ...(s.words !== undefined && { words: s.words }), context, turn };
+      for (const id of context) reached.set(id, [...(reached.get(id) ?? []), signal]);
     }
   }
 
@@ -100,6 +108,7 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
       owners: unitOwners(unit, scan.registry, scan.codeowners),
       upstream: pinned ? { name: pinned.name, repo: pinned.repo } : null,
       sessions: weight,
+      inTurn: hits.filter((h) => h.turn.includes(id)).length,
       loadedIn,
       everySession: loadedIn === kept.length,
       olderVersion,

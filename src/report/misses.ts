@@ -8,6 +8,7 @@ const rows = (units: UnitMiss[]) =>
   units.map((u) => [
     u.id,
     sessions(u.sessions),
+    u.inTurn ? `${u.inTurn} in its turn` : '',
     `loaded in ${u.loadedIn}`,
     u.upstream ? `from ${u.upstream.name}` : u.owners.length ? `owner ${u.owners.join(', ')}` : '',
     u.routed ? 'routed' : '',
@@ -24,7 +25,7 @@ export function renderMisses(m: Misses, format: 'text' | 'json', excerpts: boole
 
   const kinds = [m.signals.interrupted ? `${m.signals.interrupted} interrupted` : '', m.signals.correction ? plural(m.signals.correction, 'correction') : ''].filter(Boolean);
   lines.push(`Signals: ${kinds.join(' · ')}, in ${sessions(m.withSignal)}${m.untrusted ? ` · ${m.untrusted} after web or MCP content, counted at half` : ''}`);
-  lines.push(...block('Units in the turn when the agent was stopped or corrected', rows(m.units.filter((u) => !u.everySession))));
+  lines.push(...block('Units in context when the agent was stopped or corrected', rows(m.units.filter((u) => !u.everySession))));
   lines.push(...block("In every session, so exposure can't single them out", rows(m.units.filter((u) => u.everySession))));
   if (excerpts) {
     const said = new Map(m.units.flatMap((u) => u.signals).filter((s) => s.words !== undefined).map((s) => [`${s.session} ${s.ts}`, s]));
@@ -32,7 +33,7 @@ export function renderMisses(m: Misses, format: 'text' | 'json', excerpts: boole
   }
 
   const footer = [
-    ...(m.unattributed ? [`No load in the turn: ${plural(m.unattributed, 'signal')}`] : []),
+    ...(m.unattributed ? [`Before any unit loaded: ${plural(m.unattributed, 'signal')}`] : []),
     ...(m.units.length === 0
       ? []
       : m.units.some((u) => u.routed)

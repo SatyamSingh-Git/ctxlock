@@ -31,7 +31,7 @@ export function renderDraft(m: UnitMiss, repo: string, excerpts: boolean): strin
     `- **Belongs in:** ${code(repo)}${m.upstream ? `, the upstream ${code(m.upstream.name)} this repository syncs it from` : ''}`,
     `- **Owners:** ${m.owners.length ? m.owners.join(', ') : 'none in ctxlock.yaml or CODEOWNERS'}`,
     `- **Sessions:** ${m.sessions}, of ${m.loadedIn} that loaded it${half ? `; ${half} counted at half, since it had read web or MCP content first` : ''}`,
-    `- **Signals:** ${kinds.join(', ')}, ${first === last ? `on ${first}` : `from ${first} to ${last}`}`,
+    `- **Signals:** ${kinds.join(', ')}, ${first === last ? `on ${first}` : `from ${first} to ${last}`}${m.inTurn ? `; ${m.inTurn} came in the turn it loaded` : ''}`,
     `- **Digest today:** ${code(m.digest)}${m.olderVersion ? `; ${m.olderVersion} of these sessions loaded other bytes` : ''}`,
     ...(m.everySession ? ['', "It loaded in every session, so exposure alone can't single it out."] : []),
   ];
@@ -42,7 +42,7 @@ export function renderDraft(m: UnitMiss, repo: string, excerpts: boolean): strin
   }
   lines.push(
     '',
-    'These are signals, not a diagnosis: the unit was loaded in the turn where the agent was stopped or corrected. Check whether it says something wrong, leaves something out, or was not followed.',
+    'These are signals, not a diagnosis: the unit was in context when the agent was stopped or corrected. Check whether it says something wrong, leaves something out, or was not followed.',
   );
   return `${lines.join('\n')}\n`;
 }

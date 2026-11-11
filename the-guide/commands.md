@@ -293,14 +293,14 @@ ctxlock misses · 9 sessions, 7 with a transcript
 
 Signals: 1 interrupted · 2 corrections, in 3 sessions · 1 after web or MCP content, counted at half
 
-Units in the turn when the agent was stopped or corrected:
-  rule/.claude/rules/testing.md  3 sessions  loaded in 5  owner @platform  routed
-  skill/.claude/skills/release   1 session   loaded in 2  from platform
+Units in context when the agent was stopped or corrected:
+  rule/.claude/rules/testing.md  3 sessions  2 in its turn  loaded in 5  owner @platform  routed
+  skill/.claude/skills/release   1 session                  loaded in 2  from platform
 
 In every session, so exposure can't single them out:
-  instructions/CLAUDE.md  2.5 sessions  loaded in 9
+  instructions/CLAUDE.md  2.5 sessions    loaded in 9
 
-No load in the turn: 1 signal
+Before any unit loaded: 1 signal
 Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 ```
 
@@ -309,7 +309,7 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 - **A correction:** a prompt you typed after the agent answered, opening with words such as "no", "actually" or "I meant".
 
 **What it reports:**
-- **The units in a signal's turn** are those loaded since your prompt before it. A session counts once per unit, however many signals it had, and counts half when every one of them came after the agent read a web page or an MCP tool's output.
+- **The units in context at a signal** are all those loaded in the session before it: Claude Code keeps a loaded file in context. "In its turn" counts the signals that came in the turn the unit loaded, since your prompt before it, which is the closer link. A session counts once per unit, however many signals it had, and counts half when every one of them came after the agent read a web page or an MCP tool's output.
 - **A unit reached in `--min-sessions` sessions (default 3) is routed:** it is worth its owner's attention. For a unit synced from an upstream, the owner is in that upstream, which `from` names.
 - **Units loaded in every session** are listed apart: exposure alone can't tell them from the rest.
 
