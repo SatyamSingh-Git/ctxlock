@@ -100,6 +100,7 @@ describe('findMisses', () => {
     );
 
     expect(m.units[0]!.sessions).toBe(1.5);
+    expect(m.units[0]!.halved).toBe(1);
     expect(m.untrusted).toBe(2);
   });
 

@@ -1,4 +1,4 @@
-import { code } from '../report/markdown.js';
+import { code, plural } from '../report/markdown.js';
 import { lfDigest } from '../units/digest.js';
 import type { UnitMiss } from './misses.js';
 import { redact } from './redact.js';
@@ -15,8 +15,6 @@ export function draftState(text: string, id: string): 'unedited' | 'edited' | 'o
 
 export const draftName = (id: string) => `${id.replace(/[^A-Za-z0-9._-]/g, '-')}.md`;
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-
 // A fence longer than any backtick run inside, so the text can't end it and nothing in it renders.
 function fenced(text: string): string {
   const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((r) => r.length));
@@ -26,9 +24,6 @@ function fenced(text: string): string {
 
 // repo is where the unit belongs: this repository's name, or the upstream's repository for a synced unit.
 export function renderDraft(m: UnitMiss, repo: string, excerpts: boolean): string {
-  const bySession = new Map<string, boolean>();
-  for (const s of m.signals) bySession.set(s.session, (bySession.get(s.session) ?? false) || !s.untrusted);
-  const half = [...bySession.values()].filter((trusted) => !trusted).length;
   const kinds = [m.kinds.interrupted ? `${m.kinds.interrupted} interrupted` : '', m.kinds.correction ? plural(m.kinds.correction, 'correction') : ''].filter(Boolean);
   const [first, last] = [m.first.slice(0, 10), m.last.slice(0, 10)];
 
@@ -37,7 +32,7 @@ export function renderDraft(m: UnitMiss, repo: string, excerpts: boolean): strin
     '',
     `- **Belongs in:** ${code(repo)}${m.upstream ? `, the upstream ${code(m.upstream.name)} this repository syncs it from` : ''}`,
     `- **Owners:** ${m.owners.length ? m.owners.join(', ') : 'none in ctxlock.yaml or CODEOWNERS'}`,
-    `- **Sessions:** ${m.sessions}, of ${m.loadedIn} that loaded it${half ? `; ${half} counted at half, since it had read web or MCP content first` : ''}`,
+    `- **Sessions:** ${m.sessions}, of ${m.loadedIn} that loaded it${m.halved ? `; ${m.halved} counted at half, since it had read web or MCP content first` : ''}`,
     `- **Signals:** ${kinds.join(', ')}, ${first === last ? `on ${first}` : `from ${first} to ${last}`}${m.inTurn ? `; ${m.inTurn} came in the turn it loaded` : ''}`,
     `- **Digest today:** ${code(m.digest)}${m.olderVersion ? `; ${m.olderVersion} of these sessions loaded other bytes` : ''}`,
     ...(m.everySession ? ['', "It loaded in every session, so exposure alone can't single it out."] : []),

@@ -14,7 +14,7 @@ export function code(text: string): string {
 }
 
 export const cell = (s: string) => s.replaceAll('|', '\\|');
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+export const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 function item(f: Finding): string {
   if (f.path === undefined) return `- ${code(f.message)}`;

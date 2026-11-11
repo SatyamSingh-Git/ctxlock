@@ -26,6 +26,8 @@ export interface UnitMiss {
   // Distinct sessions with a signal while it was in context: 1 each, or 0.5 when all of them came after
   // untrusted content.
   sessions: number;
+  // Of those sessions, the ones counted at half.
+  halved: number;
   // Signals that came in the turn it loaded.
   inTurn: number;
   loadedIn: number;
@@ -101,7 +103,8 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
     const unit = byId.get(id)!;
     const sessions = new Map<string, boolean>();
     for (const h of hits) sessions.set(h.session, (sessions.get(h.session) ?? false) || !h.untrusted);
-    const weight = [...sessions.values()].reduce((sum, trusted) => sum + (trusted ? 1 : 0.5), 0);
+    const halved = [...sessions.values()].filter((trusted) => !trusted).length;
+    const weight = sessions.size - halved / 2;
     const loadedIn = kept.filter((t) => t.loads.some((l) => l.unit.id === id)).length;
     const olderVersion = kept.filter((t) => sessions.has(t.session) && t.loads.some((l) => l.unit.id === id && l.other)).length;
     const kinds = none();
@@ -115,6 +118,7 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
       owners: unitOwners(unit, scan.registry, scan.codeowners),
       upstream: pinned ? { name: pinned.name, repo: pinned.repo } : null,
       sessions: weight,
+      halved,
       inTurn: hits.filter((h) => h.turn.includes(id)).length,
       loadedIn,
       everySession: loadedIn === kept.length,

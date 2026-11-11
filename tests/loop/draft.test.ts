@@ -12,6 +12,7 @@ const MISS: UnitMiss = {
   owners: ['@platform'],
   upstream: null,
   sessions: 2.5,
+  halved: 1,
   inTurn: 2,
   loadedIn: 5,
   everySession: false,

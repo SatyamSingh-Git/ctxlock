@@ -1,8 +1,7 @@
 import type { Misses, UnitMiss } from '../loop/misses.js';
 import { block, sessions } from './graph.js';
 import { INSTALL } from './loads.js';
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+import { plural } from './markdown.js';
 
 const rows = (units: UnitMiss[]) =>
   units.map((u) => [

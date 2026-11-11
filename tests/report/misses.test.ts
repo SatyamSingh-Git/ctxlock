@@ -10,6 +10,7 @@ const unit = (over: Partial<UnitMiss>): UnitMiss => ({
   owners: [],
   upstream: null,
   sessions: 1,
+  halved: 0,
   inTurn: 0,
   loadedIn: 2,
   everySession: false,
