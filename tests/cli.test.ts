@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, symlinkSync, write
 import { join, relative, sep } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { main } from '../src/cli.js';
+import { draftName } from '../src/loop/draft.js';
 import { serializeLock } from '../src/sync/lock.js';
 import { cleanup, git, gitRepo, tempDir, writeTree } from './helpers/repo.js';
 
@@ -796,8 +797,8 @@ describe('ctxlock misses', () => {
   it("--drafts writes one file per routed unit, rewrites its own drafts, and leaves a person's file of the same name", async () => {
     const dir = recorded((real) => real);
     const drafts = join(tempDir(), 'drafts');
-    const rule = join(drafts, 'rule-.claude-rules-api.md.md');
-    const claude = join(drafts, 'instructions-CLAUDE.md.md');
+    const rule = join(drafts, draftName('rule/.claude/rules/api.md'));
+    const claude = join(drafts, draftName('instructions/CLAUDE.md'));
 
     const first = await cli('misses', dir, '--min-sessions', '1', '--drafts', drafts);
     expect(first.code).toBe(0);

@@ -73,9 +73,11 @@ describe('draftState', () => {
 });
 
 describe('draftName', () => {
-  it('turns an id into a file name', () => {
-    expect(draftName(ID)).toBe('rule-.claude-rules-testing.md.md');
-    expect(draftName('skill/.agents/skills/release')).toBe('skill-.agents-skills-release.md');
-    expect(draftName('skill/.claude/skills/my notes: v2')).toBe('skill-.claude-skills-my-notes--v2.md');
+  it('turns an id into a file name that no other id shares', () => {
+    expect(draftName(ID)).toMatch(/^rule-\.claude-rules-testing\.md-[0-9a-f]{8}\.md$/);
+    expect(draftName('skill/.agents/skills/release')).toMatch(/^skill-\.agents-skills-release-[0-9a-f]{8}\.md$/);
+    expect(draftName('skill/.claude/skills/my notes: v2')).toMatch(/^skill-\.claude-skills-my-notes--v2-[0-9a-f]{8}\.md$/);
+    expect(draftName('rule/.claude/rules/a-b.md')).not.toBe(draftName('rule/.claude/rules/a/b.md'));
+    expect(draftName(ID)).toBe(draftName(ID));
   });
 });

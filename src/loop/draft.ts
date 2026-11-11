@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { code, plural } from '../report/markdown.js';
 import { lfDigest } from '../units/digest.js';
 import type { UnitMiss } from './misses.js';
@@ -13,7 +14,8 @@ export function draftState(text: string, id: string): 'unedited' | 'edited' | 'o
   return lfDigest(Buffer.from(text.slice(mark[0].length))) === mark[2] ? 'unedited' : 'edited';
 }
 
-export const draftName = (id: string) => `${id.replace(/[^A-Za-z0-9._-]/g, '-')}.md`;
+// Readable, and made unique by a hash of the ID: a/b.md and a-b.md read alike.
+export const draftName = (id: string) => `${id.replace(/[^A-Za-z0-9._-]/g, '-')}-${createHash('sha256').update(id).digest('hex').slice(0, 8)}.md`;
 
 // A fence longer than any backtick run inside, so the text can't end it and nothing in it renders.
 function fenced(text: string): string {
