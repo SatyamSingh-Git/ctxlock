@@ -68,7 +68,10 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
       expect(renderMisses(MISSES, format, false), format).not.toContain('use pnpm test');
       expect(renderMisses(MISSES, format, true), format).toContain('no, use pnpm test');
     }
-    expect(JSON.parse(renderMisses(MISSES, 'json', false)).units[0].signals[0]).toEqual({ session: 's1', kind: 'correction', ts: t(10), untrusted: false, context: ['rule/.claude/rules/testing.md'], turn: ['rule/.claude/rules/testing.md'] });
+    const json = JSON.parse(renderMisses(MISSES, 'json', false));
+    expect(json.found[0]).toEqual({ session: 's1', kind: 'correction', ts: t(10), untrusted: false, context: ['rule/.claude/rules/testing.md'], turn: ['rule/.claude/rules/testing.md'] });
+    // Each unit points into found, rather than repeating its signals.
+    expect(json.units.map((u: { signals: number[] }) => u.signals)).toEqual([[0], [], []]);
     expect(renderMisses(MISSES, 'text', true)).toContain('\nCorrections:\n  2026-11-10  no, use pnpm test\n  2026-11-11  actually, keep the old one\n');
     const broken = { ...MISSES, found: [{ ...correction, words: 'no,\r\nuse pnpm\ntest' }] };
     expect(renderMisses(broken, 'text', true)).toContain('\nCorrections:\n  2026-11-10  no, use pnpm test\n');

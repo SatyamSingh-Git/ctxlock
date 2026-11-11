@@ -15,7 +15,12 @@ const rows = (units: UnitMiss[]) =>
 
 // A person's words appear only with --excerpts (D82).
 export function renderMisses(m: Misses, format: 'text' | 'json', excerpts: boolean): string {
-  if (format === 'json') return `${JSON.stringify(m, (key, value) => (key === 'words' && !excerpts ? undefined : value), 2)}\n`;
+  if (format === 'json') {
+    // A signal is in context for many units; each unit names it by its place in found.
+    const at = new Map(m.found.map((s, i) => [s, i]));
+    const shared = { ...m, units: m.units.map((u) => ({ ...u, signals: u.signals.map((s) => at.get(s)!) })) };
+    return `${JSON.stringify(shared, (key, value) => (key === 'words' && !excerpts ? undefined : value), 2)}\n`;
+  }
   if (m.sessions === 0) return `${['ctxlock misses · no Claude Code sessions recorded for this repository', '', ...INSTALL].join('\n')}\n`;
 
   const lines = [`ctxlock misses · ${sessions(m.sessions)}, ${m.withTranscript} with a transcript${m.since ? ` · since ${m.since}` : ''}`, ''];
