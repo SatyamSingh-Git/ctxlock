@@ -33,7 +33,10 @@ export function renderDraft(m: UnitMiss, repo: string, excerpts: boolean): strin
     `# ctxlock: ${code(m.id)} was in play when the agent was stopped or corrected`,
     '',
     `- **Belongs in:** ${code(repo)}${m.upstream ? `, the upstream ${code(m.upstream.name)} this repository syncs it from` : ''}`,
-    `- **Owners:** ${m.owners.length ? m.owners.join(', ') : 'none in ctxlock.yaml or CODEOWNERS'}`,
+    // Owners are left as written, so an @name mentions them where the note is posted.
+    m.upstream
+      ? `- **Owners:** in ${code(m.upstream.name)}'s ctxlock.yaml or CODEOWNERS${m.owners.length ? `; in this repository, ${m.owners.join(', ')}` : ''}`
+      : `- **Owners:** ${m.owners.length ? m.owners.join(', ') : 'none in ctxlock.yaml or CODEOWNERS'}`,
     `- **Sessions:** ${m.sessions}, of ${m.loadedIn} that loaded it${m.halved ? `; ${m.halved} counted at half, since it had read web or MCP content first` : ''}`,
     `- **Signals:** ${kinds.join(', ')}, ${first === last ? `on ${first}` : `from ${first} to ${last}`}${m.inTurn ? `; ${m.inTurn} came in the turn it loaded` : ''}`,
     `- **Digest today:** ${code(m.digest)}${m.olderVersion ? `; ${m.olderVersion} of these sessions loaded other bytes` : ''}`,

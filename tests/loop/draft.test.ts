@@ -54,9 +54,13 @@ describe('renderDraft', () => {
   });
 
   it("a synced unit's draft names the upstream's repository", () => {
-    const draft = renderDraft({ ...MISS, owners: [], upstream: { name: 'platform', repo: 'https://github.com/acme/context.git' } }, 'https://github.com/acme/context.git', false);
+    const synced = { ...MISS, upstream: { name: 'platform', repo: 'https://github.com/acme/context.git' } };
+    const draft = renderDraft({ ...synced, owners: ['@web-team'] }, 'https://github.com/acme/context.git', false);
 
     expect(draft).toContain('- **Belongs in:** `https://github.com/acme/context.git`, the upstream `platform` this repository syncs it from');
+    // Its owners are the upstream's; this repository's are named as such.
+    expect(draft).toContain("- **Owners:** in `platform`'s ctxlock.yaml or CODEOWNERS; in this repository, @web-team");
+    expect(renderDraft({ ...synced, owners: [] }, 'x', false)).toContain("- **Owners:** in `platform`'s ctxlock.yaml or CODEOWNERS\n");
   });
 });
 
