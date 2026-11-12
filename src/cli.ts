@@ -143,6 +143,13 @@ function count(value: string): number {
   return n;
 }
 
+// eval's status needs 2 valid runs on each side, so one run a side could only ever be inconclusive.
+function replayRuns(value: string): number {
+  const n = count(value);
+  if (n < 2) throw new InvalidArgumentError('expected at least 2, since a replay needs 2 valid runs a side to validate a fix');
+  return n;
+}
+
 const workdirOf = (flag: string | undefined) => resolve(flag ?? process.env.RUNNER_TEMP ?? tmpdir());
 // The user's own cache folder: in a temp folder that other users share, they could plant results.
 const cacheOf = (flag: string | undefined) =>
@@ -387,7 +394,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .description("ask Claude what went wrong when a unit was in context as you stopped or corrected Claude Code, and check its smallest fix by replay; sends the unit's text and the redacted moments, and writes nothing to the repository")
     .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
     .option('--since <date>', 'only sessions begun on or after this date, as YYYY-MM-DD', day)
-    .option('--runs <n>', 'runs a side in the replay', count, 2)
+    .option('--runs <n>', 'runs a side in the replay, at least 2', replayRuns, 2)
     .option('--max-runs <n>', 'the most runs the replay may start', count, 16)
     .option('--max-minutes <n>', 'start no replay run after this many minutes', count, 15)
     .option('--model <model>', 'the model Claude Code runs (default: eval.model, or sonnet)')

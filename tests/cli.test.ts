@@ -842,6 +842,18 @@ describe('ctxlock misses', () => {
       expect((await cli('diagnose', 'nope.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'))).code).toBe(2);
     });
 
+    it('--runs 1 is exit 2 before Claude runs, since a replay needs 2 valid runs a side to say anything', async () => {
+      const dir = recorded((real) => real);
+      const argv = join(tempDir(), 'argv.jsonl');
+      vi.stubEnv('FAKE_CLAUDE_ARGV_LOG', argv);
+
+      const one = await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--runs', '1');
+      expect(one.code).toBe(2);
+      expect(one.stderr).toContain("option '--runs <n>' argument '1' is invalid. expected at least 2, since a replay needs 2 valid runs a side to validate a fix");
+      expect(existsSync(argv)).toBe(false);
+      expect((await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--runs', '2')).code).toBe(0);
+    });
+
     it('diagnoses a unit in context, writes its proposal with --drafts, and leaves one edited since', async () => {
       const dir = recorded((real) => real);
       const drafts = join(tempDir(), 'drafts');

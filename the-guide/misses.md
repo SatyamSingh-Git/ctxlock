@@ -154,7 +154,7 @@ The reply is checked against the unit: every line it quotes must be in the file,
 
 **The replay** runs the probe, and every probe the unit already has, in two throwaway copies of the repository: one as it is, one with the fix. It runs as `eval` runs, with every command and edit the agent tries denied.
 - **"validated":** the probe is `improved`, its pass rate up by at least half, and none of the unit's own probes `regressed`.
-- **"not-validated"** and **"inconclusive"** (the run budget ran out) are reported as they are.
+- **"not-validated"** is reported as it is. So is **"inconclusive"**: a probe was cut short by `--max-runs` or `--max-minutes`, or has fewer than 2 runs on a side that finished without an error. That is also why `--runs` must be at least 2.
 - **How strong it is:** at the default 2 runs a side, 0 of 2 to 2 of 2 is a direction, not proof. `--runs 3` makes 0 of 3 to 3 of 3 a one-sided Fisher p of 0.05, the bar `eval` gates on.
 - **Defaults:** `--max-runs` 16 and `--max-minutes` 15.
 
