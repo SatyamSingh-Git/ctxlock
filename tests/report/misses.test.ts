@@ -22,9 +22,9 @@ const unit = (over: Partial<UnitMiss>): UnitMiss => ({
   signals: [],
   ...over,
 });
-const correction = { session: 's1', kind: 'correction' as const, ts: t(10), untrusted: false, words: 'no, use pnpm test', context: ['rule/.claude/rules/testing.md'], turn: ['rule/.claude/rules/testing.md'] };
+const correction = { session: 's1', kind: 'correction' as const, ts: t(10), untrusted: false, words: 'no, use pnpm test', task: 'run the tests for web', actions: [{ tool: 'Bash', target: 'npm test --workspace web' }], context: ['rule/.claude/rules/testing.md'], turn: ['rule/.claude/rules/testing.md'] };
 // Joined to no unit: the collector wasn't recording yet.
-const unjoined = { session: 's2', kind: 'correction' as const, ts: t(11), untrusted: false, words: 'actually, keep the old one', context: [], turn: [], unrecorded: true as const };
+const unjoined = { session: 's2', kind: 'correction' as const, ts: t(11), untrusted: false, words: 'actually, keep the old one', actions: [], context: [], turn: [], unrecorded: true as const };
 
 const MISSES: Misses = {
   sessions: 9,
@@ -66,6 +66,7 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
   it('json and text hold no words without --excerpts, and do with it', () => {
     for (const format of ['text', 'json'] as const) {
       expect(renderMisses(MISSES, format, false), format).not.toContain('use pnpm test');
+      for (const said of ['run the tests for web', 'npm test --workspace']) expect(renderMisses(MISSES, format, false), format).not.toContain(said);
       expect(renderMisses(MISSES, format, true), format).toContain('no, use pnpm test');
     }
     const json = JSON.parse(renderMisses(MISSES, 'json', false));

@@ -4,7 +4,7 @@ import { draftName, draftState, renderDraft } from '../../src/loop/draft.js';
 
 const t = (day: number) => `2026-11-${String(day).padStart(2, '0')}T10:00:00.000Z`;
 const ID = 'rule/.claude/rules/testing.md';
-const signal = (session: string, kind: 'interrupted' | 'correction', day: number, words?: string, untrusted = false) => ({ session, kind, ts: t(day), untrusted, context: [ID], turn: [ID], ...(words !== undefined && { words }) });
+const signal = (session: string, kind: 'interrupted' | 'correction', day: number, words?: string, untrusted = false) => ({ session, kind, ts: t(day), untrusted, actions: [], context: [ID], turn: [ID], ...(words !== undefined && { words }) });
 const MISS: UnitMiss = {
   id: ID,
   path: '.claude/rules/testing.md',

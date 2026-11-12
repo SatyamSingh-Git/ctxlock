@@ -1,7 +1,7 @@
 import type { SessionLoad, Timeline } from '../collect/sessions.js';
 import { unitOwners } from '../registry/codeowners.js';
 import { localDate, type ScanResult } from '../scan.js';
-import type { SessionTranscript, SignalKind } from './transcript.js';
+import type { Action, SessionTranscript, SignalKind } from './transcript.js';
 
 export interface MissSignal {
   session: string;
@@ -9,6 +9,8 @@ export interface MissSignal {
   ts: string;
   untrusted: boolean;
   words?: string;
+  task?: string;
+  actions: Action[];
   // The units loaded in the session before the signal: Claude Code keeps a loaded file in context.
   context: string[];
   // Of those, the ones loaded in the signal's own turn.
@@ -97,7 +99,15 @@ export function findMisses(timelines: Timeline[], transcripts: Map<string, Sessi
     for (const s of transcript.signals) {
       signals[s.kind]++;
       if (s.untrusted) untrusted++;
-      const said = { session: timeline.session, kind: s.kind, ts: s.ts, untrusted: s.untrusted, ...(s.words !== undefined && { words: s.words }) };
+      const said = {
+        session: timeline.session,
+        kind: s.kind,
+        ts: s.ts,
+        untrusted: s.untrusted,
+        ...(s.words !== undefined && { words: s.words }),
+        ...(s.task !== undefined && { task: s.task }),
+        actions: s.actions,
+      };
       if (s.ts < timeline.begun) {
         unrecorded++;
         found.push({ ...said, context: [], turn: [], unrecorded: true });

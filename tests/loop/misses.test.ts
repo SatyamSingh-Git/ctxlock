@@ -44,7 +44,7 @@ async function setup() {
 
 const said = (session: string, prompts: number[], signals: Array<Partial<Signal> & { kind: Signal['kind']; ts: string }>, compactions: number[] = []): [string, SessionTranscript] => [
   session,
-  { session, prompts: prompts.map(t), compactions: compactions.map(t), signals: signals.map((s) => ({ untrusted: false, ...s })) },
+  { session, prompts: prompts.map(t), compactions: compactions.map(t), signals: signals.map((s) => ({ untrusted: false, actions: [], ...s })) },
 ];
 
 describe('findMisses', () => {
@@ -80,10 +80,19 @@ describe('findMisses', () => {
       [CLAUDE, 0],
     ]);
     expect(m.units[0]!.signals).toEqual([
-      { session: 's1', kind: 'correction', ts: t(15), untrusted: false, words: 'no, the other endpoint', context: [API, DB], turn: [API] },
-      { session: 's1', kind: 'interrupted', ts: t(20), untrusted: false, context: [CLAUDE, API, DB], turn: [] },
+      { session: 's1', kind: 'correction', ts: t(15), untrusted: false, words: 'no, the other endpoint', actions: [], context: [API, DB], turn: [API] },
+      { session: 's1', kind: 'interrupted', ts: t(20), untrusted: false, actions: [], context: [CLAUDE, API, DB], turn: [] },
     ]);
     expect(m.unattributed).toBe(0);
+
+    // What happened in the turn travels with the signal.
+    const traced = findMisses(
+      [timeline('s1', 0, [load(API, 2)])],
+      new Map([said('s1', [1], [{ kind: 'interrupted', ts: t(3), task: 'add the endpoint', actions: [{ tool: 'Bash', target: 'npm test' }] }])]),
+      scan,
+      { minSessions: 3 },
+    );
+    expect(traced.found[0]).toMatchObject({ task: 'add the endpoint', actions: [{ tool: 'Bash', target: 'npm test' }] });
   });
 
   it('loads before the first prompt belong to the first turn', async () => {

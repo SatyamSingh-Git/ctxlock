@@ -13,7 +13,7 @@ const typed = (second: number, text: string) => ({ ...base(second), type: 'user'
 // Older versions mark it only with turnOrigin, and write the content as a string.
 const typedOld = (second: number, text: string) => ({ ...base(second), type: 'user', turnOrigin: 'human', message: { role: 'user', content: text } });
 const said = (second: number, text = 'Done.') => ({ ...base(second), type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });
-const tool = (second: number, name: string) => ({ ...base(second), type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `t${second}`, name, input: {} }] } });
+const tool = (second: number, name: string, input: object = {}) => ({ ...base(second), type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `t${second}`, name, input }] } });
 const result = (second: number, text: string) => ({ ...base(second), type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'x', content: text, is_error: false }] } });
 const interrupt = (second: number) => ({ ...base(second), type: 'user', message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] } });
 
@@ -39,10 +39,45 @@ describe('readTranscript', () => {
       prompts: [t(1), t(4)],
       compactions: [],
       signals: [
-        { kind: 'interrupted', ts: t(3), untrusted: false },
-        { kind: 'correction', ts: t(4), untrusted: false, words: 'no, use pnpm add' },
+        { kind: 'interrupted', ts: t(3), untrusted: false, task: 'add a dependency for dates', actions: [{ tool: 'Bash', target: '' }] },
+        { kind: 'correction', ts: t(4), untrusted: false, words: 'no, use pnpm add', task: 'add a dependency for dates', actions: [{ tool: 'Bash', target: '' }] },
       ],
     });
+  });
+
+  it("a signal carries the opening of the prompt that began its turn, and the agent's actions since, with each tool's target", async () => {
+    const file = transcript([
+      typed(1, 'add the dayjs package'),
+      tool(2, 'Read', { file_path: 'package.json' }),
+      tool(3, 'Bash', { command: 'npm install dayjs', description: 'install' }),
+      interrupt(4),
+      typed(5, 'no, we use pnpm here'),
+      tool(6, 'Grep', { pattern: 'dayjs' }),
+      typed(7, 'stop, that was enough'),
+    ]);
+
+    const [stopped, corrected, again] = (await readTranscript(file, 's1')).signals;
+    expect(stopped).toMatchObject({ kind: 'interrupted', task: 'add the dayjs package', actions: [{ tool: 'Read', target: 'package.json' }, { tool: 'Bash', target: 'npm install dayjs' }] });
+    // A correction answers the turn before it.
+    expect(corrected).toMatchObject({ kind: 'correction', task: 'add the dayjs package', actions: [{ tool: 'Read', target: 'package.json' }, { tool: 'Bash', target: 'npm install dayjs' }] });
+    expect(again).toMatchObject({ kind: 'correction', task: 'no, we use pnpm here', actions: [{ tool: 'Grep', target: 'dayjs' }] });
+  });
+
+  it('actions stop at 20, and a target at 200 characters; pasted text is not in the task', async () => {
+    const many = Array.from({ length: 25 }, (_, i) => tool(2 + i, 'Bash', { command: `echo ${i} ${'x'.repeat(300)}` }));
+    const file = transcript([typed(1, `fix it <pasted_content id="p">secret paste</pasted_content id="p"> ${'please '.repeat(60)}`), ...many, interrupt(40)]);
+
+    const [signal] = (await readTranscript(file, 's1')).signals;
+    expect(signal!.actions).toHaveLength(20);
+    expect(signal!.actions[0]!.target).toHaveLength(200);
+    expect(signal!.task).toHaveLength(300);
+    expect(signal!.task).not.toContain('secret');
+  });
+
+  it("a subagent's actions are not the turn's", async () => {
+    const file = transcript([typed(1, 'start'), { ...tool(2, 'Bash', { command: 'rm -rf build' }), isSidechain: true }, tool(3, 'Read', { file_path: 'a.ts' }), interrupt(4)]);
+
+    expect((await readTranscript(file, 's1')).signals[0]!.actions).toEqual([{ tool: 'Read', target: 'a.ts' }]);
   });
 
   it("a long correction keeps only its opening, without pasted text, as its words", async () => {

@@ -12,6 +12,16 @@ export interface Signal {
   untrusted: boolean;
   // A correction's opening, for --excerpts only.
   words?: string;
+  // The opening of the prompt that began the signal's turn, and what the agent did since: what diagnose
+  // sends, redacted (D83).
+  task?: string;
+  actions: Action[];
+}
+
+export interface Action {
+  tool: string;
+  // Its command, path or pattern.
+  target: string;
 }
 
 export interface SessionTranscript {
@@ -60,7 +70,18 @@ interface Line {
   message?: { content?: unknown };
 }
 
-type Block = { type?: string; text?: string; name?: string };
+type Block = { type?: string; text?: string; name?: string; input?: Record<string, unknown> };
+
+const TARGETS = ['command', 'file_path', 'path', 'pattern', 'skill', 'url', 'query'];
+
+const actionsOf = (content: unknown): Action[] =>
+  Array.isArray(content)
+    ? (content as Block[])
+        .filter((b) => b.type === 'tool_use' && typeof b.name === 'string')
+        .map((b) => ({ tool: b.name!, target: String(TARGETS.map((k) => b.input?.[k]).find((v) => typeof v === 'string') ?? '').slice(0, 200) }))
+    : [];
+
+const openingOf = (prompt: string, length: number) => prompt.replace(PASTED, ' ').trim().slice(0, length);
 
 const texts = (content: unknown): string[] =>
   typeof content === 'string' ? [content] : Array.isArray(content) ? (content as Block[]).filter((b) => b.type === 'text' && typeof b.text === 'string').map((b) => b.text!) : [];
@@ -98,6 +119,9 @@ export async function readTranscript(file: string, session: string): Promise<Ses
   const fromSubagent = await firstUntrustedInSubagents(file, session);
   let answered = false;
   let untrusted = false;
+  // The current turn: the prompt that began it, and what the agent has done since.
+  let task: string | undefined;
+  let actions: Action[] = [];
   for await (const text of lines(file)) {
     if (!text.includes('"type":"user"') && !text.includes('"type":"assistant"') && !text.includes('"compact_boundary"')) continue;
     let line: Line;
@@ -118,21 +142,27 @@ export async function readTranscript(file: string, session: string): Promise<Ses
 
     if (line.type === 'assistant') {
       answered = true;
+      if (actions.length < 20) actions = [...actions, ...actionsOf(content)].slice(0, 20);
       continue;
     }
     if (line.type !== 'user') continue;
 
+    const turn = { ...(task !== undefined && { task }), actions };
     if (texts(content).some((t) => INTERRUPT.test(t))) {
-      signals.push({ kind: 'interrupted', ts, untrusted });
+      signals.push({ kind: 'interrupted', ts, untrusted, ...turn });
       continue;
     }
     if (line.isMeta || (line.origin?.kind !== 'human' && line.turnOrigin !== 'human')) continue;
     const prompt = texts(content).join('\n').trim();
     if (!prompt) continue;
     prompts.push(ts);
-    if (!answered || prompt.startsWith(SUMMARY)) continue;
-    const opening = prompt.replace(PASTED, ' ').trim().slice(0, 160);
-    if (CORRECTION.some((r) => r.test(opening))) signals.push({ kind: 'correction', ts, untrusted, words: opening });
+    // A new turn begins; a compaction's summary is no one's task.
+    const summary = prompt.startsWith(SUMMARY);
+    task = summary ? undefined : openingOf(prompt, 300);
+    actions = [];
+    if (!answered || summary) continue;
+    const opening = openingOf(prompt, 160);
+    if (CORRECTION.some((r) => r.test(opening))) signals.push({ kind: 'correction', ts, untrusted, words: opening, ...turn });
   }
   return { session, prompts, compactions, signals };
 }
