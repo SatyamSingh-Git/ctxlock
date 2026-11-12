@@ -324,6 +324,24 @@ Each also goes into `journey/decisions.md` in Task 6.
   - **`journey/decisions.md`:** D83–D88.
 - [ ] **Step 3: Run** `npm run ci`. Expected: PASS. **Commit** `docs: ctxlock diagnose in the guide, the live run, and D83-D88`, push, and watch both operating systems' CI.
 
+## Final review
+
+A fresh Opus reviewer read the whole branch (f90f4e2..0343257). Three Importants, and one Minor re-graded to Important, were fixed test-first in one commit:
+- **A proposal whose replay failed still said the probe "fails without the fix and passes with it".** It now says what the replay showed.
+- **A fix that adds lines came out as one line,** its newlines printed as `?`, in the text, the proposal and the issue. Lines are now split before control characters are replaced, and tabs are kept.
+- **One issue per unit rested on GitHub's search index,** which lags behind new issues, so a quick rerun could file a second one. When search finds nothing, the 100 latest issues are read too, and only an issue whose body starts with the marker counts.
+- **Re-graded from Minor: a fix holding a code fence was refused** after a paid run, since the reply's block ended at the first fence. The closing fence must now start a line.
+
+Mutation 9/9. Suite 654/654.
+
+**Deferred minors:**
+- A fix to a unit reached through a link to a file that is not itself a unit is written to the link path, and the copy then restores the target, so a right fix replays as not validated (src/loop/diagnose.ts applyFix, src/eval/workspace.ts).
+- Action targets and the task are cut to 200 and 300 characters before redaction, so a token cut at that point no longer matches its shape (src/loop/transcript.ts).
+- The JSON output leaves out a probe's `not`, so an inverted probe reads as a positive one; the proposal keeps it (src/report/diagnose.ts renderDiagnosis).
+- A signal's `untrusted` flag is not passed to the diagnosis or shown in the proposal, though §6 asks for such sessions to be scored down.
+- A rerun updates a closed issue's body, which notifies no one; a comment or a reopen would reach the owner.
+- The guide says "inconclusive" means the run budget ran out; it also comes from runs that errored, and `--runs 1` can never validate.
+
 ## After this plan
 
 Plan 9:

@@ -12,5 +12,7 @@ if (scenario.fail) {
   process.exit(4);
 }
 const repo = argv[argv.indexOf('-R') + 1];
-if (argv[0] === 'issue' && argv[1] === 'list') process.stdout.write(JSON.stringify(scenario.issues ?? []));
+// `searched`, when given, is what a --search finds: GitHub's search index lags behind new issues.
+const listed = argv.includes('--search') && scenario.searched ? scenario.searched : scenario.issues;
+if (argv[0] === 'issue' && argv[1] === 'list') process.stdout.write(JSON.stringify(listed ?? []));
 if (argv[0] === 'issue' && argv[1] === 'create') process.stdout.write(`https://github.com/${repo}/issues/${scenario.next ?? 7}\n`);

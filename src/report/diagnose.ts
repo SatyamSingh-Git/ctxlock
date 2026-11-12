@@ -2,7 +2,7 @@ import { stringify } from 'yaml';
 import type { ArmResult, ProbeOutcome } from '../eval/eval.js';
 import type { Expectation, Probe } from '../eval/probes.js';
 import { fenced, marked } from '../loop/draft.js';
-import type { Proposal } from '../loop/propose.js';
+import type { Proposal, Replay } from '../loop/propose.js';
 import { sessions } from './graph.js';
 import { code, plural } from './markdown.js';
 import { printable, table } from './render.js';
@@ -22,7 +22,13 @@ const expectation = (probe: Probe) => {
 const passes = (side: string, a: ArmResult | null) => (a ? `${side} ${a.passed}/${a.valid}` : `${side} -`);
 const signals = (p: Proposal) =>
   [p.unit.kinds.interrupted ? `${p.unit.kinds.interrupted} interrupted` : '', p.unit.kinds.correction ? plural(p.unit.kinds.correction, 'correction') : ''].filter(Boolean).join(', ');
-const lines = (prefix: string, text: string) => text.split('\n').map((l) => `${prefix}${l}`);
+// Split before printable, which would turn the newlines and tabs of a fix into ?.
+const lines = (prefix: string, text: string) => text.split('\n').map((l) => `${prefix}${l.split('\t').map(printable).join('\t')}`);
+const PROBE_SAYS: Record<Replay['status'], string> = {
+  validated: 'It fails without the fix and passes with it. Commit it under `evals/probes/` with the fix.',
+  'not-validated': 'The replay did not validate the fix, so neither it nor the probe is ready to commit as it is.',
+  inconclusive: 'The replay was cut short, so whether the fix works is not known. Run it again with more --max-runs or --max-minutes.',
+};
 const older = (p: Proposal) => `${p.unit.olderVersion} of these sessions loaded other bytes than the unit has today; the fix is to the unit as it is now.`;
 
 // The model wrote the reason, quotes, fix and probe: every one of them is printed through printable.
@@ -36,7 +42,7 @@ export function renderDiagnosis(p: Proposal, format: 'text' | 'json'): string {
   if (d.quotes.length) out.push('', 'Rests on:', ...d.quotes.map((q) => `  ${printable(q)}`));
   if (!d.fix || !d.probe) out.push('', `No fix: ${noFix(p)}`);
   else {
-    out.push('', 'Fix:', ...lines('  - ', printable(d.fix.find)), ...lines('  + ', printable(d.fix.replace)));
+    out.push('', 'Fix:', ...lines('  - ', d.fix.find), ...lines('  + ', d.fix.replace));
     out.push('', `Probe ${printable(d.probe.id)}:`, `  prompt  ${printable(d.probe.prompt)}`, `  expect  ${printable(expectation(d.probe))}`);
   }
   if (p.replay) {
@@ -64,9 +70,9 @@ export function renderProposal(p: Proposal, repo: string): string {
   ];
   if (!d.fix || !d.probe) out.push('', `No fix: ${noFix(p)}`);
   else {
-    const diff = [...lines('- ', printable(d.fix.find)), ...lines('+ ', printable(d.fix.replace))].join('\n');
+    const diff = [...lines('- ', d.fix.find), ...lines('+ ', d.fix.replace)].join('\n');
     const probe = stringify({ version: 1, probes: [{ id: d.probe.id, unit: d.probe.unit, prompt: printable(d.probe.prompt), expect: d.probe.not ? { ...d.probe.expect, not: true } : d.probe.expect }] }).trimEnd();
-    out.push('', '## The fix', '', fenced(diff, 'diff'), '', '## The probe', '', `It fails without the fix and passes with it. Commit it under \`evals/probes/\` with the fix.`, '', fenced(probe, 'yaml'));
+    out.push('', '## The fix', '', fenced(diff, 'diff'), '', '## The probe', '', PROBE_SAYS[p.replay?.status ?? 'inconclusive'], '', fenced(probe, 'yaml'));
   }
   if (p.replay) {
     const said = (o: ProbeOutcome) => `${code(o.probe.id)}: ${passes('base', o.base)}, ${passes('head', o.head)}, ${o.status}`;

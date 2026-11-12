@@ -17,11 +17,14 @@ function gh(cmd: string[], args: string[], repo: string, input?: string): string
   return r.stdout;
 }
 
-// One issue per unit (D87): the issue whose body holds the marker is updated; otherwise one is filed.
+// One issue per unit (D87): the issue whose body starts with the marker is updated; otherwise one is filed.
+// GitHub's search index lags behind new issues, so when search finds none, the latest issues are read too.
 export async function openIssue(repo: string, title: string, body: string, marker: string, cmd: string[] = ['gh']): Promise<{ number: number; url: string; created: boolean }> {
-  const listed = gh(cmd, ['issue', 'list', '-R', repo, '--state', 'all', '--search', `"${marker.trim()}" in:body`, '--json', 'number,url,body', '--limit', '20'], repo);
-  const issues = JSON.parse(listed || '[]') as Array<{ number: number; url: string; body: string }>;
-  const found = issues.find((i) => i.body.includes(marker));
+  const find = (filter: string[], limit: string) => {
+    const listed = gh(cmd, ['issue', 'list', '-R', repo, '--state', 'all', ...filter, '--json', 'number,url,body', '--limit', limit], repo);
+    return (JSON.parse(listed || '[]') as Array<{ number: number; url: string; body: string }>).find((i) => i.body.startsWith(marker));
+  };
+  const found = find(['--search', `"${marker.trim()}" in:body`], '20') ?? find([], '100');
   if (found) {
     gh(cmd, ['issue', 'edit', String(found.number), '-R', repo, '--body-file', '-'], repo, body);
     return { number: found.number, url: found.url, created: false };

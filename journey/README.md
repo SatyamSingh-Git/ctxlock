@@ -3,7 +3,7 @@
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
 **Latest:** [15 — diagnose: from a miss to a fix someone can check](15-diagnose.md).
-- Plan 8, the feedback loop's second part: `ctxlock diagnose` asks Claude for a verdict on one unit's misses, proposes the smallest fix with a probe made from the correction, replays both through `eval`, and with `--open` files one issue for the owner; 649 tests.
+- Plan 8, the feedback loop's second part: `ctxlock diagnose` asks Claude for a verdict on one unit's misses, proposes the smallest fix with a probe made from the correction, replays both through `eval`, and with `--open` files one issue for the owner; 654 tests.
 - On a planted miss, with real Claude Code, both runs found the rule's wrong line, and the fix took the probe from 0 of 2 to 2 of 2.
 - Found: the rule beat the repository's own `package.json` in every base run; the fix's wording varied and the probe didn't; and a mutation check caught a GitHub match that could have filed an issue on the wrong tracker.
 

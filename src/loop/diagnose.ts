@@ -85,7 +85,8 @@ export function applyFix(unit: Unit, fix: { find: string; replace: string }): { 
 
 // The reply is the model's text: every part of it is checked against the unit before it is used.
 export function parseDiagnosis(text: string, unit: Unit, m: UnitMiss): Diagnosis {
-  const block = /```json[^\n]*\n([\s\S]*?)```/.exec(text)?.[1];
+  // The closing fence starts a line: a JSON string can't hold a raw newline, so a fence inside one can't.
+  const block = /```json[^\n]*\n([\s\S]*?)\n[ \t]*```/.exec(text)?.[1];
   if (block === undefined) throw new DiagnosisError('the diagnosis reply had no ```json block');
   let raw: unknown;
   try {

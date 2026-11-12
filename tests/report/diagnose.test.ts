@@ -71,5 +71,23 @@ describe('renderProposal', () => {
     expect(body).toContain('- **Replay:** validated');
     expect(body).toContain("This unit is certified: the fix needs its owner's approval.");
     expect(body).not.toContain(CONTROL);
+    expect(body).toContain('It fails without the fix and passes with it.');
+  });
+
+  it('says the probe and fix are not shown to work when the replay did not validate them', () => {
+    const replay = (status: 'not-validated' | 'inconclusive') => renderProposal({ ...PROPOSAL, replay: { ...PROPOSAL.replay!, status } }, 'acme/web');
+
+    expect(replay('not-validated')).not.toContain('passes with it');
+    expect(replay('not-validated')).toContain('The replay did not validate the fix, so neither it nor the probe is ready to commit as it is.');
+    expect(replay('inconclusive')).not.toContain('passes with it');
+    expect(replay('inconclusive')).toContain('The replay was cut short, so whether the fix works is not known. Run it again with more --max-runs or --max-minutes.');
+  });
+
+  it('a fix that adds lines keeps them as lines, in the text, the diff and the issue', () => {
+    const fix = { find: '## Setup', replace: `## Setup\n\tUse pnpm.${CONTROL}` };
+    const p = { ...PROPOSAL, diagnosis: { ...PROPOSAL.diagnosis, fix } };
+
+    expect(renderDiagnosis(p, 'text')).toContain('\nFix:\n  - ## Setup\n  + ## Setup\n  + \tUse pnpm.?\n');
+    expect(renderProposal(p, 'acme/web')).toContain('```diff\n- ## Setup\n+ ## Setup\n+ \tUse pnpm.?\n```');
   });
 });

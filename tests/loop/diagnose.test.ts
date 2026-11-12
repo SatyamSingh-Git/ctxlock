@@ -60,6 +60,13 @@ describe('parseDiagnosis', () => {
     expect(d.probe).toMatchObject({ id: `miss-${draftName(ID).slice(0, -3)}`, unit: ID, prompt: 'Add the dayjs package.', expect: { command: 'pnpm add' }, kind: 'adherence' });
   });
 
+  it('a fix holding a code fence is read whole', async () => {
+    const fence = '```';
+    const fix = { find: 'Keep the lockfile committed.', replace: `Keep the lockfile committed.\n\n${fence}sh\npnpm install --frozen-lockfile\n${fence}` };
+
+    expect(parseDiagnosis(reply({ ...DEFECT, fix }), await unit(), CORRECTED).fix).toEqual(fix);
+  });
+
   it('a preference or agent-error reply has no fix or probe, and one that carries them is refused', async () => {
     const u = await unit();
     for (const verdict of ['preference', 'agent-error']) {

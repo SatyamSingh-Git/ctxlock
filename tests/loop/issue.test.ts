@@ -37,7 +37,8 @@ describe('openIssue', () => {
     const r = await openIssue('acme/web', 'ctxlock: rule/.claude/rules/deps.md needs a look', body, MARKER, GH);
 
     expect(r).toEqual({ number: 7, url: 'https://github.com/acme/web/issues/7', created: true });
-    const [list, create] = calls();
+    const [list, latest, create] = calls();
+    expect(latest!.argv).not.toContain('--search');
     // Closed issues too, so a unit closed once and missed again is not filed twice.
     expect(list!.argv).toEqual(['issue', 'list', '-R', 'acme/web', '--state', 'all', '--search', `"${MARKER.trim()}" in:body`, '--json', 'number,url,body', '--limit', '20']);
     expect(create).toEqual({ argv: ['issue', 'create', '-R', 'acme/web', '--title', 'ctxlock: rule/.claude/rules/deps.md needs a look', '--body-file', '-'], stdin: body });
@@ -51,6 +52,24 @@ describe('openIssue', () => {
     expect(r).toEqual({ number: 5, url: 'https://github.com/acme/web/issues/5', created: false });
     expect(calls().map((c) => c.argv.slice(0, 3))).toEqual([['issue', 'list', '-R'], ['issue', 'edit', '5']]);
     expect(calls()[1]!.stdin).toBe(`${MARKER}sha256:1 -->\nnew`);
+  });
+
+  it("an issue that only quotes the marker is not taken for the unit's own", async () => {
+    scenario({ issues: [{ number: 3, url: 'https://github.com/acme/web/issues/3', body: `See ${MARKER}sha256:0 -->` }, { number: 5, url: 'https://github.com/acme/web/issues/5', body: `${MARKER}sha256:0 -->\nold` }] });
+
+    expect(await openIssue('acme/web', 'title', `${MARKER}sha256:1 -->\nnew`, MARKER, GH)).toMatchObject({ number: 5, created: false });
+  });
+
+  it('an issue search has not indexed yet is found among the latest issues, so a quick rerun files no second one', async () => {
+    scenario({ searched: [], issues: [{ number: 9, url: 'https://github.com/acme/web/issues/9', body: `${MARKER}sha256:0 -->\nold` }] });
+
+    const r = await openIssue('acme/web', 'title', `${MARKER}sha256:1 -->\nnew`, MARKER, GH);
+
+    expect(r).toMatchObject({ number: 9, created: false });
+    const [search, latest, edit] = calls();
+    expect(search!.argv).toContain('--search');
+    expect(latest!.argv).toEqual(['issue', 'list', '-R', 'acme/web', '--state', 'all', '--json', 'number,url,body', '--limit', '100']);
+    expect(edit!.argv.slice(0, 3)).toEqual(['issue', 'edit', '9']);
   });
 
   it('a gh that fails is an IssueError naming the repository', async () => {

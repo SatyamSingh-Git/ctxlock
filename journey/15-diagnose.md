@@ -14,7 +14,7 @@
 - **Nothing is written to the repository.**
 - **`eval`'s paired runner is now `runProbes`,** which takes two readers. `eval` and the replay share it.
 - **Each signal from `misses` now carries its turn's task and the agent's actions.** Before, it had only the person's words.
-- **The suite** has 649 tests.
+- **The suite** has 654 tests.
 
 ## What worked
 
@@ -49,6 +49,13 @@ Both got a test, and the mutants were run again.
 ## What broke
 
 - **The live setup, before it ran.** A scratch `CLAUDE_CONFIG_DIR` holds the planted transcript. But the replay's Claude Code runs inherit the environment, and with that variable set they would find no login. A wrapper that drops the variable fixed the run. For a person, the folder Claude Code uses and the one ctxlock reads are the same, so this is the fixture's problem, not theirs.
+- **The final review found four things an owner would have got wrong.** A fresh Opus reviewer read the whole branch:
+  - **A wrong promise:** a proposal whose replay failed still said the probe "fails without the fix and passes with it", and `--open` would have put that on the owner's tracker.
+  - **Unusable fixes:** a fix that adds lines was printed with its newlines as `?`.
+  - **Duplicate issues:** one issue per unit rested on GitHub's search index, which lags behind new issues.
+  - **Refused replies:** a reply whose fix held a code fence was refused, since the block ended at the first fence.
+
+  All four were fixed test-first. Six minors are listed in the plan. `--open` has still not run against real GitHub.
 - **Tests written wrong, three times:** an `await` inside an arrow that wasn't `async`, a fixture whose text occurred twice when the test meant once, and a sort order expected backwards. Each failed for the wrong reason first, and was fixed in the test.
 
 ## What was learned
