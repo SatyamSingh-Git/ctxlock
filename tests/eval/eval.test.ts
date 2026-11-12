@@ -1,7 +1,11 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { type ArmResult, EvalError, type EvalOptions, runEval, status } from '../../src/eval/eval.js';
+import { type ArmResult, EvalError, type EvalOptions, runEval, runProbes, status } from '../../src/eval/eval.js';
+import { parseProbeFile } from '../../src/eval/probes.js';
+import { overlayReader } from '../../src/repo/overlay.js';
+import { fsReader } from '../../src/repo/reader.js';
+import { scanRepo } from '../../src/scan.js';
 import { cleanup, git, gitRepo, tempDir, writeTree } from '../helpers/repo.js';
 
 afterAll(cleanup);
@@ -399,5 +403,23 @@ describe('status', () => {
     expect(status(arm(1, 3), arm(2, 3))).toBe('unchanged');
     expect(status(arm(0, 1), arm(3, 3))).toBe('inconclusive');
     expect(status(null, arm(3, 3))).toBe('inconclusive');
+  });
+});
+
+describe('runProbes', { timeout: 120_000 }, () => {
+  it('runProbes runs a probe against two readers, one an overlay, and reports it improved when only the overlay passes', async () => {
+    const root = tempDir();
+    writeTree(root, { 'AGENTS.md': 'Use npm.\n' });
+    const base = fsReader(root);
+    const head = overlayReader(base, new Map([['AGENTS.md', Buffer.from('Use pnpm.\n')]]));
+    const scans = { base: await scanRepo(base), head: await scanRepo(head) };
+    const [probe] = parseProbeFile(probeFile({ id: 'deps' }), 'evals/probes/p.yaml');
+
+    const r = await runProbes({ base, head }, scans, [{ probe: probe!, source: 'head', changedInHead: false, selectedFor: 'changed' }], { ...options(root), trees: { base: null, head: null } });
+
+    expect(r.outcomes).toHaveLength(1);
+    expect(r.outcomes[0]).toMatchObject({ status: 'improved', base: { passed: 0, valid: 3 }, head: { passed: 3, valid: 3 } });
+    expect(r.totals.runs).toBe(6);
+    expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe('Use npm.\n');
   });
 });

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { impactOf } from '../graph/graph.js';
-import { fsReader, gitReader } from '../repo/reader.js';
+import { fsReader, gitReader, type RepoReader } from '../repo/reader.js';
 import { type ScanResult, scanRepo } from '../scan.js';
 import { sha256Hex } from '../units/digest.js';
 import { type Transcript, claudeVersion as readVersion, runClaude } from './claude.js';
@@ -199,11 +199,42 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     harness: 'claude-code', model: null, claudeVersion: null, runsPerArm: opts.runs, changedUnits, outcomes: [], stripped: [], gateFailures: [], headProbeErrors,
     totals: { runs: 0, cachedRuns: 0, wallMs: 0, costUsd: 0, utilizationBefore: null, utilizationAfter: null },
   };
-  if (selected.length === 0) {
-    result.totals.wallMs = now() - started;
-    return result;
+  if (selected.length > 0) {
+    const trees = { base: await treeOf(opts.root, opts.base), head: opts.head ? await treeOf(opts.root, opts.head) : null };
+    Object.assign(result, await runProbes(readers, scans, selected, { ...opts, trees, started }));
   }
+  result.totals.wallMs = now() - started;
+  return result;
+}
 
+export interface ProbeRun {
+  probe: Probe;
+  source: 'base' | 'head';
+  changedInHead: boolean;
+  selectedFor: string;
+}
+
+type RunOptions = Pick<EvalOptions, 'runs' | 'maxRuns' | 'maxMinutes' | 'model' | 'claude' | 'workdir' | 'cacheDir' | 'ctxlockVersion' | 'keepRuns' | 'now'> & {
+  // A git tree to cache an arm's runs by, or null for a working tree or an overlay, which are never cached.
+  trees: Record<ArmName, string | null>;
+  // When the time budget began; by default, now.
+  started?: number;
+};
+
+// Each probe run in two copies, one materialized from each reader, paired. Nothing is ever written
+// where the readers read from.
+export async function runProbes(
+  readers: Record<ArmName, RepoReader>,
+  scans: Record<ArmName, ScanResult>,
+  probes: ProbeRun[],
+  opts: RunOptions,
+): Promise<Pick<EvalResult, 'model' | 'claudeVersion' | 'outcomes' | 'stripped' | 'gateFailures' | 'totals'>> {
+  const now = opts.now ?? Date.now;
+  const started = opts.started ?? now();
+  const result: Pick<EvalResult, 'model' | 'claudeVersion' | 'outcomes' | 'stripped' | 'gateFailures' | 'totals'> = {
+    model: null, claudeVersion: null, outcomes: [], stripped: [], gateFailures: [],
+    totals: { runs: 0, cachedRuns: 0, wallMs: 0, costUsd: 0, utilizationBefore: null, utilizationAfter: null },
+  };
   mkdirSync(opts.workdir, { recursive: true });
   const runRoot = mkdtempSync(join(opts.workdir, 'ctxlock-run-'));
   const dirs: Record<ArmName, string> = { base: join(runRoot, 'base'), head: join(runRoot, 'head') };
@@ -214,7 +245,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     }
     const version = await readVersion(opts.claude);
     result.claudeVersion = version;
-    const trees: Record<ArmName, string | null> = { base: await treeOf(opts.root, opts.base), head: opts.head ? await treeOf(opts.root, opts.head) : null };
+    const trees = opts.trees;
     const before: Partial<Record<ArmName, ReturnType<typeof snapshot>>> = {};
     for (const arm of ['base', 'head'] as const) {
       const m = await materialize(readers[arm], dirs[arm]);
@@ -247,7 +278,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
 
     let planned = 0;
     let overBudget = false;
-    const plans = selected.map((c) => {
+    const plans = probes.map((c) => {
       const keys = { base: cacheKey('base', c.probe), head: cacheKey('head', c.probe) };
       const records = { base: readCache(keys.base), head: readCache(keys.head) };
       const cost = 2 * opts.runs - records.base.length - records.head.length;
