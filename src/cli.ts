@@ -12,6 +12,7 @@ import { eventsHome, readEvents } from './collect/events.js';
 import { buildReport, shareable } from './collect/report.js';
 import { joinSessions, sessionTimelines } from './collect/sessions.js';
 import { DiagnosisError } from './loop/diagnose.js';
+import { githubRepo, IssueError, openIssue } from './loop/issue.js';
 import { type DraftKind, draftName, draftState, renderDraft } from './loop/draft.js';
 import { findMisses, type Misses } from './loop/misses.js';
 import { diagnose } from './loop/propose.js';
@@ -161,6 +162,8 @@ interface DiagnoseFlags {
   claude?: string;
   workdir?: string;
   drafts?: string;
+  open?: boolean;
+  gh?: string;
 }
 
 interface EvalFlags {
@@ -391,6 +394,8 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .option('--claude <path>', "Claude Code's executable (default: claude on PATH)")
     .option('--workdir <dir>', 'where run folders go (default: $RUNNER_TEMP, or the system temp folder)')
     .option('--drafts <folder>', "write the proposal for the unit's owner into this folder")
+    .option('--open', "file the proposal as an issue in the unit's GitHub repository, or update the one filed before; for a defect or a gap")
+    .option('--gh <path>', "GitHub CLI's executable (default: gh on PATH)")
     .action(async (ref: string, dir: string | undefined, opts: DiagnoseFlags) => {
       const root = resolve(dir ?? '.');
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
@@ -399,6 +404,10 @@ export async function main(argv: string[], io: Io): Promise<number> {
       if (!unit) throw new UsageError(`ctxlock diagnose: no unit ${ref}; ctxlock scan lists the units`);
       const miss = (await missesAt(root, scan, { minSessions: 1, since: opts.since })).units.find((u) => u.id === unit.id);
       if (!miss) throw new UsageError(`ctxlock diagnose: no signal had ${unit.id} in context; ctxlock misses lists the units that did`);
+      const repo = miss.upstream?.repo ?? (await repoName(root));
+      // Checked before Claude runs, so a wrong repository costs nothing.
+      const github = githubRepo(repo);
+      if (opts.open && !github) throw new UsageError(`ctxlock diagnose --open: ${shareable(repo)} is not a GitHub repository`);
       const p = await diagnose({
         root,
         miss,
@@ -410,10 +419,14 @@ export async function main(argv: string[], io: Io): Promise<number> {
         maxMinutes: opts.maxMinutes,
       });
       io.stdout(renderDiagnosis(p, opts.format));
-      if (opts.drafts === undefined) return;
-      const text = renderProposal(p, shareable(miss.upstream?.repo ?? (await repoName(root))));
+      const text = renderProposal(p, shareable(repo));
       const say = opts.format === 'json' ? io.stderr : io.stdout;
-      say(writeDrafts(resolve(opts.drafts), [{ name: `${draftName(unit.id).slice(0, -'.md'.length)}.fix.md`, id: unit.id, kind: 'fix', text }], 'Proposal written'));
+      if (opts.drafts !== undefined) say(writeDrafts(resolve(opts.drafts), [{ name: `${draftName(unit.id).slice(0, -'.md'.length)}.fix.md`, id: unit.id, kind: 'fix', text }], 'Proposal written'));
+      if (!opts.open) return;
+      const { verdict } = p.diagnosis;
+      if (verdict !== 'defect' && verdict !== 'gap') return say(`\nNo issue filed: the verdict is ${verdict}, so there is nothing for the unit to fix.\n`);
+      const issue = await openIssue(github!, `ctxlock: ${unit.id} needs a look`, text, `<!-- ctxlock:fix ${unit.id} `, opts.gh === undefined ? undefined : [opts.gh]);
+      say(`\n${issue.created ? 'Issue filed' : 'Issue updated'}: ${issue.url}\n`);
     });
 
   program
@@ -565,7 +578,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     // Commander has already printed its own message; help and version exit 0.
     if (err instanceof CommanderError) return err.exitCode === 0 ? 0 : 2;
     // Anything else is a bug or input ctxlock cannot handle. It still exits 2, because 1 means must-fix.
-    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, DiagnosisError, BuildError, UpstreamError, LockError].some((type) => err instanceof type);
+    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, DiagnosisError, IssueError, BuildError, UpstreamError, LockError].some((type) => err instanceof type);
     const reason = err instanceof Error ? err.message : String(err);
     io.stderr(known ? `${reason}\n` : `ctxlock could not run: ${reason}\n`);
     if (markdown) io.stdout(renderErrorMarkdown(reason));

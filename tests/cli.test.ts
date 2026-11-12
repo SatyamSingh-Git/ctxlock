@@ -858,6 +858,57 @@ describe('ctxlock misses', () => {
       expect(again.stdout).toContain(`Left as it is, edited since ctxlock wrote it:\n  ${file}\n`);
       expect(readFileSync(file, 'utf8')).toBe(edited);
     });
+
+    it("diagnose --open files for a defect, in the upstream's repository for a synced unit, and files nothing for a preference", async () => {
+      const reply = (o: object) => {
+        const file = join(tempDir(), 'scenario.json');
+        const behaviours = [
+          { when: { promptContains: 'You are diagnosing a miss' }, text: `\`\`\`json\n${JSON.stringify(o)}\n\`\`\``, calls: [] },
+          { when: { file: '.claude/rules/api.md', contains: 'v2' }, calls: [{ tool: 'Bash', input: { command: 'curl /v2/items' } }] },
+          { calls: [{ tool: 'Bash', input: { command: 'curl /v1/items' } }] },
+        ];
+        writeFileSync(file, JSON.stringify({ behaviours }));
+        vi.stubEnv('FAKE_CLAUDE_SCENARIO', file);
+      };
+      const DEFECT = { verdict: 'defect', reason: 'It names no version.', quotes: ['API rule.'], fix: { find: 'API rule.', replace: 'API rule: call the v2 endpoint.' }, probe: { prompt: 'Add the endpoint.', expect: { command: 'v2' } } };
+      const log = join(tempDir(), 'gh.jsonl');
+      const ghScenario = join(tempDir(), 'gh.json');
+      writeFileSync(ghScenario, '{}');
+      vi.stubEnv('FAKE_GH_LOG', log);
+      vi.stubEnv('FAKE_GH_SCENARIO', ghScenario);
+      const gh = () => (existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { argv: string[]; stdin: string | null }) : []);
+      const open = (dir: string) => cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--open', '--gh', 'tests/helpers/fake-gh.mjs');
+
+      const dir = recorded((real) => real);
+      reply(DEFECT);
+      const local = await open(dir);
+      expect(local.code).toBe(2);
+      expect(local.stderr).toMatch(/--open: .+ is not a GitHub repository/);
+      expect(gh()).toEqual([]);
+
+      git(dir, 'init', '-q');
+      git(dir, 'remote', 'add', 'origin', 'https://github.com/acme/web.git');
+      const filed = await open(dir);
+      expect(filed.code).toBe(0);
+      expect(filed.stdout).toContain('Issue filed: https://github.com/acme/web/issues/7');
+      const create = gh().at(-1)!;
+      expect(create.argv).toEqual(['issue', 'create', '-R', 'acme/web', '--title', 'ctxlock: rule/.claude/rules/api.md needs a look', '--body-file', '-']);
+      expect(create.stdin).toMatch(/^<!-- ctxlock:fix rule\/\.claude\/rules\/api\.md \S+ -->\n/);
+      expect(create.stdin).toContain('call the v2 endpoint');
+      expect(create.stdin).not.toContain('no, the v2 endpoint');
+
+      const D = `sha256:${'c'.repeat(64)}`;
+      writeTree(dir, { 'ctxlock.lock': serializeLock({ upstreams: [{ name: 'platform', repo: 'git@github.com:acme/platform.git', ref: 'main', commit: 'f'.repeat(40), units: [{ path: '.claude/rules/api.md', id: 'rule/.claude/rules/api.md', digest: D, tier: 'reviewed', files: { '.claude/rules/api.md': D } }] }] }) });
+      expect((await open(dir)).stdout).toContain('Issue filed: https://github.com/acme/platform/issues/7');
+      expect(gh().at(-1)!.argv.slice(0, 4)).toEqual(['issue', 'create', '-R', 'acme/platform']);
+
+      const calls = gh().length;
+      reply({ verdict: 'preference', reason: 'A one-off wish.', quotes: [] });
+      const preference = await open(dir);
+      expect(preference.code).toBe(0);
+      expect(preference.stdout).toContain('No issue filed: the verdict is preference, so there is nothing for the unit to fix.');
+      expect(gh()).toHaveLength(calls);
+    });
   });
 
   it('a bad --since is exit 2', async () => {
