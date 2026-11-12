@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { redact } from '../../src/loop/redact.js';
 import { CORRECTION, findTranscript, readTranscript, transcriptsHome } from '../../src/loop/transcript.js';
 import { cleanup, tempDir } from '../helpers/repo.js';
 
@@ -64,14 +65,37 @@ describe('readTranscript', () => {
   });
 
   it('actions stop at 20, and a target at 200 characters; pasted text is not in the task', async () => {
-    const many = Array.from({ length: 25 }, (_, i) => tool(2 + i, 'Bash', { command: `echo ${i} ${'x'.repeat(300)}` }));
+    const many = Array.from({ length: 25 }, (_, i) => tool(2 + i, 'Bash', { command: `echo ${i} ${'x '.repeat(150)}` }));
     const file = transcript([typed(1, `fix it <pasted_content id="p">secret paste</pasted_content id="p"> ${'please '.repeat(60)}`), ...many, interrupt(40)]);
 
     const [signal] = (await readTranscript(file, 's1')).signals;
     expect(signal!.actions).toHaveLength(20);
     expect(signal!.actions[0]!.target).toHaveLength(200);
-    expect(signal!.task).toHaveLength(300);
+    expect(signal!.task).toBe(`fix it   ${'please '.repeat(41)}please`);
     expect(signal!.task).not.toContain('secret');
+  });
+
+  it('a cut never splits a run of non-space characters, so a token at the cut keeps the shape redact knows', async () => {
+    // Built here, so no token-shaped string sits in the repository.
+    const token = `ghp_${'Ab1'.repeat(12)}`;
+    const file = transcript([
+      typed(1, `${'a '.repeat(140)}${token} done`),
+      tool(2, 'Bash', { command: `${'b '.repeat(90)}${token} more` }),
+      tool(3, 'Bash', { command: `echo ${'x'.repeat(1000)}` }),
+      tool(4, 'Bash', { command: `${'d '.repeat(100)}next` }),
+      said(4),
+      typed(5, `no, ${'c '.repeat(76)}${token} ok`),
+    ]);
+
+    const [signal] = (await readTranscript(file, 's1')).signals;
+    expect(signal!.task!.endsWith(token)).toBe(true);
+    expect(signal!.actions[0]!.target.endsWith(token)).toBe(true);
+    expect(signal!.words!.endsWith(token)).toBe(true);
+    for (const text of [signal!.task!, signal!.actions[0]!.target, signal!.words!]) expect(redact(text)).not.toContain('ghp_');
+    // A run longer than any token is still cut, 200 characters past the cut at most.
+    expect(signal!.actions[1]!.target).toHaveLength(400);
+    // A cut right after a space takes nothing of the next word.
+    expect(signal!.actions[2]!.target).toBe('d '.repeat(100));
   });
 
   it("a subagent's actions are not the turn's", async () => {
@@ -84,8 +108,8 @@ describe('readTranscript', () => {
     const file = transcript([typed(1, 'start'), said(2), typed(3, `no, <pasted_content id="p">secret</pasted_content id="p"> use ${'the shared helper '.repeat(20)}`)]);
 
     const words = (await readTranscript(file, 's1')).signals[0]!.words!;
-    expect(words).toHaveLength(160);
-    expect(words.startsWith('no,   use the shared helper')).toBe(true);
+    // 160 characters, to the end of the word the cut falls in.
+    expect(words).toBe(`no,   use ${'the shared helper '.repeat(8)}the shared`);
     expect(words).not.toContain('secret');
   });
 

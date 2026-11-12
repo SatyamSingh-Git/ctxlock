@@ -74,14 +74,18 @@ type Block = { type?: string; text?: string; name?: string; input?: Record<strin
 
 const TARGETS = ['command', 'file_path', 'path', 'pattern', 'skill', 'url', 'query'];
 
+// Cut where a run of non-space characters ends, up to 200 past the length: redaction comes later, and
+// a token cut short no longer has the shape it is known by.
+const cut = (text: string, length: number) => text.slice(0, length) + (/\S$/.test(text.slice(0, length)) ? (/^\S{0,200}/.exec(text.slice(length))?.[0] ?? '') : '');
+
 const actionsOf = (content: unknown): Action[] =>
   Array.isArray(content)
     ? (content as Block[])
         .filter((b) => b.type === 'tool_use' && typeof b.name === 'string')
-        .map((b) => ({ tool: b.name!, target: String(TARGETS.map((k) => b.input?.[k]).find((v) => typeof v === 'string') ?? '').slice(0, 200) }))
+        .map((b) => ({ tool: b.name!, target: cut(String(TARGETS.map((k) => b.input?.[k]).find((v) => typeof v === 'string') ?? ''), 200) }))
     : [];
 
-const openingOf = (prompt: string, length: number) => prompt.replace(PASTED, ' ').trim().slice(0, length);
+const unpasted = (prompt: string) => prompt.replace(PASTED, ' ').trim();
 
 const texts = (content: unknown): string[] =>
   typeof content === 'string' ? [content] : Array.isArray(content) ? (content as Block[]).filter((b) => b.type === 'text' && typeof b.text === 'string').map((b) => b.text!) : [];
@@ -158,11 +162,12 @@ export async function readTranscript(file: string, session: string): Promise<Ses
     prompts.push(ts);
     // A new turn begins; a compaction's summary is no one's task.
     const summary = prompt.startsWith(SUMMARY);
-    task = summary ? undefined : openingOf(prompt, 300);
+    task = summary ? undefined : cut(unpasted(prompt), 300);
     actions = [];
     if (!answered || summary) continue;
-    const opening = openingOf(prompt, 160);
-    if (CORRECTION.some((r) => r.test(opening))) signals.push({ kind: 'correction', ts, untrusted, words: opening, ...turn });
+    // The phrases are matched on exactly the first 160 characters.
+    const opening = unpasted(prompt);
+    if (CORRECTION.some((r) => r.test(opening.slice(0, 160)))) signals.push({ kind: 'correction', ts, untrusted, words: cut(opening, 160), ...turn });
   }
   return { session, prompts, compactions, signals };
 }
