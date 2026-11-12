@@ -1,9 +1,9 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { MissSignal, UnitMiss } from '../../src/loop/misses.js';
 import { diagnose } from '../../src/loop/propose.js';
-import { cleanup, tempDir, writeTree } from '../helpers/repo.js';
+import { canSymlink, cleanup, tempDir, writeTree } from '../helpers/repo.js';
 
 afterAll(cleanup);
 
@@ -75,6 +75,32 @@ describe('diagnose', { timeout: 120_000 }, () => {
     // Nothing in the repository changes, the probe files included.
     expect(readFileSync(join(root, '.claude/rules/deps.md'), 'utf8')).toBe(RULE);
     expect(readFileSync(join(root, 'evals/probes/deps.yaml'), 'utf8')).toBe(probes('dayjs'));
+  });
+
+  it('a fix to a rule reached through a linked folder is replayed on the bytes the link copies', async () => {
+    scenario(DEFECT);
+    const root = tempDir();
+    writeTree(root, { 'shared/rules/deps.md': RULE });
+    mkdirSync(join(root, '.claude'));
+    symlinkSync(join(root, 'shared', 'rules'), join(root, '.claude', 'rules'), 'junction');
+
+    const p = await run(root);
+
+    expect(p.replay!.miss).toMatchObject({ status: 'improved', head: { passed: 2, valid: 2 } });
+    expect(p.replay!.status).toBe('validated');
+    expect(readFileSync(join(root, 'shared/rules/deps.md'), 'utf8')).toBe(RULE);
+  });
+
+  it.runIf(canSymlink)('a fix to a rule that is itself a link is replayed on the bytes the link copies', async () => {
+    scenario(DEFECT);
+    const root = tempDir();
+    writeTree(root, { 'docs/deps.md': RULE, '.claude/rules/keep.md': 'Keep it short.\n' });
+    symlinkSync(join('..', '..', 'docs', 'deps.md'), join(root, '.claude', 'rules', 'deps.md'));
+
+    const p = await run(root);
+
+    expect(p.replay!.status).toBe('validated');
+    expect(readFileSync(join(root, 'docs/deps.md'), 'utf8')).toBe(RULE);
   });
 
   it("a fix that changes nothing the agent does, or that makes the unit's other probe worse, is not validated", async () => {

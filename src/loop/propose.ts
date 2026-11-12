@@ -65,7 +65,11 @@ export async function diagnose(opts: DiagnoseOptions): Promise<Proposal> {
     if (!diagnosis.fix || !diagnosis.probe) return { unit: opts.miss, diagnosis, replay: null, runs: 1, tier };
 
     const fixed = applyFix(unit, diagnosis.fix);
-    const head = overlayReader(reader, new Map([[fixed.path, fixed.bytes]]));
+    // A copy turns each link into the bytes of its target, so a unit reached through a link is fixed
+    // in its target.
+    const links = [...(await reader.listSymlinks())];
+    const real = links.reduce((path, [link, target]) => (target !== null && (path === link || path.startsWith(`${link}/`)) ? `${target}${path.slice(link.length)}` : path), fixed.path);
+    const head = overlayReader(reader, new Map([[real, fixed.bytes]]));
     // The unit's own probes are its golden set: the fix may not make one of them worse.
     const own = (await loadProbes(reader)).filter((p) => p.unit === unit.id);
     const probes: ProbeRun[] = [
