@@ -35,7 +35,7 @@ const older = (p: Proposal) => `${p.unit.olderVersion} of these sessions loaded 
 export function renderDiagnosis(p: Proposal, format: 'text' | 'json'): string {
   const d = p.diagnosis;
   if (format === 'json') {
-    const json = { unit: p.unit.id, verdict: d.verdict, reason: d.reason, quotes: d.quotes, fix: d.fix, probe: d.probe && { id: d.probe.id, prompt: d.probe.prompt, expect: d.probe.expect }, tier: p.tier, replay: p.replay, runs: p.runs };
+    const json = { unit: p.unit.id, verdict: d.verdict, reason: d.reason, quotes: d.quotes, fix: d.fix, probe: d.probe && { id: d.probe.id, prompt: d.probe.prompt, expect: d.probe.expect, not: d.probe.not }, tier: p.tier, replay: p.replay, runs: p.runs };
     return `${JSON.stringify(json, null, 2)}\n`;
   }
   const out = [`ctxlock diagnose · ${p.unit.id} · ${sessions(p.unit.sessions)}, ${signals(p)}`, '', `Verdict: ${d.verdict}`, `  ${printable(d.reason)}`];

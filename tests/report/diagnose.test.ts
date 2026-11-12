@@ -56,6 +56,10 @@ describe('renderDiagnosis', () => {
     expect(stopped).toContain('\nNo fix: only a correction says what was wanted.\n');
 
     expect(JSON.parse(renderDiagnosis(PROPOSAL, 'json'))).toMatchObject({ unit: ID, verdict: 'defect', tier: 'certified', replay: { status: 'validated' }, runs: 9 });
+    // An inverted probe stays inverted, as the proposal's YAML has it.
+    const inverted = { ...PROPOSAL, diagnosis: { ...PROPOSAL.diagnosis, probe: { ...miss!, not: true } } };
+    expect(JSON.parse(renderDiagnosis(inverted, 'json')).probe).toEqual({ id: 'miss-deps', prompt: 'Add the dayjs package.', expect: { command: 'pnpm add' }, not: true });
+    expect(JSON.parse(renderDiagnosis(PROPOSAL, 'json')).probe.not).toBe(false);
   });
 });
 
