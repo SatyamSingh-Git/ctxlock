@@ -14,7 +14,7 @@
 - **Nothing is written to the repository.**
 - **`eval`'s paired runner is now `runProbes`,** which takes two readers. `eval` and the replay share it.
 - **Each signal from `misses` now carries its turn's task and the agent's actions.** Before, it had only the person's words.
-- **The suite** has 654 tests.
+- **The suite** has 661 tests.
 
 ## What worked
 
@@ -55,7 +55,7 @@ Both got a test, and the mutants were run again.
   - **Duplicate issues:** one issue per unit rested on GitHub's search index, which lags behind new issues.
   - **Refused replies:** a reply whose fix held a code fence was refused, since the block ended at the first fence.
 
-  All four were fixed test-first. Six minors are listed in the plan. `--open` has still not run against real GitHub.
+  All four were fixed test-first. The six minors were fixed too, at Satyam's request, one commit each. Two changed what the tool concludes: a linked unit's fix used to replay as not validated, and a moment after web or MCP content now counts for less. `--open` has still not run against real GitHub.
 - **Tests written wrong, three times:** an `await` inside an arrow that wasn't `async`, a fixture whose text occurred twice when the test meant once, and a sort order expected backwards. Each failed for the wrong reason first, and was fixed in the test.
 
 ## What was learned

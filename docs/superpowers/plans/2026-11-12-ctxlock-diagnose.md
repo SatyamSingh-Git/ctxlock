@@ -334,13 +334,15 @@ A fresh Opus reviewer read the whole branch (f90f4e2..0343257). Three Importants
 
 Mutation 9/9. Suite 654/654.
 
-**Deferred minors:**
-- A fix to a unit reached through a link to a file that is not itself a unit is written to the link path, and the copy then restores the target, so a right fix replays as not validated (src/loop/diagnose.ts applyFix, src/eval/workspace.ts).
-- Action targets and the task are cut to 200 and 300 characters before redaction, so a token cut at that point no longer matches its shape (src/loop/transcript.ts).
-- The JSON output leaves out a probe's `not`, so an inverted probe reads as a positive one; the proposal keeps it (src/report/diagnose.ts renderDiagnosis).
-- A signal's `untrusted` flag is not passed to the diagnosis or shown in the proposal, though §6 asks for such sessions to be scored down.
-- A rerun updates a closed issue's body, which notifies no one; a comment or a reopen would reach the owner.
-- The guide says "inconclusive" means the run budget ran out; it also comes from runs that errored, and `--runs 1` can never validate.
+**The six minors, fixed at Satyam's request** ("fix them too"), test-first, one commit and push each, mutation-checked:
+- **A linked unit's fix replayed as not validated.** The copy turns a link into its target's bytes, over the fix written at the link's path. The fix now goes to the real file behind a linked file or folder (`42fb3be`, 4/4).
+- **Text cut before redaction.** A token cut at the task's, a target's or a correction's length kept none of its shape. A cut now runs on to the end of its word, at most 200 characters more; the phrase match still reads 160 (`cc34d6a`, 6/6).
+- **The JSON dropped a probe's `not`** (`b6d4c44`).
+- **Untrusted moments.** One after web or MCP content is marked in the prompt, to be weighed less, and the output, proposal and issue count them (`ecd851f`, 6/6).
+- **A closed issue updated unseen.** It is now reopened as well, and the command says so. An open issue is still updated without a notification, which is my call (`b3c3732`, 5/5).
+- **"inconclusive" in the guide** now names errored runs too. `--runs 1`, which could never validate, is exit 2 before Claude runs (`4ddb7a6`, 3/3).
+
+Suite 661/661.
 
 ## After this plan
 
