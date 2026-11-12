@@ -15,7 +15,7 @@ const [miss, other] = parseProbeFile(
   'x.yaml',
 );
 const outcome = (probe: typeof miss, base: number, head: number, status: ProbeOutcome['status']): ProbeOutcome => ({ probe: probe!, source: 'head', changedInHead: false, selectedFor: 'the miss', base: arm(base), head: arm(head), status });
-const UNIT = { id: ID, sessions: 2, kinds: { interrupted: 1, correction: 1 }, olderVersion: 1 } as UnitMiss;
+const UNIT = { id: ID, sessions: 2, kinds: { interrupted: 1, correction: 1 }, olderVersion: 1, signals: [] } as unknown as UnitMiss;
 const CONTROL = String.fromCodePoint(0x1b);
 
 const PROPOSAL: Proposal = {
@@ -85,6 +85,19 @@ describe('renderProposal', () => {
     expect(replay('not-validated')).toContain('The replay did not validate the fix, so neither it nor the probe is ready to commit as it is.');
     expect(replay('inconclusive')).not.toContain('passes with it');
     expect(replay('inconclusive')).toContain('The replay was cut short, so whether the fix works is not known. Run it again with more --max-runs or --max-minutes.');
+  });
+
+  it('says how many signals came after web or MCP content, in the text, the json and the proposal', () => {
+    const SAYS = "1 of the 2 signals came after the agent read a web page or an MCP tool's output, which may have steered it.";
+    const signals = [{ untrusted: true }, { untrusted: false }] as UnitMiss['signals'];
+    const p = { ...PROPOSAL, unit: { ...UNIT, signals } };
+
+    expect(renderDiagnosis(p, 'text')).toContain(`\n${SAYS}\n`);
+    expect(renderProposal(p, 'acme/web')).toContain(`\n${SAYS}\n`);
+    expect(JSON.parse(renderDiagnosis(p, 'json')).untrusted).toBe(1);
+    const trusted = { ...PROPOSAL, unit: { ...UNIT, signals: [{ untrusted: false }] as UnitMiss['signals'] } };
+    expect(renderDiagnosis(trusted, 'text')).not.toContain('web page');
+    expect(renderProposal(trusted, 'acme/web')).not.toContain('web page');
   });
 
   it('a fix that adds lines keeps them as lines, in the text, the diff and the issue', () => {

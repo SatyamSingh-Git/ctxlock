@@ -136,6 +136,8 @@ Runs: 5
 
 Everything after the unit's text is [redacted](#drafts-for-owners) first. The diagnosing run has no tools, so it can only answer.
 
+**A moment that came after the agent read a web page or an MCP tool's output** is marked so in what is sent, and Claude is told to weigh it less: text from outside may have steered the agent. The output, the proposal and the issue say how many of the signals that was.
+
 **The verdict** is one of:
 - **`defect`:** the unit says something wrong;
 - **`gap`:** it leaves out what was needed;

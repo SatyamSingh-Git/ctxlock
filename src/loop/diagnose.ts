@@ -42,6 +42,8 @@ export function diagnosisPrompt(unit: Unit, m: UnitMiss): string {
     '   What the agent did in that turn:',
     ...(s.actions.length ? s.actions.map((a) => `     - ${a.tool}: ${redact(a.target)}`) : ['     (nothing)']),
     ...(s.words !== undefined ? [`   The person then wrote: ${redact(s.words)}`] : []),
+    // §6: a session that took in untrusted content is scored down.
+    ...(s.untrusted ? ["   This came after the agent read a web page or an MCP tool's output, which may have steered it: weigh it less, and rest no fix on it alone."] : []),
   ]);
   return [
     'You are diagnosing a miss for ctxlock, a CI check for coding-agent context. A person stopped or corrected their coding agent while the context file below was loaded. Decide whether the file is to blame.',

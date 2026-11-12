@@ -29,13 +29,16 @@ const PROBE_SAYS: Record<Replay['status'], string> = {
   'not-validated': 'The replay did not validate the fix, so neither it nor the probe is ready to commit as it is.',
   inconclusive: 'The replay was cut short, so whether the fix works is not known. Run it again with more --max-runs or --max-minutes.',
 };
+const untrusted = (p: Proposal) => p.unit.signals.filter((s) => s.untrusted).length;
+const steered = (p: Proposal) =>
+  untrusted(p) ? [`${untrusted(p)} of the ${plural(p.unit.signals.length, 'signal')} came after the agent read a web page or an MCP tool's output, which may have steered it.`] : [];
 const older = (p: Proposal) => `${p.unit.olderVersion} of these sessions loaded other bytes than the unit has today; the fix is to the unit as it is now.`;
 
 // The model wrote the reason, quotes, fix and probe: every one of them is printed through printable.
 export function renderDiagnosis(p: Proposal, format: 'text' | 'json'): string {
   const d = p.diagnosis;
   if (format === 'json') {
-    const json = { unit: p.unit.id, verdict: d.verdict, reason: d.reason, quotes: d.quotes, fix: d.fix, probe: d.probe && { id: d.probe.id, prompt: d.probe.prompt, expect: d.probe.expect, not: d.probe.not }, tier: p.tier, replay: p.replay, runs: p.runs };
+    const json = { unit: p.unit.id, untrusted: untrusted(p), verdict: d.verdict, reason: d.reason, quotes: d.quotes, fix: d.fix, probe: d.probe && { id: d.probe.id, prompt: d.probe.prompt, expect: d.probe.expect, not: d.probe.not }, tier: p.tier, replay: p.replay, runs: p.runs };
     return `${JSON.stringify(json, null, 2)}\n`;
   }
   const out = [`ctxlock diagnose · ${p.unit.id} · ${sessions(p.unit.sessions)}, ${signals(p)}`, '', `Verdict: ${d.verdict}`, `  ${printable(d.reason)}`];
@@ -49,7 +52,7 @@ export function renderDiagnosis(p: Proposal, format: 'text' | 'json'): string {
     const row = (o: ProbeOutcome, role: string) => [`  ${printable(o.probe.id)}`, role, passes('base', o.base), passes('head', o.head), o.status];
     out.push('', `Replay, ${p.replay.runsPerArm} runs a side: ${p.replay.status}`, table([row(p.replay.miss, 'the miss'), ...p.replay.others.map((o) => row(o, 'existing'))]));
   }
-  const notes = [...(p.unit.olderVersion ? [older(p)] : []), ...(p.tier === 'certified' ? [CERTIFIED] : [])];
+  const notes = [...steered(p), ...(p.unit.olderVersion ? [older(p)] : []), ...(p.tier === 'certified' ? [CERTIFIED] : [])];
   if (notes.length) out.push('', ...notes);
   out.push('', `Runs: ${p.runs}`);
   return `${out.join('\n')}\n`;
@@ -78,6 +81,7 @@ export function renderProposal(p: Proposal, repo: string): string {
     const said = (o: ProbeOutcome) => `${code(o.probe.id)}: ${passes('base', o.base)}, ${passes('head', o.head)}, ${o.status}`;
     out.push('', `- **Replay:** ${p.replay.status}, ${p.replay.runsPerArm} runs a side`, `  - the miss, ${said(p.replay.miss)}`, ...p.replay.others.map((o) => `  - ${said(o)}`));
   }
+  for (const note of steered(p)) out.push('', note);
   if (p.unit.olderVersion) out.push('', older(p));
   if (p.tier === 'certified') out.push('', CERTIFIED);
   out.push('', 'Proposed by ctxlock diagnose. Nothing was changed in the repository.');
