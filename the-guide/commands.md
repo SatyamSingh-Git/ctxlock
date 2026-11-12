@@ -346,7 +346,7 @@ ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs 
 
 **`--drafts <folder>`** writes the proposal, the diagnosis, the fix as a diff, the probe and the replay, as `<unit>.fix.md`. It leaves an edited one alone.
 
-**`--open`** files that proposal as a GitHub issue through your own `gh` (`--gh <path>` names another), in the repository the unit belongs to, for a `defect` or `gap` only. A rerun updates the same issue. It holds nothing from the session itself.
+**`--open`** files that proposal as a GitHub issue through your own `gh` (`--gh <path>` names another), in the repository the unit belongs to, for a `defect` or `gap` only. A rerun updates the same issue, and reopens it if it was closed. It holds nothing from the session itself.
 
 **It never writes to the repository.** A unit need not be routed to be diagnosed, but it must have been in context for at least one signal.
 

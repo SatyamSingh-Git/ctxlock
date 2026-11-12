@@ -426,7 +426,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const { verdict } = p.diagnosis;
       if (verdict !== 'defect' && verdict !== 'gap') return say(`\nNo issue filed: the verdict is ${verdict}, so there is nothing for the unit to fix.\n`);
       const issue = await openIssue(github!, `ctxlock: ${unit.id} needs a look`, text, `<!-- ctxlock:fix ${unit.id} `, opts.gh === undefined ? undefined : [opts.gh]);
-      say(`\n${issue.created ? 'Issue filed' : 'Issue updated'}: ${issue.url}\n`);
+      say(`\n${issue.created ? 'Issue filed' : issue.reopened ? 'Issue reopened and updated' : 'Issue updated'}: ${issue.url}\n`);
     });
 
   program

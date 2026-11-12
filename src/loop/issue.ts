@@ -19,16 +19,19 @@ function gh(cmd: string[], args: string[], repo: string, input?: string): string
 
 // One issue per unit (D87): the issue whose body starts with the marker is updated; otherwise one is filed.
 // GitHub's search index lags behind new issues, so when search finds none, the latest issues are read too.
-export async function openIssue(repo: string, title: string, body: string, marker: string, cmd: string[] = ['gh']): Promise<{ number: number; url: string; created: boolean }> {
+// A closed one is reopened: the unit missed again after it was closed, and an edit alone notifies no one.
+export async function openIssue(repo: string, title: string, body: string, marker: string, cmd: string[] = ['gh']): Promise<{ number: number; url: string; created: boolean; reopened: boolean }> {
   const find = (filter: string[], limit: string) => {
-    const listed = gh(cmd, ['issue', 'list', '-R', repo, '--state', 'all', ...filter, '--json', 'number,url,body', '--limit', limit], repo);
-    return (JSON.parse(listed || '[]') as Array<{ number: number; url: string; body: string }>).find((i) => i.body.startsWith(marker));
+    const listed = gh(cmd, ['issue', 'list', '-R', repo, '--state', 'all', ...filter, '--json', 'number,url,body,state', '--limit', limit], repo);
+    return (JSON.parse(listed || '[]') as Array<{ number: number; url: string; body: string; state: string }>).find((i) => i.body.startsWith(marker));
   };
   const found = find(['--search', `"${marker.trim()}" in:body`], '20') ?? find([], '100');
   if (found) {
     gh(cmd, ['issue', 'edit', String(found.number), '-R', repo, '--body-file', '-'], repo, body);
-    return { number: found.number, url: found.url, created: false };
+    const reopened = found.state === 'CLOSED';
+    if (reopened) gh(cmd, ['issue', 'reopen', String(found.number), '-R', repo], repo);
+    return { number: found.number, url: found.url, created: false, reopened };
   }
   const url = gh(cmd, ['issue', 'create', '-R', repo, '--title', title, '--body-file', '-'], repo, body).trim().split('\n').at(-1)!;
-  return { number: Number(/\/issues\/(\d+)$/.exec(url)?.[1]), url, created: true };
+  return { number: Number(/\/issues\/(\d+)$/.exec(url)?.[1]), url, created: true, reopened: false };
 }

@@ -166,7 +166,7 @@ The reply is checked against the unit: every line it quotes must be in the file,
 
 **`--open` files the proposal as a GitHub issue,** through your own `gh`, in the repository the unit belongs to: this one's `origin`, or the upstream's for a synced unit.
 - **Only for a `defect` or a `gap`.** For any other verdict it says so and files nothing.
-- **One issue per unit:** the body carries a marker, and a rerun updates the issue it finds, closed ones included, instead of filing another.
+- **One issue per unit:** the body carries a marker, and a rerun updates the issue it finds instead of filing another. A closed one is reopened too, since the unit missed again after it was closed, and an edit alone notifies no one. An open one is updated quietly.
 - **What it holds:** the proposal, exactly as `--drafts` writes it. Nothing from the session itself, not the task, the actions or your words.
 - **The repository must be on GitHub.** Anything else is exit 2, before Claude runs.
 - **No pull request is opened.** A fix to shared context needs its owner's reading first.

@@ -902,6 +902,12 @@ describe('ctxlock misses', () => {
       expect((await open(dir)).stdout).toContain('Issue filed: https://github.com/acme/platform/issues/7');
       expect(gh().at(-1)!.argv.slice(0, 4)).toEqual(['issue', 'create', '-R', 'acme/platform']);
 
+      const closed = { number: 4, url: 'https://github.com/acme/platform/issues/4', state: 'CLOSED', body: '<!-- ctxlock:fix rule/.claude/rules/api.md sha256:0 -->\nold' };
+      writeFileSync(ghScenario, JSON.stringify({ issues: [closed] }));
+      expect((await open(dir)).stdout).toContain('Issue reopened and updated: https://github.com/acme/platform/issues/4');
+      writeFileSync(ghScenario, JSON.stringify({ issues: [{ ...closed, state: 'OPEN' }] }));
+      expect((await open(dir)).stdout).toContain('Issue updated: https://github.com/acme/platform/issues/4');
+
       const calls = gh().length;
       reply({ verdict: 'preference', reason: 'A one-off wish.', quotes: [] });
       const preference = await open(dir);
