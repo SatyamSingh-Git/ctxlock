@@ -2,7 +2,7 @@
 
 When you stop Claude Code partway through, or tell it "no, use the other one", something went wrong. Often that's the agent's own mistake. Sometimes it's the context: a rule that says the wrong thing, a skill that leaves something out, or an instruction file the agent read and didn't follow. `ctxlock misses` puts those moments next to the units that were in context, so a unit that keeps turning up can reach its owner.
 
-It is the first step of the feedback loop. It gives exposure, not a diagnosis: a unit in context when you corrected the agent is a candidate, not a culprit.
+It is the first step of the feedback loop. It gives exposure, not a diagnosis: a unit in context when you corrected the agent is a candidate, not a culprit. [`ctxlock diagnose`](#diagnosing-a-unit) is the next step, for one unit at a time.
 
 ## What you need
 
@@ -87,7 +87,7 @@ These are signals, not a diagnosis: the unit was in context when the agent was s
   - **Fenced:** a code fence longer than any run of backticks inside, so no `@mention`, link or markup in it renders.
   - **Read it before you pass it on:** redaction catches shapes, not meaning.
 
-## What it reads, keeps and sends
+## What `misses` reads, keeps and sends
 
 - **Reads:** the collector's events, and the transcripts of the sessions they name.
 - **Keeps:** nothing. What it finds lives in memory while it runs. The only files it writes are the drafts, in the folder you name.
@@ -95,10 +95,82 @@ These are signals, not a diagnosis: the unit was in context when the agent was s
 - **Your words appear only with `--excerpts`,** in the text, the JSON or the drafts.
 - **The JSON names sessions,** since it stays on your machine. `ctxlock report`, which is for sharing, has no misses in it.
 
+## Diagnosing a unit
+
+`ctxlock diagnose <unit>` asks Claude what went wrong in the moments the unit was in context, and when the unit is at fault, proposes the smallest fix and checks it by replay. It runs your own `claude`, as [`eval`](evals.md) does, so it costs runs from your plan. A unit need not be routed, but it must have been in context for at least one signal.
+
+```
+ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>] [--drafts <folder>] [--open] [--gh <path>]
+```
+
+This is real output, from a repository whose rule said `npm install` while its `package.json` named pnpm, and a session in which the person wrote "no, we use pnpm here" ([report](../docs/dogfood/2026-11-12-diagnose.md)):
+
+```
+ctxlock diagnose · rule/.claude/rules/deps.md · 1 session, 1 correction
+
+Verdict: defect
+  The file instructs installing packages with npm install, the agent followed it, and the person wanted pnpm.
+
+Rests on:
+  Install packages with npm install.
+
+Fix:
+  - Install packages with npm install.
+  + Install packages with pnpm add (pnpm install for all dependencies).
+
+Probe miss-rule-.claude-rules-deps.md-4d49356f:
+  prompt  Add the dayjs package to the project so we can format dates.
+  expect  command /pnpm (add|install) dayjs/
+
+Replay, 2 runs a side: validated
+  miss-rule-.claude-rules-deps.md-4d49356f  the miss  base 0/2  head 2/2  improved
+
+Runs: 5
+```
+
+**What it sends to Claude,** and nothing else:
+- the unit's text;
+- for each signal it was in context for, the opening of the prompt that began the turn;
+- what the agent did in that turn: each tool's name, with its command, path or pattern;
+- your correction.
+
+Everything after the unit's text is [redacted](#drafts-for-owners) first. The diagnosing run has no tools, so it can only answer.
+
+**The verdict** is one of:
+- **`defect`:** the unit says something wrong;
+- **`gap`:** it leaves out what was needed;
+- **`preference`:** what you wanted was a one-off, not something the unit should say;
+- **`agent-error`:** the unit already says the right thing, and the agent did not follow it;
+- **`unclear`:** the moments are too thin to tell.
+
+The reply is checked against the unit: every line it quotes must be in the file, or the diagnosis is refused.
+
+**The fix and the probe,** for a `defect` or a `gap`:
+- **Only a correction says what was wanted,** so a unit with interrupts alone gets a verdict and no fix.
+- **The fix is one exact replacement** in the unit's text. Its `find` must occur exactly once. It may edit an instructions or rule file, or a skill's `SKILL.md`, never config.
+- **The probe** is a task built from your correction and what the agent should then do, as an [`eval` probe](evals.md). Its prompt is redacted again.
+
+**The replay** runs the probe, and every probe the unit already has, in two throwaway copies of the repository: one as it is, one with the fix. It runs as `eval` runs, with every command and edit the agent tries denied.
+- **"validated":** the probe is `improved`, its pass rate up by at least half, and none of the unit's own probes `regressed`.
+- **"not-validated"** and **"inconclusive"** (the run budget ran out) are reported as they are.
+- **How strong it is:** at the default 2 runs a side, 0 of 2 to 2 of 2 is a direction, not proof. `--runs 3` makes 0 of 3 to 3 of 3 a one-sided Fisher p of 0.05, the bar `eval` gates on.
+- **Defaults:** `--max-runs` 16 and `--max-minutes` 15.
+
+**A certified unit** is diagnosed and its fix proposed, and the output says the fix needs its owner's approval.
+
+**Nothing is written to the repository,** the fix and the probe included. To take them, apply the diff and commit the probe under `evals/probes/` yourself.
+
+**`--drafts <folder>`** writes the proposal for the unit's owner as `<unit>.fix.md`: the diagnosis, the fix as a diff, the probe as YAML, and the replay. What Claude wrote sits in code spans and fences, so it can't mention anyone or render. A proposal you have edited is left as it is, as notes are.
+
+**`--open` files the proposal as a GitHub issue,** through your own `gh`, in the repository the unit belongs to: this one's `origin`, or the upstream's for a synced unit.
+- **Only for a `defect` or a `gap`.** For any other verdict it says so and files nothing.
+- **One issue per unit:** the body carries a marker, and a rerun updates the issue it finds, closed ones included, instead of filing another.
+- **What it holds:** the proposal, exactly as `--drafts` writes it. Nothing from the session itself, not the task, the actions or your words.
+- **The repository must be on GitHub.** Anything else is exit 2, before Claude runs.
+- **No pull request is opened.** A fix to shared context needs its owner's reading first.
+
 ## What it doesn't do yet
 
 These are for the next plan:
-- **A diagnosis:** whether a miss is the context's defect, a gap in it, a preference, or the agent's own error.
-- **Replay:** re-running the session with a unit taken out or changed.
-- **A proposed fix,** validated against the sessions that surfaced it.
-- **Opening an issue for the owner.** Until a miss is diagnosed, sending raw signals would cost owners more than it helps.
+- **Replay with the unit taken out,** to see whether its absence would have helped.
+- **Whether a shipped fix holds,** checked at 7 and 30 days, and whether its unit's misses stop.

@@ -31,12 +31,12 @@ Want to help? Start with **[Contributing](#contributing)**.
 4. **Dependency graph:** `who-uses` and `impact` say what relies on a unit and what a change reaches, and `eval` runs the probes of everything it reaches ([report](docs/dogfood/2026-11-08-graph.md)).
 5. **What really loaded:** a Claude Code plugin records which units your sessions load, as paths and digests only, for `loads` ([report](docs/dogfood/2026-11-08-collector.md)).
 6. **Propagation:** `sync` brings an org repository's skills and rules in, pinned in `ctxlock.lock`. `L16` flags a synced file edited by hand, and `impact --locks` names the repositories a change upstream reaches ([report](docs/dogfood/2026-11-10-propagation.md)).
-7. **Misses:** `misses` reads Claude Code's transcripts for the moments you stopped or corrected the agent, joins them to the units in context, and drafts a note to the owner of a unit that keeps turning up. It stores nothing ([guide](the-guide/misses.md), [report](docs/dogfood/2026-11-11-misses.md)).
+7. **Misses:** `misses` reads Claude Code's transcripts for the moments you stopped or corrected the agent, joins them to the units in context, and drafts a note to the owner of a unit that keeps turning up. It stores nothing. `diagnose` then asks Claude whether a unit was at fault, proposes the smallest fix with a probe, checks it by replay, and with `--open` files it as one issue for the owner ([guide](the-guide/misses.md), [misses report](docs/dogfood/2026-11-11-misses.md), [diagnose report](docs/dogfood/2026-11-12-diagnose.md)).
 8. **Shareable load reports:** `report` writes what sessions loaded as JSON to share with the org, with no session ID, local path or credential in it.
 9. **Two agents:** Claude Code and Codex loading is predicted. Claude Code is also observed in real sessions and evaluated.
 
 > [!NOTE]
-> Pre-alpha: everything above runs from source, and is tested on Windows and Linux. Nothing is on npm yet, and there is no release tag. The feedback loop has its first part, misses; diagnosis and validated fixes come next.
+> Pre-alpha: everything above runs from source, and is tested on Windows and Linux. Nothing is on npm yet, and there is no release tag. The feedback loop has misses and diagnosed, replayed fixes; tracking whether a fix holds comes next.
 
 ---
 
@@ -311,7 +311,7 @@ flowchart LR
 - [x] **Propagation:** `ctxlock sync` brings an org repository's skills and rules into each repository that names them under `upstream:`, pinned in `ctxlock.lock`, and a workflow keeps one pull request open with each update. Hooks, settings and MCP servers never sync, and a synced file edited by hand is refused by sync and flagged by `L16`. `ctxlock impact --locks` names the repositories a change upstream reaches, and `ctxlock report` shares what sessions loaded, with nothing local in it. Checked live on local repositories; the workflow has not run on GitHub yet ([plan](docs/superpowers/plans/2026-11-10-ctxlock-propagation.md), [guide](the-guide/propagation.md), [report](docs/dogfood/2026-11-10-propagation.md)).
 - [ ] **Feedback loop:** agent misses routed to the owner, fixed, validated by replay, and tracked for durability.
   - [x] **Misses:** `ctxlock misses` finds the moments you interrupted or corrected Claude Code in its own transcripts, joins each to the units in context from the collector, counts distinct sessions per unit, and writes a redacted note to the owner of a unit that reaches the threshold. Checked live on three repositories against an independent scan ([plan](docs/superpowers/plans/2026-11-11-ctxlock-misses.md), [guide](the-guide/misses.md), [report](docs/dogfood/2026-11-11-misses.md)).
-  - [ ] **Diagnosis and fixes:** a model's diagnosis of each routed miss, replay with the unit taken out or changed, and the smallest fix proposed and validated by replay.
+  - [x] **Diagnosis and fixes:** `ctxlock diagnose` asks Claude for a verdict on a unit's misses, checked against the unit's text; proposes the smallest fix, one exact replacement, with a probe made from the correction; replays both sides through `eval`; and with `--open` files or updates one issue in the repository that owns the unit. Checked live on a planted miss with real Claude Code ([plan](docs/superpowers/plans/2026-11-12-ctxlock-diagnose.md), [guide](the-guide/misses.md#diagnosing-a-unit), [report](docs/dogfood/2026-11-12-diagnose.md)). Replay with the unit taken out waits.
   - [ ] **Durability:** fixes tracked at 7 and 30 days, and the compounding numbers.
 - [ ] **Business context:** metrics, knowledge docs and procedures, served over MCP.
 

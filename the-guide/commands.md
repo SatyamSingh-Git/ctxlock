@@ -329,7 +329,7 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 Asks Claude what went wrong in the moments a unit was in context when you stopped or corrected the agent, and checks the smallest fix by replay. It runs your own `claude`, as `eval` does. [Misses](misses.md#diagnosing-a-unit) has the details.
 
 ```
-ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>] [--drafts <folder>]
+ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>] [--drafts <folder>] [--open] [--gh <path>]
 ```
 
 **The diagnosis:**
@@ -345,6 +345,8 @@ ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs 
 - **Defaults:** `--runs` 2 a side, `--max-runs` 16 and `--max-minutes` 15.
 
 **`--drafts <folder>`** writes the proposal, the diagnosis, the fix as a diff, the probe and the replay, as `<unit>.fix.md`. It leaves an edited one alone.
+
+**`--open`** files that proposal as a GitHub issue through your own `gh` (`--gh <path>` names another), in the repository the unit belongs to, for a `defect` or `gap` only. A rerun updates the same issue. It holds nothing from the session itself.
 
 **It never writes to the repository.** A unit need not be routed to be diagnosed, but it must have been in context for at least one signal.
 

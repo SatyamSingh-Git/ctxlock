@@ -2,7 +2,12 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [14 — misses: when the agent was stopped or corrected, what was in its context](14-misses.md).
+**Latest:** [15 — diagnose: from a miss to a fix someone can check](15-diagnose.md).
+- Plan 8, the feedback loop's second part: `ctxlock diagnose` asks Claude for a verdict on one unit's misses, proposes the smallest fix with a probe made from the correction, replays both through `eval`, and with `--open` files one issue for the owner; 649 tests.
+- On a planted miss, with real Claude Code, both runs found the rule's wrong line, and the fix took the probe from 0 of 2 to 2 of 2.
+- Found: the rule beat the repository's own `package.json` in every base run; the fix's wording varied and the probe didn't; and a mutation check caught a GitHub match that could have filed an issue on the wrong tracker.
+
+**Earlier:** [14 — misses: when the agent was stopped or corrected, what was in its context](14-misses.md).
 - Plan 7, the feedback loop's first part: `ctxlock misses` reads Claude Code's transcripts for interrupts and corrections, joins each to the units in context from the collector, counts distinct sessions per unit, and drafts a redacted note to the owner of a unit that keeps turning up; 622 tests.
 - Live on three of the author's repositories, an independent scan found the same signals at the same times.
 - Found: the plan's rule for which units were in play joined no real signal to any unit, since files load at a session's start; and two situations hid behind one name.

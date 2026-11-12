@@ -39,12 +39,12 @@ Satyam asked on 2026-11-12 to "continue the work" without design questions. Ever
 
 | Task | Status | Commits |
 |---|---|---|
-| 1 | Not started | |
-| 2 | Not started | |
-| 3 | Not started | |
-| 4 | Not started | |
-| 5 | Not started | |
-| 6 | Not started | |
+| 1 | Done | `0186267` |
+| 2 | Done | `067b857` |
+| 3 | Done | `3487c6a` |
+| 4 | Done | `04630ce` |
+| 5 | Done | `8f13ada` |
+| 6 | Done | the docs commit |
 
 ## Rulings this plan makes (my calls)
 
