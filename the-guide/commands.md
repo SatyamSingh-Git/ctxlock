@@ -324,6 +324,30 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 - Your words appear only with `--excerpts`.
 - The JSON names the sessions, since it stays on your machine.
 
+## `ctxlock diagnose`
+
+Asks Claude what went wrong in the moments a unit was in context when you stopped or corrected the agent, and checks the smallest fix by replay. It runs your own `claude`, as `eval` does. [Misses](misses.md#diagnosing-a-unit) has the details.
+
+```
+ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>] [--drafts <folder>]
+```
+
+**The diagnosis:**
+- **What it sends:** the unit's text, and for each signal the opening of the prompt that began its turn, what the agent did in that turn, and your correction. All of it is redacted first.
+- **The verdict:** `defect`, `gap`, `preference`, `agent-error` or `unclear`.
+
+**The fix, for a `defect` or `gap` with a correction:**
+- **The smallest fix:** one exact replacement in the unit's text.
+- **A probe:** made from your correction.
+
+**The replay** runs in two throwaway copies of the repository: one as it is, one with the fix.
+- **"validated"** means the probe fails without the fix and passes with it, and none of the unit's own probes gets worse.
+- **Defaults:** `--runs` 2 a side, `--max-runs` 16 and `--max-minutes` 15.
+
+**`--drafts <folder>`** writes the proposal, the diagnosis, the fix as a diff, the probe and the replay, as `<unit>.fix.md`. It leaves an edited one alone.
+
+**It never writes to the repository.** A unit need not be routed to be diagnosed, but it must have been in context for at least one signal.
+
 ## `ctxlock report`
 
 Writes what `loads` counts as JSON, to share with the team that owns your shared context. It holds no session ID, no path outside the repository and no error message. [The collector](collector.md#sharing-what-was-loaded) shows it.

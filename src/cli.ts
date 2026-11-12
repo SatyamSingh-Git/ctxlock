@@ -11,8 +11,11 @@ import { BuildError, suggestIndex } from './build/index-suggest.js';
 import { eventsHome, readEvents } from './collect/events.js';
 import { buildReport, shareable } from './collect/report.js';
 import { joinSessions, sessionTimelines } from './collect/sessions.js';
-import { draftName, draftState, renderDraft } from './loop/draft.js';
-import { findMisses } from './loop/misses.js';
+import { DiagnosisError } from './loop/diagnose.js';
+import { type DraftKind, draftName, draftState, renderDraft } from './loop/draft.js';
+import { findMisses, type Misses } from './loop/misses.js';
+import { diagnose } from './loop/propose.js';
+import { renderDiagnosis, renderProposal } from './report/diagnose.js';
 import { findTranscript, readTranscript, type SessionTranscript, transcriptsHome } from './loop/transcript.js';
 import { renderMisses } from './report/misses.js';
 import { buildGraph, impactOf, pinnedBy, resolveRef, whoUses } from './graph/graph.js';
@@ -31,7 +34,7 @@ import { fsReader, gitOrigin, gitReader, gitTopLevel, RefNotFound } from './repo
 import { renderBuild } from './report/build.js';
 import { renderEval } from './report/eval.js';
 import { renderDiffMarkdown, renderErrorMarkdown } from './report/markdown.js';
-import { renderDiff, renderScan } from './report/render.js';
+import { printable, renderDiff, renderScan } from './report/render.js';
 import { renderSync } from './report/sync.js';
 import { type ScanResult, scanRepo } from './scan.js';
 import { UpstreamError, fetchUpstream } from './sync/fetch.js';
@@ -84,6 +87,44 @@ function recordedAt(root: string) {
   return { read: readEvents(eventsHome()), roots: [...new Set([real(root), root])], real: realOf };
 }
 
+// The recorded sessions here, read against Claude Code's transcripts.
+async function missesAt(root: string, scan: ScanResult, opts: { minSessions: number; since?: string }): Promise<Misses> {
+  const r = recordedAt(root);
+  const timelines = sessionTimelines(r.read, scan, r.roots, r.real);
+  const home = transcriptsHome();
+  const transcripts = new Map<string, SessionTranscript>();
+  for (const { session } of timelines) {
+    const file = findTranscript(home, session);
+    if (file) transcripts.set(session, await readTranscript(file, session));
+  }
+  return findMisses(timelines, transcripts, scan, { minSessions: opts.minSessions, ...(opts.since !== undefined && { since: opts.since }) });
+}
+
+// This repository, as a draft may name it: its origin, or its folder.
+async function repoName(root: string): Promise<string> {
+  const top = await gitTopLevel(root);
+  return (top ? await gitOrigin(top) : null) ?? basename(real(top ?? root));
+}
+
+// Each file into the drafts folder, unless one there was edited since ctxlock wrote it or is someone's own.
+function writeDrafts(folder: string, drafts: Array<{ name: string; id: string; kind: DraftKind; text: string }>, title: string): string {
+  mkdirSync(folder, { recursive: true });
+  const written: string[] = [];
+  const left = { edited: [] as string[], other: [] as string[] };
+  for (const d of drafts) {
+    const file = join(folder, d.name);
+    const state = existsSync(file) ? draftState(readFileSync(file, 'utf8'), d.id, d.kind) : 'unedited';
+    if (state !== 'unedited') {
+      left[state].push(file);
+      continue;
+    }
+    writeFileSync(file, d.text);
+    written.push(file);
+  }
+  const list = (heading: string, files: string[]) => (files.length ? ['', `${heading}:`, ...files.map((f) => `  ${f}`)] : []);
+  return `${[...list(title, written), ...list('Left as it is, edited since ctxlock wrote it', left.edited), ...list('Left as it is, not a ctxlock draft', left.other)].join('\n')}\n`;
+}
+
 function sessionsAt(root: string, scan: ScanResult) {
   const r = recordedAt(root);
   return joinSessions(r.read, scan, r.roots, r.real);
@@ -109,9 +150,18 @@ const VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.
 // A path is resolved here, since Claude Code runs with the copy as its working directory.
 const claudeOf = (flag: string | undefined) => (flag === undefined ? ['claude'] : [/[\\/]/.test(flag) ? resolve(flag) : flag]);
 
-// C0 and C1 control characters, built from code points so no raw one sits in the source.
-const cp = String.fromCodePoint;
-const CONTROLS = new RegExp(`[${cp(0)}-${cp(31)}${cp(127)}-${cp(159)}]`, 'g');
+
+interface DiagnoseFlags {
+  format: 'text' | 'json';
+  since?: string;
+  runs: number;
+  maxRuns: number;
+  maxMinutes: number;
+  model?: string;
+  claude?: string;
+  workdir?: string;
+  drafts?: string;
+}
 
 interface EvalFlags {
   base: string;
@@ -313,15 +363,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const root = resolve(dir ?? '.');
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
       const scan = await scanRepo(fsReader(root));
-      const r = recordedAt(root);
-      const timelines = sessionTimelines(r.read, scan, r.roots, r.real);
-      const home = transcriptsHome();
-      const transcripts = new Map<string, SessionTranscript>();
-      for (const { session } of timelines) {
-        const file = findTranscript(home, session);
-        if (file) transcripts.set(session, await readTranscript(file, session));
-      }
-      const misses = findMisses(timelines, transcripts, scan, { minSessions: opts.minSessions, ...(opts.since !== undefined && { since: opts.since }) });
+      const misses = await missesAt(root, scan, opts);
       io.stdout(renderMisses(misses, opts.format, opts.excerpts ?? false));
       if (opts.drafts === undefined) return;
 
@@ -332,26 +374,46 @@ export async function main(argv: string[], io: Io): Promise<number> {
         say('\nNo unit is routed, so no draft was written.\n');
         return;
       }
-      const folder = resolve(opts.drafts);
-      mkdirSync(folder, { recursive: true });
-      const top = await gitTopLevel(root);
-      const here = (top ? await gitOrigin(top) : null) ?? basename(real(top ?? root));
-      const written: string[] = [];
-      const left = { edited: [] as string[], other: [] as string[] };
-      for (const u of routed) {
-        const file = join(folder, draftName(u.id));
-        const state = existsSync(file) ? draftState(readFileSync(file, 'utf8'), u.id) : 'unedited';
-        if (state !== 'unedited') {
-          left[state].push(file);
-          continue;
-        }
-        writeFileSync(file, renderDraft(u, shareable(u.upstream?.repo ?? here), opts.excerpts ?? false));
-        written.push(file);
-      }
-      const list = (title: string, files: string[]) => (files.length ? ['', `${title}:`, ...files.map((f) => `  ${f}`)] : []);
-      say(
-        `${[...list('Drafts written', written), ...list('Left as it is, edited since ctxlock wrote it', left.edited), ...list('Left as it is, not a ctxlock draft', left.other)].join('\n')}\n`,
-      );
+      const here = await repoName(root);
+      const drafts = routed.map((u) => ({ name: draftName(u.id), id: u.id, kind: 'miss' as const, text: renderDraft(u, shareable(u.upstream?.repo ?? here), opts.excerpts ?? false) }));
+      say(writeDrafts(resolve(opts.drafts), drafts, 'Drafts written'));
+    });
+
+  program
+    .command('diagnose <unit> [dir]')
+    .description("ask Claude what went wrong when a unit was in context as you stopped or corrected Claude Code, and check its smallest fix by replay; sends the unit's text and the redacted moments, and writes nothing to the repository")
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
+    .option('--since <date>', 'only sessions begun on or after this date, as YYYY-MM-DD', day)
+    .option('--runs <n>', 'runs a side in the replay', count, 2)
+    .option('--max-runs <n>', 'the most runs the replay may start', count, 16)
+    .option('--max-minutes <n>', 'start no replay run after this many minutes', count, 15)
+    .option('--model <model>', 'the model Claude Code runs (default: eval.model, or sonnet)')
+    .option('--claude <path>', "Claude Code's executable (default: claude on PATH)")
+    .option('--workdir <dir>', 'where run folders go (default: $RUNNER_TEMP, or the system temp folder)')
+    .option('--drafts <folder>', "write the proposal for the unit's owner into this folder")
+    .action(async (ref: string, dir: string | undefined, opts: DiagnoseFlags) => {
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      const scan = await scanRepo(fsReader(root));
+      const unit = resolveRef(ref, scan.units);
+      if (!unit) throw new UsageError(`ctxlock diagnose: no unit ${ref}; ctxlock scan lists the units`);
+      const miss = (await missesAt(root, scan, { minSessions: 1, since: opts.since })).units.find((u) => u.id === unit.id);
+      if (!miss) throw new UsageError(`ctxlock diagnose: no signal had ${unit.id} in context; ctxlock misses lists the units that did`);
+      const p = await diagnose({
+        root,
+        miss,
+        model: opts.model ?? scan.registry.eval.model,
+        claude: claudeOf(opts.claude),
+        workdir: workdirOf(opts.workdir),
+        runs: opts.runs,
+        maxRuns: opts.maxRuns,
+        maxMinutes: opts.maxMinutes,
+      });
+      io.stdout(renderDiagnosis(p, opts.format));
+      if (opts.drafts === undefined) return;
+      const text = renderProposal(p, shareable(miss.upstream?.repo ?? (await repoName(root))));
+      const say = opts.format === 'json' ? io.stderr : io.stdout;
+      say(writeDrafts(resolve(opts.drafts), [{ name: `${draftName(unit.id).slice(0, -'.md'.length)}.fix.md`, id: unit.id, kind: 'fix', text }], 'Proposal written'));
     });
 
   program
@@ -490,8 +552,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
       });
       const lines = [`ctxlock probe draft · ${opts.unit}`];
       lines.push(r.kept.length > 0 ? `Wrote ${r.path}: ${r.kept.length} kept. Review it before committing.` : 'No probe told the two copies apart, so nothing was written.');
-      // Ids and reasons carry the model's text, and a control character in it could drive the terminal.
-      const printable = (s: string) => s.replace(CONTROLS, '?');
+      // Ids and reasons carry the model's text.
       for (const id of r.kept) lines.push(`  kept       ${printable(id)}`);
       for (const d of r.discarded) lines.push(`  discarded  ${printable(d.id)}: ${printable(d.reason)}`);
       lines.push(`Runs: ${r.runs}`);
@@ -504,7 +565,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     // Commander has already printed its own message; help and version exit 0.
     if (err instanceof CommanderError) return err.exitCode === 0 ? 0 : 2;
     // Anything else is a bug or input ctxlock cannot handle. It still exits 2, because 1 means must-fix.
-    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, BuildError, UpstreamError, LockError].some((type) => err instanceof type);
+    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, DiagnosisError, BuildError, UpstreamError, LockError].some((type) => err instanceof type);
     const reason = err instanceof Error ? err.message : String(err);
     io.stderr(known ? `${reason}\n` : `ctxlock could not run: ${reason}\n`);
     if (markdown) io.stdout(renderErrorMarkdown(reason));

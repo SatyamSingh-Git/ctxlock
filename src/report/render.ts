@@ -6,6 +6,12 @@ import { impactSection } from './graph.js';
 
 const site = (s: string) => s || '.';
 
+// C0 and C1 control characters, built from code points so no raw one sits in the source. Text from a
+// model can carry one, and printed raw it could drive the terminal.
+const cp = String.fromCodePoint;
+const CONTROLS = new RegExp(`[${cp(0)}-${cp(31)}${cp(127)}-${cp(159)}]`, 'g');
+export const printable = (s: string) => s.replace(CONTROLS, '?');
+
 // Columns padded to their widest cell, two spaces apart; the last column is not padded.
 export function table(rows: string[][]): string {
   const widths = rows[0]!.map((_, i) => Math.max(...rows.map((r) => r[i]!.length)));

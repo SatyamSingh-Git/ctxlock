@@ -823,6 +823,43 @@ describe('ctxlock misses', () => {
     expect((await cli('misses', dir, '--drafts', drafts)).stdout).toContain('No unit is routed, so no draft was written.');
   });
 
+  describe('ctxlock diagnose', { timeout: 120_000 }, () => {
+    const FAKE = 'tests/helpers/fake-claude.mjs';
+    beforeEach(() => {
+      const file = join(tempDir(), 'scenario.json');
+      const reply = { verdict: 'agent-error', reason: 'The rule names v2 already.', quotes: [] };
+      writeFileSync(file, JSON.stringify({ behaviours: [{ when: { promptContains: 'You are diagnosing a miss' }, text: `\`\`\`json\n${JSON.stringify(reply)}\n\`\`\``, calls: [] }] }));
+      vi.stubEnv('FAKE_CLAUDE_SCENARIO', file);
+    });
+
+    it('a unit with no signal in context, and an unknown unit, are exit 2', async () => {
+      const dir = recorded((real) => real);
+      writeTree(dir, { '.claude/rules/other.md': 'Never loaded.\n' });
+
+      const quiet = await cli('diagnose', '.claude/rules/other.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'));
+      expect(quiet.code).toBe(2);
+      expect(quiet.stderr).toMatch(/no signal had rule\/\.claude\/rules\/other\.md in context; ctxlock misses lists the units that did/);
+      expect((await cli('diagnose', 'nope.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'))).code).toBe(2);
+    });
+
+    it('diagnoses a unit in context, writes its proposal with --drafts, and leaves one edited since', async () => {
+      const dir = recorded((real) => real);
+      const drafts = join(tempDir(), 'drafts');
+      const file = join(drafts, `${draftName('rule/.claude/rules/api.md').slice(0, -3)}.fix.md`);
+
+      const first = await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--drafts', drafts);
+      expect(first.code).toBe(0);
+      expect(first.stdout).toContain('Verdict: agent-error');
+      expect(first.stdout).toContain(`Proposal written:\n  ${file}\n`);
+      const edited = readFileSync(file, 'utf8').replace('Verdict', 'Verdict (seen by @api-team)');
+      writeFileSync(file, edited);
+
+      const again = await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--drafts', drafts);
+      expect(again.stdout).toContain(`Left as it is, edited since ctxlock wrote it:\n  ${file}\n`);
+      expect(readFileSync(file, 'utf8')).toBe(edited);
+    });
+  });
+
   it('a bad --since is exit 2', async () => {
     const dir = tempDir();
     for (const since of ['yesterday', '2026-13-01', '2026-11-1']) expect((await cli('misses', dir, '--since', since)).code, since).toBe(2);
