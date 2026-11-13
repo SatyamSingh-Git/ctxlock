@@ -93,6 +93,34 @@ describe('shippedFixes', () => {
     expect(orphans.map((p) => p.id)).toEqual([other]);
   });
 
+  it("a unit added with its probe is not unchanged, and a skill's file added later makes a new version", async () => {
+    const SKILL = '---\nname: release\ndescription: Publish a version.\n---\nTag with git tag.\n';
+    const id = 'miss-skill-.claude-skills-release-00000000-11111111';
+    const { dir, shas } = history([
+      { at: '2026-11-01T10:00:00Z', files: { 'README.md': 'r\n' } },
+      { at: '2026-11-02T10:00:00Z', files: { '.claude/skills/release/SKILL.md': SKILL, 'evals/probes/r.yaml': probe(id, 'skill/.claude/skills/release') } },
+      { at: '2026-11-03T10:00:00Z', files: { '.claude/skills/release/notes.md': 'Notes.\n' } },
+    ]);
+
+    const { fixes } = await run(dir);
+
+    expect(fixes.map((f) => [f.probe.id, f.unchanged])).toEqual([[id, false]]);
+    // The first version lacks notes.md, so its digest is of SKILL.md alone; the later one has both.
+    expect(fixes[0]!.versions.map((v) => [v.commit, v.file])).toEqual([
+      [shas[1], digest(SKILL)],
+      [shas[2], digest(SKILL)],
+    ]);
+    expect(fixes[0]!.versions[0]!.unit).not.toBe(fixes[0]!.versions[1]!.unit);
+  });
+
+  it("a fix in the repository's first commit has no version before it, so it is not unchanged", async () => {
+    const { dir, shas } = history([{ at: '2026-11-01T10:00:00Z', files: { '.claude/rules/deps.md': FIXED, 'evals/probes/deps.yaml': probe(MISS) } }]);
+
+    const { fixes } = await run(dir);
+
+    expect(fixes.map((f) => [f.unchanged, f.versions.map((v) => v.commit)])).toEqual([[false, [shas[0]]]]);
+  });
+
   it('run from a subfolder, it finds the same fixes as from the top', async () => {
     const { dir, shas } = history([
       { at: '2026-11-01T10:00:00+00:00', files: { '.claude/rules/deps.md': RULE, 'sub/x.txt': 'x\n' } },
