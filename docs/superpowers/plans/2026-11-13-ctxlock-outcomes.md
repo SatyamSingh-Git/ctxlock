@@ -26,11 +26,11 @@ Satyam asked on 2026-11-13 to "continue the work" without design questions. Ever
 
 | Task | Status | Commits |
 |---|---|---|
-| 1 | Not started | |
-| 2 | Not started | |
-| 3 | Not started | |
-| 4 | Not started | |
-| 5 | Not started | |
+| 1 | Done | `425bb14` |
+| 2 | Done | `56ffeaf` |
+| 3 | Done | `1d9db8d` |
+| 4 | Done | `b0ebc1c` |
+| 5 | Done | `08a0388`, and the docs commit |
 
 ## Rulings this plan makes (my calls)
 

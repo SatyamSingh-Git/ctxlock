@@ -175,4 +175,4 @@ The reply is checked against the unit: every line it quotes must be in the file,
 
 These are for the next plan:
 - **Replay with the unit taken out,** to see whether its absence would have helped.
-- **Whether a shipped fix holds,** checked at 7 and 30 days, and whether its unit's misses stop.
+- **Whether a shipped fix holds** is [`ctxlock outcomes`](outcomes.md)'s.

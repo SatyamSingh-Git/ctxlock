@@ -350,6 +350,30 @@ ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs 
 
 **It never writes to the repository.** A unit need not be routed to be diagnosed, but it must have been in context for at least one signal.
 
+## `ctxlock outcomes`
+
+Finds the fixes `diagnose` proposed that shipped, says whether each held at 7 and 30 days, counts helpful and harmful sessions per version of each unit, and gives the compounding numbers. A fix ships with the commit that adds its `miss-` probe. It reads git history, the collector's events and the transcripts, and runs nothing unless you pass `--verify`. [Outcomes](outcomes.md) has the details.
+
+```
+ctxlock outcomes [dir] [--format text|json] [--locks <folders...>] [--verify] [--runs <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>]
+```
+
+- **`--locks <folders...>`** also counts the repositories under those folders whose `ctxlock.lock` pins a fixed unit at one of the fix's versions.
+- **`--verify`** runs each shipped fix's probe on the repository as it is, with your own `claude`. One that fails is a regression.
+- **A shallow clone** is exit 2, since it can't say when a probe arrived: run `git fetch --unshallow`.
+
+## `ctxlock verify`
+
+Re-checks the units whose `stale-after` has passed by their own probes, run on the repository as it is with your own `claude`, and prints the `ctxlock.yaml` lines to set for each that holds. It never writes them. [Outcomes](outcomes.md#re-checking-a-unit-ctxlock-verify) has the details.
+
+```
+ctxlock verify [dir] [--unit <ref>] [--format text|json] [--runs <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>]
+```
+
+- **`--unit`** checks one unit instead, due or not.
+- **`--runs`** defaults to 3 and must be at least 2.
+- **It exits 1** when a unit fails.
+
 ## `ctxlock report`
 
 Writes what `loads` counts as JSON, to share with the team that owns your shared context. It holds no session ID, no path outside the repository and no error message. [The collector](collector.md#sharing-what-was-loaded) shows it.
@@ -420,7 +444,7 @@ With `--dry-run` it shows what would change, and writes nothing. In markdown, th
 | Code | Meaning |
 |---|---|
 | 0 | Done, including every `build`, `who-uses`, `impact`, `loads` and `report`. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
-| 1 | `lint`: at least one `must` finding. `sync`: a file it refused, so it wrote nothing. `diff`: a new `must` finding or an execution-affecting change. `eval`: only with `--fail-on-regression`, a gated regression |
+| 1 | `lint`: at least one `must` finding. `sync`: a file it refused, so it wrote nothing. `diff`: a new `must` finding or an execution-affecting change. `eval`: only with `--fail-on-regression`, a gated regression. `verify`: a unit whose probe failed |
 | 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`, `eval`, `impact` and `sync`), a `who-uses` unit that is no unit, a `loads` folder that does not exist, a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` or `sync` cannot read, an upstream that cannot be fetched or lacks a unit or ref, an invalid `ctxlock.lock`, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
 
 `scan` and `budget` exit 0 whatever they find, so you can run them anywhere without failing a build.
