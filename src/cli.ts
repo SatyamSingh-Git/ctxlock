@@ -12,11 +12,14 @@ import { eventsHome, readEvents } from './collect/events.js';
 import { buildReport, shareable } from './collect/report.js';
 import { joinSessions, sessionTimelines } from './collect/sessions.js';
 import { DiagnosisError } from './loop/diagnose.js';
+import { FixesError, shippedFixes } from './loop/fixes.js';
 import { githubRepo, IssueError, openIssue } from './loop/issue.js';
+import { counters, numbers, outcomeOf } from './loop/outcomes.js';
 import { type DraftKind, draftName, draftState, renderDraft } from './loop/draft.js';
 import { findMisses, type Misses } from './loop/misses.js';
 import { diagnose } from './loop/propose.js';
 import { renderDiagnosis, renderProposal } from './report/diagnose.js';
+import { renderOutcomes } from './report/outcomes.js';
 import { findTranscript, readTranscript, type SessionTranscript, transcriptsHome } from './loop/transcript.js';
 import { renderMisses } from './report/misses.js';
 import { buildGraph, impactOf, pinnedBy, resolveRef, whoUses } from './graph/graph.js';
@@ -75,6 +78,24 @@ function locksUnder(dir: string): string[] {
     if (e.isDirectory()) return e.name === '.git' || e.name === 'node_modules' ? [] : locksUnder(join(dir, e.name));
     return e.isFile() && e.name === LOCK_FILE ? [join(dir, e.name)] : [];
   });
+}
+
+// The locks under the folders given to --locks, each named by its repository's origin or its folder.
+async function locksAt(folders: string[], warn: (text: string) => void) {
+  const missing = folders.find((p) => !isDirectory(resolve(p)));
+  if (missing !== undefined) throw new UsageError(`ctxlock: ${missing} is not a directory`);
+  const locks = [];
+  for (const path of folders.flatMap((p) => locksUnder(real(resolve(p))))) {
+    try {
+      const lock = await loadLock({ exists: async () => true, readFile: async () => readFileSync(path) });
+      locks.push({ repo: (await gitOrigin(dirname(path))) ?? dirname(path), path, lock });
+    } catch (err) {
+      // One unreadable lock among many repositories does not hide the others.
+      if (!(err instanceof LockError)) throw err;
+      warn(`ctxlock: skipped ${path}: ${err.message}\n`);
+    }
+  }
+  return locks;
 }
 
 // Recorded sessions in a folder, matched under its real path and under the path as typed: Claude Code
@@ -437,6 +458,33 @@ export async function main(argv: string[], io: Io): Promise<number> {
     });
 
   program
+    .command('outcomes [dir]')
+    .description('the fixes diagnose proposed that shipped, whether each held at 7 and 30 days, helpful and harmful sessions per unit version, and the compounding numbers; reads git, the collector and the transcripts, and runs nothing')
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
+    .option('--locks <paths...>', 'also count the repositories under these folders whose ctxlock.lock pins a fixed unit at a version from the fix on')
+    .action(async (dir: string | undefined, opts: { format: 'text' | 'json'; locks?: string[] }) => {
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      const scan = await scanRepo(fsReader(root));
+      const { fixes, orphans, git } = await shippedFixes(root, scan);
+      const r = recordedAt(root);
+      const timelines = sessionTimelines(r.read, scan, r.roots, r.real);
+      const { found } = await missesAt(root, scan, { minSessions: 1 });
+      const locks = opts.locks ? await locksAt(opts.locks, io.stderr) : [];
+      const top = await gitTopLevel(root);
+      const self = top ? [await gitOrigin(top), top].filter((s) => s !== null) : [root];
+      const graph = buildGraph({ ...scan, generated: scan.generated.files });
+      const now = new Date();
+      const outcomes = fixes.map((fix) => {
+        const path = scan.units.find((u) => u.id === fix.unit)!.path;
+        const pins = pinnedBy([path], self, locks, real).filter((p) => fix.versions.some((v) => v.unit === p.digest));
+        return outcomeOf(fix, timelines, found, now, { consumers: whoUses(graph, fix.unit).consumers.map((c) => c.name), pinnedBy: [...new Set(pins.map((p) => shareable(p.repo)))] });
+      });
+      const sessions = joinSessions(r.read, scan, r.roots, r.real);
+      io.stdout(renderOutcomes({ sessions: sessions.sessions, git, fixes: outcomes, orphans: orphans.map((p) => p.id), counters: counters(timelines, found, scan, fixes), numbers: numbers(outcomes, sessions) }, opts.format));
+    });
+
+  program
     .command('report [dir]')
     .description("write what Claude Code loaded in this repository's recorded sessions as JSON to share with your org; it holds no session ID, local path or error message")
     .option('--out <file>', 'the file to write (default: stdout)')
@@ -471,19 +519,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const { base, head } = await scansAt(root, opts);
       const impact = impactOf(base, head);
       if (opts.locks) {
-        const locks = [];
-        const missing = opts.locks.find((p) => !isDirectory(resolve(p)));
-        if (missing !== undefined) throw new UsageError(`ctxlock: ${missing} is not a directory`);
-        for (const path of opts.locks.flatMap((p) => locksUnder(real(resolve(p))))) {
-          try {
-            const lock = await loadLock({ exists: async () => true, readFile: async () => readFileSync(path) });
-            locks.push({ repo: (await gitOrigin(dirname(path))) ?? dirname(path), path, lock });
-          } catch (err) {
-            // One unreadable lock among many repositories does not hide the others.
-            if (!(err instanceof LockError)) throw err;
-            io.stderr(`ctxlock: skipped ${path}: ${err.message}\n`);
-          }
-        }
+        const locks = await locksAt(opts.locks, io.stderr);
         const self = [await gitOrigin(top), top].filter((s) => s !== null);
         impact.pinned = pinnedBy(impact.changed.map((c) => c.id.slice(c.id.indexOf('/') + 1)), self, locks, real);
       }
@@ -585,7 +621,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     // Commander has already printed its own message; help and version exit 0.
     if (err instanceof CommanderError) return err.exitCode === 0 ? 0 : 2;
     // Anything else is a bug or input ctxlock cannot handle. It still exits 2, because 1 means must-fix.
-    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, DiagnosisError, IssueError, BuildError, UpstreamError, LockError].some((type) => err instanceof type);
+    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, DiagnosisError, IssueError, FixesError, BuildError, UpstreamError, LockError].some((type) => err instanceof type);
     const reason = err instanceof Error ? err.message : String(err);
     io.stderr(known ? `${reason}\n` : `ctxlock could not run: ${reason}\n`);
     if (markdown) io.stdout(renderErrorMarkdown(reason));

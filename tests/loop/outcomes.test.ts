@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { SessionLoad, Timeline } from '../../src/collect/sessions.js';
 import type { ShippedFix } from '../../src/loop/fixes.js';
 import type { MissSignal } from '../../src/loop/misses.js';
-import { counters, durability } from '../../src/loop/outcomes.js';
+import type { Sessions } from '../../src/collect/sessions.js';
+import { counters, durability, type FixOutcome, numbers, outcomeOf, type Window } from '../../src/loop/outcomes.js';
 import type { Unit } from '../../src/model.js';
 import type { ScanResult } from '../../src/scan.js';
 
@@ -85,6 +86,54 @@ describe('durability', () => {
     expect(durability(fix, inside, [], new Date('2026-11-08T04:29:59Z'))[0]!.status).toBe('pending');
     expect(durability(fix, inside, [], new Date('2026-11-08T04:30:00Z'))[0]).toEqual({ days: 7, status: 'held', sessions: 1, missed: 0 });
     expect(durability(fix, outside, [], new Date('2026-11-09T00:00:00Z'))[0]).toEqual({ days: 7, status: 'no sessions', sessions: 0, missed: 0 });
+  });
+});
+
+describe('outcomeOf', () => {
+  it("a fix's first signal is the earliest recorded one with the unit in context before it shipped, and its days to fix count from there", () => {
+    const now = new Date('2026-12-15T00:00:00Z');
+    const found = [signal('a', '2026-10-30T10:00:00Z', { context: [] }), signal('b', '2026-10-30T22:00:00Z'), signal('c', '2026-10-29T10:00:00Z', { unrecorded: true }), signal('d', day(5))];
+
+    const o = outcomeOf(FIX, [], found, now, { consumers: ['payments-api'], pinnedBy: ['acme/web'] });
+
+    expect(o).toMatchObject({ firstSignal: '2026-10-30T22:00:00Z', daysToFix: 1.5, consumers: ['payments-api'], pinnedBy: ['acme/web'] });
+    expect(o.windows.map((w) => w.status)).toEqual(['no sessions', 'no sessions']);
+    expect(outcomeOf(FIX, [], [], now, { consumers: [], pinnedBy: [] })).toMatchObject({ firstSignal: null, daysToFix: null });
+    // A signal only after the ship is no time to fix.
+    expect(outcomeOf(FIX, [], [signal('d', day(5))], now, { consumers: [], pinnedBy: [] })).toMatchObject({ firstSignal: null, daysToFix: null });
+  });
+});
+
+describe('numbers', () => {
+  const SESSIONS = { sessions: 12, units: [{}, {}, {}], unseen: [{}, {}] } as unknown as Sessions;
+  const w = (s7: Window['status'], s30: Window['status']): Window[] => [
+    { days: 7, status: s7, sessions: 1, missed: s7 === 'missed again' ? 1 : 0 },
+    { days: 30, status: s30, sessions: 1, missed: s30 === 'missed again' ? 1 : 0 },
+  ];
+  const outcome = (o: Partial<FixOutcome>): FixOutcome => ({ fix: FIX, firstSignal: null, daysToFix: null, windows: w('pending', 'pending'), consumers: [], pinnedBy: [], ...o });
+
+  it('the median time to fix counts only fixes with a recorded signal before them, the regression rate only judged closed windows, and durability at 30 days only judged closed 30-day windows', () => {
+    const n = numbers(
+      [
+        outcome({ daysToFix: 1, windows: w('held', 'held') }),
+        outcome({ daysToFix: 3, windows: w('held', 'missed again') }),
+        outcome({ daysToFix: 10, windows: w('missed again', 'pending') }),
+        outcome({ windows: w('no sessions', 'no sessions') }),
+        outcome({ windows: w('pending', 'pending') }),
+      ],
+      SESSIONS,
+    );
+
+    expect(n).toMatchObject({ medianDaysToFix: 3, timed: 3, regressed: 2, judged7: 3, held30: 1, judged30: 2, neverLoaded: 2, loadable: 5, sessions: 12 });
+    // A probe that fails today regresses a fix whose windows say nothing yet; one that holds makes it judged.
+    expect(numbers([outcome({ probe: 'fails' }), outcome({ probe: 'holds' })], SESSIONS)).toMatchObject({ regressed: 1, judged7: 2 });
+    expect(numbers([], SESSIONS)).toMatchObject({ medianDaysToFix: null, timed: 0, regressed: 0, judged7: 0, reached: 0 });
+    const even = [outcome({ daysToFix: 1, windows: w('held', 'held') }), outcome({ daysToFix: 4, windows: w('held', 'held') }), outcome({ windows: w('held', 'missed again') })];
+    expect(numbers(even, SESSIONS)).toMatchObject({ medianDaysToFix: 2.5, held30: 2, judged30: 3 });
+  });
+
+  it('consumers reached sum each fix\'s declared consumers and the repositories whose lock pins it at a fixed version', () => {
+    expect(numbers([outcome({ consumers: ['payments-api'], pinnedBy: ['acme/web', 'acme/docs'] }), outcome({ consumers: ['payments-api'] })], SESSIONS).reached).toBe(4);
   });
 });
 

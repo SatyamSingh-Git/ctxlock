@@ -929,6 +929,74 @@ describe('ctxlock misses', () => {
     });
   });
 
+  describe('ctxlock outcomes', () => {
+    const PROBE = 'version: 1\nprobes:\n  - id: miss-rule-.claude-rules-api.md-1234abcd\n    unit: rule/.claude/rules/api.md\n    prompt: Add the endpoint.\n    expect:\n      command: v2\n';
+    // The recorded session, then two commits: the files as recorded, and the fix with its probe.
+    function shipped(dir: string) {
+      git(dir, 'init', '-q', '-b', 'main');
+      git(dir, 'config', 'user.email', 'test@example.com');
+      git(dir, 'config', 'user.name', 'test');
+      vi.stubEnv('GIT_COMMITTER_DATE', '2026-11-11T09:00:00Z');
+      git(dir, 'add', '-A');
+      git(dir, 'commit', '-q', '-m', 'as recorded');
+      writeTree(dir, { '.claude/rules/api.md': 'API rule: call the v2 endpoint.\n', 'evals/probes/api.yaml': PROBE });
+      vi.stubEnv('GIT_COMMITTER_DATE', '2026-11-11T12:00:00Z');
+      git(dir, 'add', '-A');
+      git(dir, 'commit', '-q', '-m', 'fix');
+      return git(dir, 'rev-parse', 'HEAD');
+    }
+
+    it('outcomes finds a fix committed with its probe, its time to fix from the recorded signal, and a window pending', async () => {
+      const dir = recorded((real) => real);
+      const commit = shipped(dir);
+
+      const { code, stdout } = await cli('outcomes', dir);
+      expect(code).toBe(0);
+      expect(stdout).toContain(`\nShipped fixes:\n  rule/.claude/rules/api.md  shipped 2026-11-11 in ${commit.slice(0, 7)}, 0.1 days after its first signal\n`);
+      expect(stdout).toContain('\n    7 days   pending: so far 0 sessions\n');
+      expect(stdout).toContain('\n  Median time to fix     0.1 days, over 1 fix\n');
+
+      const json = JSON.parse((await cli('outcomes', dir, '--format', 'json')).stdout);
+      expect(json.fixes[0]).toMatchObject({ unit: 'rule/.claude/rules/api.md', commit, firstSignal: ts(4), shippedAt: '2026-11-11T12:00:00Z' });
+      // The session loaded the rule with no digest recorded: unknown bytes, and harmful, as a signal came with it in context.
+      expect(json.counters).toContainEqual({ unit: 'rule/.claude/rules/api.md', version: null, today: false, fixed: false, helpful: 0, harmful: 1 });
+    });
+
+    it('outcomes --locks counts a repository whose lock pins the unit at the fix, and not one still on the older version', async () => {
+      const dir = recorded((real) => real);
+      shipped(dir);
+      const fixed = JSON.parse((await cli('outcomes', dir, '--format', 'json')).stdout).fixes[0].versions[0].unit as string;
+      const old = `sha256:${'c'.repeat(64)}`;
+      const pin = (digest: string) => serializeLock({ upstreams: [{ name: 'org', repo: dir, ref: 'main', commit: 'f'.repeat(40), units: [{ path: '.claude/rules/api.md', id: 'rule/.claude/rules/api.md', digest, tier: 'reviewed', files: { '.claude/rules/api.md': digest } }] }] });
+      const consumers = tempDir();
+      writeTree(consumers, { 'web/ctxlock.lock': pin(fixed), 'docs/ctxlock.lock': pin(old) });
+
+      const json = JSON.parse((await cli('outcomes', dir, '--format', 'json', '--locks', consumers)).stdout);
+      expect(json.fixes[0].pinnedBy).toEqual(['web']);
+      expect(json.numbers.reached).toBe(1);
+    });
+
+    it('outcomes outside git still counts each version\'s sessions', async () => {
+      const dir = recorded((real) => real);
+
+      const { code, stdout } = await cli('outcomes', dir);
+      expect(code).toBe(0);
+      expect(stdout).toContain('\nNot a git repository, so no fix can be found shipped.\n');
+      expect(stdout).toContain('\nHelpful and harmful, by the version loaded:\n  instructions/CLAUDE.md');
+    });
+
+    it('outcomes in a shallow clone is exit 2 naming git fetch --unshallow', async () => {
+      const dir = recorded((real) => real);
+      shipped(dir);
+      const shallow = join(tempDir(), 'shallow');
+      execFileSync('git', ['clone', '-q', '--depth', '1', `file://${dir.replaceAll('\\', '/')}`, shallow]);
+
+      const { code, stderr } = await cli('outcomes', shallow);
+      expect(code).toBe(2);
+      expect(stderr).toContain('git fetch --unshallow');
+    });
+  });
+
   it('a bad --since is exit 2', async () => {
     const dir = tempDir();
     for (const since of ['yesterday', '2026-13-01', '2026-11-1']) expect((await cli('misses', dir, '--since', since)).code, since).toBe(2);
