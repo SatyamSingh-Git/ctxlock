@@ -219,6 +219,9 @@ type RunOptions = Pick<EvalOptions, 'runs' | 'maxRuns' | 'maxMinutes' | 'model' 
   trees: Record<ArmName, string | null>;
   // When the time budget began; by default, now.
   started?: number;
+  // The arms to run, by default both. An arm not run is null in each outcome, whose status is then
+  // inconclusive, as status has it for a missing arm.
+  arms?: readonly ArmName[];
 };
 
 // Each probe run in two copies, one materialized from each reader, paired. Nothing is ever written
@@ -231,6 +234,7 @@ export async function runProbes(
 ): Promise<Pick<EvalResult, 'model' | 'claudeVersion' | 'outcomes' | 'stripped' | 'gateFailures' | 'totals'>> {
   const now = opts.now ?? Date.now;
   const started = opts.started ?? now();
+  const arms = opts.arms ?? (['base', 'head'] as const);
   const result: Pick<EvalResult, 'model' | 'claudeVersion' | 'outcomes' | 'stripped' | 'gateFailures' | 'totals'> = {
     model: null, claudeVersion: null, outcomes: [], stripped: [], gateFailures: [],
     totals: { runs: 0, cachedRuns: 0, wallMs: 0, costUsd: 0, utilizationBefore: null, utilizationAfter: null },
@@ -247,7 +251,7 @@ export async function runProbes(
     result.claudeVersion = version;
     const trees = opts.trees;
     const before: Partial<Record<ArmName, ReturnType<typeof snapshot>>> = {};
-    for (const arm of ['base', 'head'] as const) {
+    for (const arm of arms) {
       const m = await materialize(readers[arm], dirs[arm]);
       result.stripped.push(...m.stripped);
       before[arm] = snapshot(dirs[arm]);
@@ -281,7 +285,7 @@ export async function runProbes(
     const plans = probes.map((c) => {
       const keys = { base: cacheKey('base', c.probe), head: cacheKey('head', c.probe) };
       const records = { base: readCache(keys.base), head: readCache(keys.head) };
-      const cost = 2 * opts.runs - records.base.length - records.head.length;
+      const cost = arms.reduce((n, arm) => n + opts.runs - records[arm].length, 0);
       if (!overBudget && planned + cost <= opts.maxRuns) planned += cost;
       else overBudget = true;
       return { ...c, keys, records, cached: { base: records.base.length, head: records.head.length }, runnable: !overBudget, started: false, complete: false };
@@ -293,7 +297,7 @@ export async function runProbes(
     for (const plan of plans) {
       if (!plan.runnable) break;
       for (let i = 0; i < opts.runs; i++) {
-        for (const arm of ['base', 'head'] as const) {
+        for (const arm of arms) {
           if (plan.records[arm].length > i) continue;
           if (elapsed()) break;
           plan.started = true;
@@ -321,9 +325,9 @@ export async function runProbes(
           }
         }
       }
-      plan.complete = plan.records.base.length === opts.runs && plan.records.head.length === opts.runs;
+      plan.complete = arms.every((arm) => plan.records[arm].length === opts.runs);
       if (!plan.complete) continue;
-      for (const arm of ['base', 'head'] as const) {
+      for (const arm of arms) {
         const key = plan.keys[arm];
         const keep = plan.records[arm].filter((r) => r.error === null);
         if (key !== null && keep.length > plan.cached[arm]) {
@@ -339,11 +343,14 @@ export async function runProbes(
       if (!plan.runnable) outcome = { probe, source, changedInHead, selectedFor, base: null, head: null, status: 'not-run', reason: `run budget (${opts.maxRuns} runs)` };
       else if (!plan.complete && !plan.started) outcome = { probe, source, changedInHead, selectedFor, base: null, head: null, status: 'not-run', reason: `time budget (${opts.maxMinutes} min)` };
       else {
-        const arms = { base: summarise(probe, plan.records.base, plan.cached.base), head: summarise(probe, plan.records.head, plan.cached.head) };
-        result.totals.cachedRuns += plan.cached.base + plan.cached.head;
+        const sides = {
+          base: arms.includes('base') ? summarise(probe, plan.records.base, plan.cached.base) : null,
+          head: arms.includes('head') ? summarise(probe, plan.records.head, plan.cached.head) : null,
+        };
+        result.totals.cachedRuns += arms.reduce((n, arm) => n + plan.cached[arm], 0);
         outcome = plan.complete
-          ? { probe, source, changedInHead, selectedFor, ...arms, status: status(arms.base, arms.head) }
-          : { probe, source, changedInHead, selectedFor, ...arms, status: 'inconclusive', reason: `time budget (${opts.maxMinutes} min)` };
+          ? { probe, source, changedInHead, selectedFor, ...sides, status: status(sides.base, sides.head) }
+          : { probe, source, changedInHead, selectedFor, ...sides, status: 'inconclusive', reason: `time budget (${opts.maxMinutes} min)` };
       }
       result.outcomes.push(outcome);
     }

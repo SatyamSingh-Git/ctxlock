@@ -1,4 +1,5 @@
 import type { Counter, FixOutcome, Numbers, Outcomes, Window } from '../loop/outcomes.js';
+import type { UnitCheck } from '../loop/verify.js';
 import { plural } from './markdown.js';
 import { printable, table } from './render.js';
 
@@ -82,5 +83,26 @@ export function renderOutcomes(o: Outcomes, format: 'text' | 'json'): string {
     );
   }
   out.push('', 'The numbers:', numberRows(o.numbers));
+  return `${out.join('\n')}\n`;
+}
+
+const passes = (head: { passed: number; valid: number } | null) => (head ? `${head.passed} of ${head.valid} passed` : 'not run');
+
+export function renderVerify(r: { checks: UnitCheck[]; runs: number }, format: 'text' | 'json'): string {
+  if (format === 'json') {
+    const checks = r.checks.map((c) => ({ unit: c.unit.id, check: c.check, probes: c.probes.map((o) => ({ id: o.probe.id, head: o.head })), ...(c.next && { next: c.next }) }));
+    return `${JSON.stringify({ checks, runs: r.runs }, null, 2)}\n`;
+  }
+  if (!r.checks.length) return "ctxlock verify · no unit's stale-after has passed; name one with --unit\n";
+  const out = [`ctxlock verify · ${plural(r.checks.length, 'unit')}, ${plural(r.runs, 'run')}`, ''];
+  for (const c of r.checks) {
+    if (c.check === 'no probes') out.push(`  ${c.unit.id}  no probes: ctxlock probe draft can draft some`);
+    else out.push(`  ${c.unit.id}  ${c.check}`, ...c.probes.map((o) => `    ${printable(o.probe.id)}  ${passes(o.head)}`));
+  }
+  const holding = r.checks.filter((c) => c.next);
+  if (holding.length) {
+    out.push('', 'In ctxlock.yaml, for the units that hold:', '  units:');
+    for (const c of holding) out.push(`    ${c.unit.path}:`, `      verified-at: ${c.next!.verifiedAt}`, `      stale-after: ${c.next!.staleAfter}`);
+  }
   return `${out.join('\n')}\n`;
 }

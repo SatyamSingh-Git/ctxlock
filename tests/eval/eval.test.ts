@@ -422,4 +422,25 @@ describe('runProbes', { timeout: 120_000 }, () => {
     expect(r.totals.runs).toBe(6);
     expect(readFileSync(join(root, 'AGENTS.md'), 'utf8')).toBe('Use npm.\n');
   });
+
+  it('runProbes with arms head runs only the head copy, and its outcome has no base', async () => {
+    const root = tempDir();
+    writeTree(root, { 'AGENTS.md': 'Use pnpm.\n' });
+    const reader = fsReader(root);
+    const scan = await scanRepo(reader);
+    const [probe] = parseProbeFile(probeFile({ id: 'deps' }), 'evals/probes/p.yaml');
+
+    const r = await runProbes({ base: reader, head: reader }, { base: scan, head: scan }, [{ probe: probe!, source: 'base', changedInHead: false, selectedFor: 'verify' }], {
+      ...options(root),
+      trees: { base: null, head: null },
+      arms: ['head'],
+    });
+
+    expect(r.outcomes[0]).toMatchObject({ base: null, head: { passed: 3, valid: 3 }, status: 'inconclusive' });
+    // Complete, not cut short: no budget is named.
+    expect(r.outcomes[0]!.reason).toBeUndefined();
+    expect(r.totals.runs).toBe(3);
+    expect(readFileSync(argvLog, 'utf8').trim().split('\n').filter((l) => l.includes('"-p"'))).toHaveLength(3);
+    expect(r.gateFailures).toEqual([]);
+  });
 });

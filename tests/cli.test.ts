@@ -4,6 +4,7 @@ import { join, relative, sep } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { main } from '../src/cli.js';
 import { draftName } from '../src/loop/draft.js';
+import { localDate } from '../src/scan.js';
 import { serializeLock } from '../src/sync/lock.js';
 import { cleanup, git, gitRepo, tempDir, writeTree } from './helpers/repo.js';
 
@@ -976,6 +977,19 @@ describe('ctxlock misses', () => {
       expect(json.numbers.reached).toBe(1);
     });
 
+    it('outcomes --verify counts a fix whose probe fails today as a regression', { timeout: 120_000 }, async () => {
+      const dir = recorded((real) => real);
+      shipped(dir);
+      const file = join(tempDir(), 'scenario.json');
+      writeFileSync(file, JSON.stringify({ behaviours: [{ calls: [{ tool: 'Bash', input: { command: 'curl /v1/items' } }] }] }));
+      vi.stubEnv('FAKE_CLAUDE_SCENARIO', file);
+
+      const { code, stdout } = await cli('outcomes', dir, '--verify', '--claude', 'tests/helpers/fake-claude.mjs', '--workdir', join(tempDir(), 'w'));
+      expect(code).toBe(0);
+      expect(stdout).toContain('\n    Its probe today: fails\n');
+      expect(stdout).toContain('\n  Regression rate        1 of 1 fix judged\n');
+    });
+
     it('outcomes outside git still counts each version\'s sessions', async () => {
       const dir = recorded((real) => real);
 
@@ -1002,5 +1016,72 @@ describe('ctxlock misses', () => {
     for (const since of ['yesterday', '2026-13-01', '2026-11-1']) expect((await cli('misses', dir, '--since', since)).code, since).toBe(2);
     for (const since of ['yesterday', '2026-13-01', '2026-00-10']) expect((await cli('misses', dir, '--since', since)).stderr, since).toContain('expected a date as YYYY-MM-DD');
     expect((await cli('misses', dir, '--since', '2026-11-01')).code).toBe(0);
+  });
+});
+
+describe('ctxlock verify', { timeout: 120_000 }, () => {
+  const FAKE = 'tests/helpers/fake-claude.mjs';
+  const probe = (id: string, unit: string, command: string) => `  - id: ${id}\n    unit: rule/.claude/rules/${unit}\n    prompt: Add zod.\n    expect:\n      command: '${command}'\n`;
+  let argv: string;
+
+  beforeEach(() => {
+    const file = join(tempDir(), 'scenario.json');
+    writeFileSync(file, JSON.stringify({ behaviours: [{ calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] }] }));
+    vi.stubEnv('FAKE_CLAUDE_SCENARIO', file);
+    argv = join(tempDir(), 'argv.jsonl');
+    vi.stubEnv('FAKE_CLAUDE_ARGV_LOG', argv);
+  });
+
+  function repo() {
+    const dir = tempDir();
+    writeTree(dir, {
+      '.claude/rules/a.md': 'Use pnpm.\n',
+      '.claude/rules/b.md': 'Use yarn.\n',
+      '.claude/rules/c.md': 'Use pnpm here too.\n',
+      '.claude/rules/d.md': 'No probes.\n',
+      'ctxlock.yaml': 'version: 1\nunits:\n  .claude/rules/a.md:\n    verified-at: 2025-10-03\n    stale-after: 2026-01-01\n  .claude/rules/b.md:\n    stale-after: 2026-01-01\n  .claude/rules/d.md:\n    stale-after: 2026-01-01\n',
+      'evals/probes/p.yaml': `version: 1\nprobes:\n${probe('a-pnpm', 'a.md', 'pnpm add')}${probe('b-yarn', 'b.md', 'yarn add')}${probe('c-pnpm', 'c.md', 'pnpm add')}`,
+    });
+    return dir;
+  }
+  const runs = () => readFileSync(argv, 'utf8').trim().split('\n').filter((l) => l.includes('"-p"')).length;
+  const run = (...args: string[]) => cli('verify', ...args, '--claude', FAKE, '--workdir', join(tempDir(), 'w'));
+
+  it("verify runs only a due unit's own probes, prints the lines for one that holds, and is exit 1 for one that fails", async () => {
+    const dir = repo();
+
+    const { code, stdout } = await run(dir);
+
+    expect(code).toBe(1);
+    expect(stdout).toContain('ctxlock verify · 3 units, 6 runs\n');
+    expect(stdout).toContain('\n  rule/.claude/rules/a.md  holds\n    a-pnpm  3 of 3 passed\n');
+    expect(stdout).toContain('\n  rule/.claude/rules/b.md  fails\n    b-yarn  0 of 3 passed\n');
+    expect(stdout).not.toContain('c.md');
+    const today = localDate();
+    const due = new Date(Date.parse(`${today}T00:00:00Z`) + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    expect(stdout).toContain(`\nIn ctxlock.yaml, for the units that hold:\n  units:\n    .claude/rules/a.md:\n      verified-at: ${today}\n      stale-after: ${due}\n`);
+    expect(stdout).not.toContain('.claude/rules/b.md:');
+    expect(runs()).toBe(6);
+    // Nothing is written: ctxlock.yaml is the owner's.
+    expect(readFileSync(join(dir, 'ctxlock.yaml'), 'utf8')).toContain('stale-after: 2026-01-01');
+  });
+
+  it('verify --unit names one unit due or not, and a unit with no probes says probe draft can draft some', async () => {
+    const dir = repo();
+
+    const c = await run(dir, '--unit', '.claude/rules/c.md');
+    expect(c.code).toBe(0);
+    expect(c.stdout).toContain('\n  rule/.claude/rules/c.md  holds\n');
+    expect(runs()).toBe(3);
+    expect((await run(dir, '--unit', '.claude/rules/d.md')).stdout).toContain('\n  rule/.claude/rules/d.md  no probes: ctxlock probe draft can draft some\n');
+    expect((await run(dir, '--unit', 'nope.md')).code).toBe(2);
+    expect((await run(dir, '--runs', '1')).code).toBe(2);
+  });
+
+  it("with no unit due it says so", async () => {
+    const dir = tempDir();
+    writeTree(dir, { '.claude/rules/a.md': 'Use pnpm.\n' });
+
+    expect((await run(dir)).stdout).toBe("ctxlock verify · no unit's stale-after has passed; name one with --unit\n");
   });
 });

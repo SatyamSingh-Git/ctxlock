@@ -15,11 +15,12 @@ import { DiagnosisError } from './loop/diagnose.js';
 import { FixesError, shippedFixes } from './loop/fixes.js';
 import { githubRepo, IssueError, openIssue } from './loop/issue.js';
 import { counters, numbers, outcomeOf } from './loop/outcomes.js';
+import { dueUnits, headRuns, judgeHead, verifyProbes } from './loop/verify.js';
 import { type DraftKind, draftName, draftState, renderDraft } from './loop/draft.js';
 import { findMisses, type Misses } from './loop/misses.js';
 import { diagnose } from './loop/propose.js';
 import { renderDiagnosis, renderProposal } from './report/diagnose.js';
-import { renderOutcomes } from './report/outcomes.js';
+import { renderOutcomes, renderVerify } from './report/outcomes.js';
 import { findTranscript, readTranscript, type SessionTranscript, transcriptsHome } from './loop/transcript.js';
 import { renderMisses } from './report/misses.js';
 import { buildGraph, impactOf, pinnedBy, resolveRef, whoUses } from './graph/graph.js';
@@ -40,7 +41,7 @@ import { renderEval } from './report/eval.js';
 import { renderDiffMarkdown, renderErrorMarkdown } from './report/markdown.js';
 import { printable, renderDiff, renderScan } from './report/render.js';
 import { renderSync } from './report/sync.js';
-import { type ScanResult, scanRepo } from './scan.js';
+import { localDate, type ScanResult, scanRepo } from './scan.js';
 import { UpstreamError, fetchUpstream } from './sync/fetch.js';
 import { LOCK_FILE, LockError, loadLock } from './sync/lock.js';
 import { applySync, planSync } from './sync/sync.js';
@@ -193,6 +194,24 @@ interface DiagnoseFlags {
   open?: boolean;
   gh?: string;
 }
+
+interface RunFlags {
+  runs: number;
+  maxRuns: number;
+  maxMinutes: number;
+  model?: string;
+  claude?: string;
+  workdir?: string;
+}
+
+const runOptions = (opts: RunFlags, scan: ScanResult) => ({
+  runs: opts.runs,
+  maxRuns: opts.maxRuns,
+  maxMinutes: opts.maxMinutes,
+  model: opts.model ?? scan.registry.eval.model,
+  claude: claudeOf(opts.claude),
+  workdir: workdirOf(opts.workdir),
+});
 
 interface EvalFlags {
   base: string;
@@ -462,7 +481,14 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .description('the fixes diagnose proposed that shipped, whether each held at 7 and 30 days, helpful and harmful sessions per unit version, and the compounding numbers; reads git, the collector and the transcripts, and runs nothing')
     .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
     .option('--locks <paths...>', 'also count the repositories under these folders whose ctxlock.lock pins a fixed unit at a version from the fix on')
-    .action(async (dir: string | undefined, opts: { format: 'text' | 'json'; locks?: string[] }) => {
+    .option('--verify', "also run each shipped fix's probe on the repository as it is, with Claude Code; one that fails is a regression")
+    .option('--runs <n>', 'runs of each probe with --verify, at least 2', replayRuns, 3)
+    .option('--max-runs <n>', 'the most runs --verify may start', count, 16)
+    .option('--max-minutes <n>', 'start no run after this many minutes', count, 15)
+    .option('--model <model>', 'the model Claude Code runs (default: eval.model, or sonnet)')
+    .option('--claude <path>', "Claude Code's executable (default: claude on PATH)")
+    .option('--workdir <dir>', 'where run folders go (default: $RUNNER_TEMP, or the system temp folder)')
+    .action(async (dir: string | undefined, opts: RunFlags & { format: 'text' | 'json'; locks?: string[]; verify?: boolean }) => {
       const root = resolve(dir ?? '.');
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
       const scan = await scanRepo(fsReader(root));
@@ -480,8 +506,39 @@ export async function main(argv: string[], io: Io): Promise<number> {
         const pins = pinnedBy([path], self, locks, real).filter((p) => fix.versions.some((v) => v.unit === p.digest));
         return outcomeOf(fix, timelines, found, now, { consumers: whoUses(graph, fix.unit).consumers.map((c) => c.name), pinnedBy: [...new Set(pins.map((p) => shareable(p.repo)))] });
       });
+      if (opts.verify) {
+        const ran = await headRuns(root, fixes.map((f) => f.probe), runOptions(opts, scan));
+        for (const o of outcomes) o.probe = judgeHead([ran.outcomes.find((r) => r.probe.id === o.fix.probe.id)?.head ?? null]);
+      }
       const sessions = joinSessions(r.read, scan, r.roots, r.real);
       io.stdout(renderOutcomes({ sessions: sessions.sessions, git, fixes: outcomes, orphans: orphans.map((p) => p.id), counters: counters(timelines, found, scan, fixes), numbers: numbers(outcomes, sessions) }, opts.format));
+    });
+
+  program
+    .command('verify [dir]')
+    .description("re-check the units whose stale-after has passed by their own probes, run on the repository as it is with Claude Code; prints the ctxlock.yaml lines to set for each that holds, and writes nothing")
+    .option('--unit <ref>', 'check this unit instead, due or not')
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
+    .option('--runs <n>', 'runs of each probe, at least 2', replayRuns, 3)
+    .option('--max-runs <n>', 'the most runs it may start', count, 16)
+    .option('--max-minutes <n>', 'start no run after this many minutes', count, 15)
+    .option('--model <model>', 'the model Claude Code runs (default: eval.model, or sonnet)')
+    .option('--claude <path>', "Claude Code's executable (default: claude on PATH)")
+    .option('--workdir <dir>', 'where run folders go (default: $RUNNER_TEMP, or the system temp folder)')
+    .action(async (dir: string | undefined, opts: RunFlags & { unit?: string; format: 'text' | 'json' }) => {
+      const root = resolve(dir ?? '.');
+      if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      const scan = await scanRepo(fsReader(root));
+      const today = localDate();
+      let units = dueUnits(scan, today);
+      if (opts.unit !== undefined) {
+        const unit = resolveRef(opts.unit, scan.units);
+        if (!unit) throw new UsageError(`ctxlock verify: no unit ${opts.unit}; ctxlock scan lists the units`);
+        units = [unit];
+      }
+      const r = await verifyProbes(root, scan, units, today, runOptions(opts, scan));
+      io.stdout(renderVerify(r, opts.format));
+      if (r.checks.some((c) => c.check === 'fails')) code = 1;
     });
 
   program
