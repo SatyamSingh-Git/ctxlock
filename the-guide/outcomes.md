@@ -43,9 +43,8 @@ A fix ships when a commit adds the probe `diagnose` wrote for it, which is the o
 - **When:** the committer date of the first commit that added the probe's id under `evals/probes/`. A probe edited later, or removed and added back, keeps its first date.
 - **One probe per fix:** the id `diagnose` writes names the unit and the bytes it had, so after a fix that missed again, the next fix's probe has an id of its own, and its own ship date.
 - **The fix's versions:** the unit as it was at that commit, at every later commit that descends from it and changed it, and in your working tree. A later edit to the unit still carries the fix. A branch that forked before the fix and merged after it brings no version, since its commits never had the fix.
-- **Listed apart:**
-  - a probe whose unit is gone;
-  - a commit that added the probe but left the unit as it was.
+- **A probe whose unit is gone** is listed apart, under "Probes whose unit is gone".
+- **A commit that added the probe but left the unit as it was** still ships the fix, with a note under it: "Its commit added the probe and left the unit as it was."
 - **A shallow clone** can't say when a probe arrived, so `outcomes` stops with exit 2: run `git fetch --unshallow`.
 - **Outside git,** there are no shipped fixes, and the counters still show.
 
