@@ -170,6 +170,7 @@ The reply is checked against the unit: every line it quotes must be in the file,
 - **What it holds:** the proposal, exactly as `--drafts` writes it. Nothing from the session itself, not the task, the actions or your words.
 - **The repository must be on GitHub.** Anything else is exit 2, before Claude runs.
 - **No pull request is opened.** A fix to shared context needs its owner's reading first.
+- **Checked on GitHub:** on a scratch repository, it filed one issue, updated it on the next run, and reopened it after it was closed ([report](../docs/dogfood/2026-11-13-github.md)).
 
 ## What it doesn't do yet
 

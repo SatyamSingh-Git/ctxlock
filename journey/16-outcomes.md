@@ -14,7 +14,7 @@
   - **`runProbes`** runs one side only, with `arms: ['head']`.
   - **Each session load** keeps the digest the collector recorded.
   - **`locksAt`** is shared by `impact --locks` and `outcomes --locks`.
-- **The suite** has 698 tests.
+- **The suite** has 699 tests.
 
 ## What worked
 
@@ -54,6 +54,12 @@ Each survivor got a test, and the mutants were run again.
 
   The tests passed throughout: each case was one the tests didn't hold. Two of them came from test data in a shape real input never has. All six were fixed test-first.
 - **The three minors, fixed at Satyam's request.** One taught something about git: `--first-parent` with `--ancestry-path` follows first parents only, so a branch with two commits merged in looked as if it never arrived. The ship time now takes the fix's descendants first, then the oldest of them on the first-parent line. Reading versions through one `git cat-file --batch` made finding a fix 13 times faster on a 2,000-file history.
+- **On GitHub, the sync workflow could leave a change where no reviewer would see it.** With Satyam's OK, `diagnose --open` and the sync workflow ran on two scratch repositories ([report](../docs/dogfood/2026-11-13-github.md)).
+  - **`--open`:** filed, updated and reopened one issue, as designed.
+  - **The workflow's first run:** it pushed its branch, then GitHub refused the pull request, as a new repository does.
+  - **Every run after that:** each saw the branch already held the files, said the pull request had them, and opened none.
+
+  The stand-in `gh` had never been asked about a branch with no pull request. The check now applies only when one is open (`9e35bfc`).
 - **The scratchpad was cleared overnight,** the mutation script with it. It was written again from what it had been, so the same checks still apply: the baseline must pass, and a mutant equal to the code counts as survived.
 - **Shell strings, again.** A script that edited a test through a heredoc had its `\n` turned into newlines. It was redone with the Edit tool.
 

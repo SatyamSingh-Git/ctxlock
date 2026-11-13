@@ -8,7 +8,7 @@ ctxlock treats shared context as a dependency:
 - **`ctxlock sync`** brings those units in.
 - **`ctxlock.lock`** pins what sync brought in, so any change to it arrives as a diff someone reviews.
 
-> **Status:** built and tested, and checked live on local repositories ([report](../docs/dogfood/2026-11-10-propagation.md)). The workflow template has been tested against a stand-in for `gh`, but has not yet run on GitHub.
+> **Status:** built and tested, and checked live on local repositories ([report](../docs/dogfood/2026-11-10-propagation.md)). The workflow template has run on GitHub too, on two scratch repositories: it opened one pull request, updated it when the upstream changed, and left it alone when nothing had ([report](../docs/dogfood/2026-11-13-github.md)).
 
 ## The org repository
 
