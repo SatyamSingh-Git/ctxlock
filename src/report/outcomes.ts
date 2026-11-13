@@ -4,7 +4,12 @@ import { plural } from './markdown.js';
 import { printable, table } from './render.js';
 
 const fixes = (n: number) => `${n} ${n === 1 ? 'fix' : 'fixes'}`;
-const days = (n: number) => `${n.toFixed(1)} days`;
+// A fix can ship minutes after its signal, and "0.0 days" would hide it.
+function days(n: number): string {
+  if (n >= 1) return `${n.toFixed(1)} days`;
+  if (n * 24 >= 1) return `${(n * 24).toFixed(1)} hours`;
+  return plural(Math.max(1, Math.round(n * 24 * 60)), 'minute');
+}
 
 function window(w: Window): string {
   const label = `${w.days} days`.padEnd(7);
@@ -27,10 +32,12 @@ function fix(o: FixOutcome): string[] {
 }
 
 function counterRows(counters: Counter[]): string {
+  const marks = (c: Counter) => [c.today ? 'today' : '', c.fixed ? 'a fix' : ''].filter(Boolean).join(', ');
+  const marked = counters.some((c) => marks(c));
   const rows = counters.map((c, i) => [
     `  ${i > 0 && counters[i - 1]!.unit === c.unit ? '' : c.unit}`,
     c.version === null ? 'unknown bytes' : c.version.slice(0, 12),
-    [c.today ? 'today' : '', c.fixed ? 'a fix' : ''].filter(Boolean).join(', '),
+    ...(marked ? [marks(c)] : []),
     `helpful ${c.helpful}`,
     `harmful ${c.harmful}`,
   ]);

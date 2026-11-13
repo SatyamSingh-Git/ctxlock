@@ -60,6 +60,15 @@ describe('renderOutcomes', () => {
     expect(json.fixes[0]).toMatchObject({ unit: ID, probe: 'miss-deps', commit: FIX.commit, shippedAt: FIX.shippedAt, daysToFix: 1, windows: [{ status: 'held' }, { status: 'pending' }] });
   });
 
+  it('a time under a day reads in hours or minutes, and a table with no marked version has no empty column', () => {
+    const quick = { ...OUTCOMES.fixes[0]!, daysToFix: 2 / 1440 };
+    const text = renderOutcomes({ ...OUTCOMES, fixes: [quick], numbers: { ...OUTCOMES.numbers, medianDaysToFix: 0.25 }, counters: [OUTCOMES.counters[2]!] }, 'text');
+
+    expect(text).toContain(', 2 minutes after its first signal\n');
+    expect(text).toContain('\n  Median time to fix     6.0 hours, over 1 fix\n');
+    expect(text).toContain(`\n  ${ID}  unknown bytes  helpful 1  harmful 0\n`);
+  });
+
   it('with no fix it says how a fix ships, and outside git that none can be found', () => {
     const none = { ...OUTCOMES, fixes: [], orphans: [] };
 

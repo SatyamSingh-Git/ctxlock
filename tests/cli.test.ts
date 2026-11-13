@@ -953,9 +953,9 @@ describe('ctxlock misses', () => {
 
       const { code, stdout } = await cli('outcomes', dir);
       expect(code).toBe(0);
-      expect(stdout).toContain(`\nShipped fixes:\n  rule/.claude/rules/api.md  shipped 2026-11-11 in ${commit.slice(0, 7)}, 0.1 days after its first signal\n`);
+      expect(stdout).toContain(`\nShipped fixes:\n  rule/.claude/rules/api.md  shipped 2026-11-11 in ${commit.slice(0, 7)}, 2.0 hours after its first signal\n`);
       expect(stdout).toContain('\n    7 days   pending: so far 0 sessions\n');
-      expect(stdout).toContain('\n  Median time to fix     0.1 days, over 1 fix\n');
+      expect(stdout).toContain('\n  Median time to fix     2.0 hours, over 1 fix\n');
 
       const json = JSON.parse((await cli('outcomes', dir, '--format', 'json')).stdout);
       expect(json.fixes[0]).toMatchObject({ unit: 'rule/.claude/rules/api.md', commit, firstSignal: ts(4), shippedAt: '2026-11-11T12:00:00Z' });
