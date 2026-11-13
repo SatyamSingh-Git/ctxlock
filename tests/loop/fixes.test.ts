@@ -131,6 +131,38 @@ describe('shippedFixes', () => {
     expect(fixes[0]!.versions.map((v) => v.file)).not.toContain(digest(`${RULE}Old branch.\n`));
   });
 
+  it('a fix committed on a branch ships when it is merged, not when it was committed', async () => {
+    const { dir, shas } = history([{ at: '2026-11-01T10:00:00Z', files: { '.claude/rules/deps.md': RULE } }]);
+    git(dir, 'checkout', '-q', '-b', 'fix');
+    writeTree(dir, { '.claude/rules/deps.md': FIXED, 'evals/probes/deps.yaml': probe(MISS) });
+    vi.stubEnv('GIT_COMMITTER_DATE', '2026-11-02T10:00:00Z');
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-qm', 'fix');
+    const fix = git(dir, 'rev-parse', 'HEAD');
+    // A later commit on the branch is not when the fix shipped either.
+    writeTree(dir, { 'NOTES.md': 'Still on the branch.\n' });
+    vi.stubEnv('GIT_COMMITTER_DATE', '2026-11-04T10:00:00Z');
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-qm', 'more on the branch');
+    git(dir, 'checkout', '-q', 'main');
+    writeTree(dir, { 'README.md': 'Meanwhile on main.\n' });
+    vi.stubEnv('GIT_COMMITTER_DATE', '2026-11-03T10:00:00Z');
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-qm', 'main moves on');
+    vi.stubEnv('GIT_COMMITTER_DATE', '2026-11-05T10:00:00Z');
+    git(dir, 'merge', '-q', '--no-ff', '-m', 'merge fix', 'fix');
+    writeTree(dir, { 'README.md': 'After the merge.\n' });
+    vi.stubEnv('GIT_COMMITTER_DATE', '2026-11-06T10:00:00Z');
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-qm', 'after');
+
+    const { fixes } = await run(dir);
+
+    expect(fixes.map((f) => [f.commit, f.shippedAt])).toEqual([[fix, '2026-11-05T10:00:00Z']]);
+    expect(fixes[0]!.versions[0]!.commit).toBe(fix);
+    expect(shas).toHaveLength(1);
+  });
+
   it('a shallow clone is a FixesError naming git fetch --unshallow, and a folder outside git has no fixes', async () => {
     const { dir } = history([
       { at: '2026-11-01T10:00:00+00:00', files: { '.claude/rules/deps.md': RULE } },

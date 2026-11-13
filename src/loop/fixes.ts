@@ -67,6 +67,8 @@ export async function shippedFixes(root: string, scan: ScanResult): Promise<Fixe
     throw new FixesError('the history is shallow, so when a probe arrived is unknown; run git fetch --unshallow');
   }
   const units = new Map(scan.units.map((u) => [u.id, u]));
+  // HEAD's first-parent line, oldest first.
+  const mainline = (await git(top, ['rev-list', '--reverse', '--first-parent', 'HEAD'])).split('\n').filter(Boolean);
   const fixes: ShippedFix[] = [];
   const orphans: Probe[] = [];
   for (const probe of (await loadProbes(fsReader(root))).filter((p) => p.id.startsWith('miss-'))) {
@@ -78,10 +80,19 @@ export async function shippedFixes(root: string, scan: ScanResult): Promise<Fixe
     // -S finds each commit that changes how often the id occurs: the oldest is when it first arrived.
     const [first] = commits(await git(top, ['log', '--reverse', '--format=%H%x09%cI', `-S${probe.id}`, '--', 'evals/probes']));
     if (!first) continue;
-    const [commit, shippedAt] = first;
+    const [commit, committedAt] = first;
+    // A commit made on a branch shipped when it reached HEAD's first-parent line: at the oldest commit there
+    // that descends from it, a merge's. --first-parent can't be asked here, as --ancestry-path would then
+    // follow first parents only and lose a merge of a longer branch.
+    let shippedAt = committedAt;
+    if (!mainline.includes(commit)) {
+      const descendants = new Set((await git(top, ['rev-list', '--ancestry-path', `${commit}..HEAD`])).split('\n').filter(Boolean));
+      const merge = mainline.find((c) => descendants.has(c));
+      if (merge) shippedAt = (await git(top, ['show', '-s', '--format=%cI', merge])).trim();
+    }
     // Only commits that descend from the fix: a branch that forked before it and merged later never had it.
     const later = commits(await git(top, ['log', '--reverse', '--ancestry-path', '--format=%H%x09%cI', `${commit}..HEAD`, '--', ...unit.files.map((f) => f.path)]));
-    const found = await Promise.all([[commit, shippedAt] as const, ...later].map(([c, at]) => versionAt(top, unit, c, at)));
+    const found = await Promise.all([[commit, committedAt] as const, ...later].map(([c, at]) => versionAt(top, unit, c, at)));
     const versions: Version[] = [];
     for (const v of [...found, { commit: null, at: null, file: unit.files[0]!.sha256, unit: unit.digest }]) {
       if (v && !versions.some((w) => w.unit === v.unit)) versions.push(v);

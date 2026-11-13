@@ -40,7 +40,7 @@ The numbers:
 ## What ships a fix
 
 A fix ships when a commit adds the probe `diagnose` wrote for it, which is the one whose id starts with `miss-`. The proposal says to commit the probe with the fix, so that commit is the fix shipping. ctxlock reads this from git history. It keeps no record of its own.
-- **When:** the committer date of the first commit that added the probe's id under `evals/probes/`. A probe edited later, or removed and added back, keeps its first date.
+- **When:** the committer date of the first commit that added the probe's id under `evals/probes/`. When that commit was made on a branch, it is the date the fix reached your main line instead: the merge's. A probe edited later, or removed and added back, keeps its first date.
 - **One probe per fix:** the id `diagnose` writes names the unit and the bytes it had, so after a fix that missed again, the next fix's probe has an id of its own, and its own ship date.
 - **The fix's versions:** the unit as it was at that commit, at every later commit that descends from it and changed it, and in your working tree. A later edit to the unit still carries the fix. A branch that forked before the fix and merged after it brings no version, since its commits never had the fix.
 - **A probe whose unit is gone** is listed apart, under "Probes whose unit is gone".
