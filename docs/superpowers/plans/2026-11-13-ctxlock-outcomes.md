@@ -307,10 +307,12 @@ A fresh Opus reviewer read the whole branch (6c9aa4c..cb04507). Three Importants
 
 Mutation 9/9.
 
-**Deferred minors:**
-- Each fix version reads a whole tree through its own gitReader, all at once: slow for a unit edited hundreds of times in a very large repository (src/loop/fixes.ts).
-- The ship time is the committer date of the commit that added the probe, which on a merge-commit workflow is the branch's, before main had the fix (D90 as written).
-- The guide lists "a commit that added the probe but left the unit as it was" under "Listed apart"; it is a note under the fix (the-guide/outcomes.md).
+**The three minors, fixed at Satyam's request**, one commit and push each:
+- **A fix's versions were read slowly:** each listed the whole tree through its own reader, all at once. They now go through one `git cat-file --batch`. On 2,000 files and a rule edited 150 times since its fix, 5.9 s became 0.46 s, with the same 151 versions (`62d2dac`, 6/6).
+- **The ship time on a merge-commit workflow** was the branch commit's own date, before main had the fix. It is now the date the fix reached the first-parent line: the merge's (`cb80e90`, 5/5). The first attempt combined `--first-parent` with `--ancestry-path`, which follows first parents only and lost a merge of a branch with more than one commit; a test with a longer branch caught it.
+- **The guide** now says a commit that leaves the unit unchanged ships the fix with a note under it, as the output does (`8e7f698`).
+
+Suite 698/698.
 
 ## After this plan
 

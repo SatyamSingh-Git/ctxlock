@@ -14,7 +14,7 @@
   - **`runProbes`** runs one side only, with `arms: ['head']`.
   - **Each session load** keeps the digest the collector recorded.
   - **`locksAt`** is shared by `impact --locks` and `outcomes --locks`.
-- **The suite** has 695 tests.
+- **The suite** has 698 tests.
 
 ## What worked
 
@@ -53,6 +53,7 @@ Each survivor got a test, and the mutants were run again.
   - a second fix to the same unit would take the first one's probe id.
 
   The tests passed throughout: each case was one the tests didn't hold. Two of them came from test data in a shape real input never has. All six were fixed test-first.
+- **The three minors, fixed at Satyam's request.** One taught something about git: `--first-parent` with `--ancestry-path` follows first parents only, so a branch with two commits merged in looked as if it never arrived. The ship time now takes the fix's descendants first, then the oldest of them on the first-parent line. Reading versions through one `git cat-file --batch` made finding a fix 13 times faster on a 2,000-file history.
 - **The scratchpad was cleared overnight,** the mutation script with it. It was written again from what it had been, so the same checks still apply: the baseline must pass, and a mutant equal to the code counts as survived.
 - **Shell strings, again.** A script that edited a test through a heredoc had its `\n` turned into newlines. It was redone with the Edit tool.
 
