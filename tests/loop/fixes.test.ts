@@ -93,6 +93,44 @@ describe('shippedFixes', () => {
     expect(orphans.map((p) => p.id)).toEqual([other]);
   });
 
+  it('run from a subfolder, it finds the same fixes as from the top', async () => {
+    const { dir, shas } = history([
+      { at: '2026-11-01T10:00:00+00:00', files: { '.claude/rules/deps.md': RULE, 'sub/x.txt': 'x\n' } },
+      { at: '2026-11-02T10:00:00+00:00', files: { '.claude/rules/deps.md': FIXED, 'evals/probes/deps.yaml': probe(MISS) } },
+      { at: '2026-11-03T10:00:00+00:00', files: { '.claude/rules/deps.md': `${FIXED}More.\n` } },
+    ]);
+
+    const { fixes } = await run(join(dir, 'sub'));
+
+    // The working tree is HEAD's bytes, so it adds no version.
+    expect(fixes.map((f) => [f.commit, f.versions.map((v) => v.commit)])).toEqual([[shas[1], [shas[1], shas[2]]]]);
+  });
+
+  it("a branch that forked before the fix and merged after it brings no version: its commits never had the fix", async () => {
+    const { dir, shas } = history([
+      { at: '2026-11-01T10:00:00+00:00', files: { '.claude/rules/deps.md': RULE } },
+      { at: '2026-11-02T10:00:00+00:00', files: { '.claude/rules/deps.md': FIXED, 'evals/probes/deps.yaml': probe(MISS) } },
+    ]);
+    git(dir, 'checkout', '-q', '-b', 'old', shas[0]!);
+    writeTree(dir, { '.claude/rules/deps.md': `${RULE}Old branch.\n` });
+    vi.stubEnv('GIT_COMMITTER_DATE', '2026-11-03T10:00:00+00:00');
+    git(dir, 'commit', '-qam', 'old branch');
+    const old = git(dir, 'rev-parse', 'HEAD');
+    git(dir, 'checkout', '-q', 'main');
+    // The fix's line wins the merge; the old branch's line is kept below it.
+    writeTree(dir, { '.claude/rules/deps.md': `${FIXED}Old branch.\n` });
+    vi.stubEnv('GIT_COMMITTER_DATE', '2026-11-04T10:00:00+00:00');
+    execFileSync('git', ['merge', '-q', '--no-ff', '-s', 'ours', '--no-commit', 'old'], { cwd: dir });
+    writeTree(dir, { '.claude/rules/deps.md': `${FIXED}Old branch.\n` });
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-qm', 'merge old');
+
+    const { fixes } = await run(dir);
+
+    expect(fixes[0]!.versions.map((v) => v.commit)).not.toContain(old);
+    expect(fixes[0]!.versions.map((v) => v.file)).not.toContain(digest(`${RULE}Old branch.\n`));
+  });
+
   it('a shallow clone is a FixesError naming git fetch --unshallow, and a folder outside git has no fixes', async () => {
     const { dir } = history([
       { at: '2026-11-01T10:00:00+00:00', files: { '.claude/rules/deps.md': RULE } },

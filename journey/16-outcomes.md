@@ -14,7 +14,7 @@
   - **`runProbes`** runs one side only, with `arms: ['head']`.
   - **Each session load** keeps the digest the collector recorded.
   - **`locksAt`** is shared by `impact --locks` and `outcomes --locks`.
-- **The suite** has 690 tests.
+- **The suite** has 695 tests.
 
 ## What worked
 
@@ -44,6 +44,15 @@ Each survivor got a test, and the mutants were run again.
 
 - **The demo's fix printed as "0.0 days."** It shipped in two minutes, and the number hid it. A loop whose goal is a fast fix can't round the fast ones to zero. Times under a day now read in hours or minutes.
 - **Git writes a UTC offset as `Z`.** The first tests expected `+00:00` back from `%cI`. The code was right; the tests were fixed.
+- **The final review found six ways `outcomes` would have told a person something wrong,** each in ordinary use:
+  - run from a subfolder, it found no fix at all;
+  - a branch merged in from before the fix counted as having it;
+  - after Claude Code's 30-day transcript cleanup, a fix that missed again would read as held;
+  - a session the person corrected counted as helpful;
+  - a regression at 30 days was left out of the rate;
+  - a second fix to the same unit would take the first one's probe id.
+
+  The tests passed throughout: each case was one the tests didn't hold. Two of them came from test data in a shape real input never has. All six were fixed test-first.
 - **The scratchpad was cleared overnight,** the mutation script with it. It was written again from what it had been, so the same checks still apply: the baseline must pass, and a mutant equal to the code counts as survived.
 - **Shell strings, again.** A script that edited a test through a heredoc had its `\n` turned into newlines. It was redone with the Edit tool.
 

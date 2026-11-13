@@ -66,7 +66,8 @@ export function counters(timelines: Timeline[], found: MissSignal[], scan: ScanR
         harmful: 0,
       };
       const signals = against(found, id).filter((s) => s.session === t.session);
-      const early = found.some((s) => s.session === t.session && s.unrecorded && s.context.includes(id));
+      // A signal from before the collector recorded the session has no context to join: the session is neither.
+      const early = found.some((s) => s.session === t.session && s.unrecorded);
       if (signals.length) row.harmful += signals.every((s) => s.untrusted) ? 0.5 : 1;
       else if (!early) row.helpful++;
       rows.set(key, row);
@@ -107,7 +108,7 @@ export interface Numbers {
   medianDaysToFix: number | null;
   timed: number;
   regressed: number;
-  judged7: number;
+  judged: number;
   held30: number;
   judged30: number;
   reached: number;
@@ -116,7 +117,7 @@ export interface Numbers {
   sessions: number;
 }
 
-const judged = (w: Window | undefined) => w?.status === 'held' || w?.status === 'missed again';
+const closed = (w: Window | undefined) => w?.status === 'held' || w?.status === 'missed again';
 
 function median(values: number[]): number | null {
   if (!values.length) return null;
@@ -128,16 +129,16 @@ function median(values: number[]): number | null {
 // D93: every number comes with what it was counted over, and nothing judges a window still open.
 export function numbers(outcomes: FixOutcome[], sessions: Sessions): Numbers {
   const days = outcomes.flatMap((o) => (o.daysToFix === null ? [] : [o.daysToFix]));
-  // A fix is judged once its 7-day window closed with sessions in it, or its probe was run again.
-  const judged7 = outcomes.filter((o) => judged(o.windows.find((w) => w.days === 7)) || o.probe === 'holds' || o.probe === 'fails');
-  const regressed = judged7.filter((o) => o.probe === 'fails' || o.windows.some((w) => w.status === 'missed again'));
-  const thirty = outcomes.map((o) => o.windows.find((w) => w.days === 30)).filter(judged);
+  // A fix is judged once any window closed with sessions in it, or its probe was run again.
+  const judged = outcomes.filter((o) => o.windows.some(closed) || o.probe === 'holds' || o.probe === 'fails');
+  const regressed = judged.filter((o) => o.probe === 'fails' || o.windows.some((w) => w.status === 'missed again'));
+  const thirty = outcomes.map((o) => o.windows.find((w) => w.days === 30)).filter(closed);
   return {
     fixes: outcomes.length,
     medianDaysToFix: median(days),
     timed: days.length,
     regressed: regressed.length,
-    judged7: judged7.length,
+    judged: judged.length,
     held30: thirty.filter((w) => w!.status === 'held').length,
     judged30: thirty.length,
     reached: outcomes.reduce((n, o) => n + o.consumers.length + o.pinnedBy.length, 0),
@@ -149,6 +150,8 @@ export function numbers(outcomes: FixOutcome[], sessions: Sessions): Numbers {
 
 export interface Outcomes {
   sessions: number;
+  // Recorded sessions with no transcript, left out of durability and the counters.
+  untranscribed: number;
   git: boolean;
   fixes: FixOutcome[];
   orphans: string[];

@@ -124,12 +124,16 @@ describe('numbers', () => {
       SESSIONS,
     );
 
-    expect(n).toMatchObject({ medianDaysToFix: 3, timed: 3, regressed: 2, judged7: 3, held30: 1, judged30: 2, neverLoaded: 2, loadable: 5, sessions: 12 });
+    expect(n).toMatchObject({ medianDaysToFix: 3, timed: 3, regressed: 2, judged: 3, held30: 1, judged30: 2, neverLoaded: 2, loadable: 5, sessions: 12 });
     // A probe that fails today regresses a fix whose windows say nothing yet; one that holds makes it judged.
-    expect(numbers([outcome({ probe: 'fails' }), outcome({ probe: 'holds' })], SESSIONS)).toMatchObject({ regressed: 1, judged7: 2 });
-    expect(numbers([], SESSIONS)).toMatchObject({ medianDaysToFix: null, timed: 0, regressed: 0, judged7: 0, reached: 0 });
+    expect(numbers([outcome({ probe: 'fails' }), outcome({ probe: 'holds' })], SESSIONS)).toMatchObject({ regressed: 1, judged: 2 });
+    expect(numbers([], SESSIONS)).toMatchObject({ medianDaysToFix: null, timed: 0, regressed: 0, judged: 0, reached: 0 });
     const even = [outcome({ daysToFix: 1, windows: w('held', 'held') }), outcome({ daysToFix: 4, windows: w('held', 'held') }), outcome({ windows: w('held', 'missed again') })];
     expect(numbers(even, SESSIONS)).toMatchObject({ medianDaysToFix: 2.5, held30: 2, judged30: 3 });
+  });
+
+  it('a fix that missed again at 30 days is a regression though its 7-day window had no sessions', () => {
+    expect(numbers([outcome({ windows: w('no sessions', 'missed again') }), outcome({ windows: w('no sessions', 'held') })], SESSIONS)).toMatchObject({ regressed: 1, judged: 2 });
   });
 
   it('consumers reached sum each fix\'s declared consumers and the repositories whose lock pins it at a fixed version', () => {
@@ -146,7 +150,7 @@ describe('counters', () => {
       session('early', loaded(day(1), OLD)),
       session('now', loaded(day(5), LATER)),
     ];
-    const found = [signal('hit', day(1, 11)), signal('hit', day(1, 12), { untrusted: true }), signal('web', day(1, 11), { untrusted: true }), signal('early', day(1, 11), { unrecorded: true })];
+    const found = [signal('hit', day(1, 11)), signal('hit', day(1, 12), { untrusted: true }), signal('web', day(1, 11), { untrusted: true }), signal('early', day(1, 11), { unrecorded: true, context: [] })];
 
     const old = counters(timelines, found, SCAN, []).find((c) => c.version === OLD);
 

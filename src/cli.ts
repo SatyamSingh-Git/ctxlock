@@ -494,7 +494,10 @@ export async function main(argv: string[], io: Io): Promise<number> {
       const scan = await scanRepo(fsReader(root));
       const { fixes, orphans, git } = await shippedFixes(root, scan);
       const r = recordedAt(root);
-      const timelines = sessionTimelines(r.read, scan, r.roots, r.real);
+      const recorded = sessionTimelines(r.read, scan, r.roots, r.real);
+      // A session's signals live in its transcript: without one, it can't be judged, only counted.
+      const home = transcriptsHome();
+      const timelines = recorded.filter((t) => findTranscript(home, t.session) !== null);
       const { found } = await missesAt(root, scan, { minSessions: 1 });
       const locks = opts.locks ? await locksAt(opts.locks, io.stderr) : [];
       const top = await gitTopLevel(root);
@@ -511,7 +514,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
         for (const o of outcomes) o.probe = judgeHead([ran.outcomes.find((r) => r.probe.id === o.fix.probe.id)?.head ?? null]);
       }
       const sessions = joinSessions(r.read, scan, r.roots, r.real);
-      io.stdout(renderOutcomes({ sessions: sessions.sessions, git, fixes: outcomes, orphans: orphans.map((p) => p.id), counters: counters(timelines, found, scan, fixes), numbers: numbers(outcomes, sessions) }, opts.format));
+      io.stdout(renderOutcomes({ sessions: sessions.sessions, untranscribed: recorded.length - timelines.length, git, fixes: outcomes, orphans: orphans.map((p) => p.id), counters: counters(timelines, found, scan, fixes), numbers: numbers(outcomes, sessions) }, opts.format));
     });
 
   program

@@ -68,7 +68,17 @@ describe('parseDiagnosis', () => {
     const d = parseDiagnosis(reply(DEFECT), await unit(), CORRECTED);
 
     expect(d).toMatchObject({ verdict: 'defect', quotes: DEFECT.quotes, fix: DEFECT.fix });
-    expect(d.probe).toMatchObject({ id: `miss-${draftName(ID).slice(0, -3)}`, unit: ID, prompt: 'Add the dayjs package.', expect: { command: 'pnpm add' }, kind: 'adherence' });
+    const u = await unit();
+    expect(d.probe).toMatchObject({ id: `miss-${draftName(ID).slice(0, -3)}-${u.digest.slice('sha256:'.length, 'sha256:'.length + 8)}`, unit: ID, prompt: 'Add the dayjs package.', expect: { command: 'pnpm add' }, kind: 'adherence' });
+  });
+
+  it("a probe's id names the unit's bytes too, so a second fix to a unit that missed again gets its own probe", async () => {
+    const first = parseDiagnosis(reply(DEFECT), await unit(), CORRECTED).probe!.id;
+    const later = (await scanRepo(memReader({ ...FILES, '.claude/rules/deps.md': `${RULE}Use the workspace root.\n` }))).units.find((x) => x.id === ID)!;
+
+    expect(parseDiagnosis(reply(DEFECT), await unit(), CORRECTED).probe!.id).toBe(first);
+    expect(parseDiagnosis(reply(DEFECT), later, CORRECTED).probe!.id).not.toBe(first);
+    expect(parseDiagnosis(reply(DEFECT), later, CORRECTED).probe!.id.startsWith('miss-')).toBe(true);
   });
 
   it('a fix holding a code fence is read whole', async () => {

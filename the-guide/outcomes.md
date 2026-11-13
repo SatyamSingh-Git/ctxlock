@@ -31,7 +31,7 @@ Helpful and harmful, by the version loaded:
 
 The numbers:
   Median time to fix     2 minutes, over 1 fix
-  Regression rate        - (no fix's 7-day window has closed and been judged)
+  Regression rate        - (no fix's window has closed with sessions in it)
   Durability at 30 days  - (no 30-day window has closed and been judged)
   Fixes × consumers      2, over 1 fix
   Never loaded           0 of 2 units, in 1 session; ctxlock loads lists them
@@ -41,7 +41,8 @@ The numbers:
 
 A fix ships when a commit adds the probe `diagnose` wrote for it, which is the one whose id starts with `miss-`. The proposal says to commit the probe with the fix, so that commit is the fix shipping. ctxlock reads this from git history. It keeps no record of its own.
 - **When:** the committer date of the first commit that added the probe's id under `evals/probes/`. A probe edited later, or removed and added back, keeps its first date.
-- **The fix's versions:** the unit as it was at that commit, at every later commit that changed it, and in your working tree. A later edit to the unit still carries the fix.
+- **One probe per fix:** the id `diagnose` writes names the unit and the bytes it had, so after a fix that missed again, the next fix's probe has an id of its own, and its own ship date.
+- **The fix's versions:** the unit as it was at that commit, at every later commit that descends from it and changed it, and in your working tree. A later edit to the unit still carries the fix. A branch that forked before the fix and merged after it brings no version, since its commits never had the fix.
 - **Listed apart:**
   - a probe whose unit is gone;
   - a commit that added the probe but left the unit as it was.
@@ -54,7 +55,8 @@ A fix held when the sessions that saw it were not stopped or corrected over it.
 - **Seeing it:** a session saw the fix when the [collector](collector.md) recorded it loading the unit with the bytes of one of the fix's versions.
 - **Not judged:**
   - a session on older bytes, such as an old branch;
-  - a session with unknown bytes: a skill call, a predicted load, or a file the collector couldn't hash.
+  - a session with unknown bytes: a skill call, a predicted load, or a file the collector couldn't hash;
+  - a session whose transcript is gone, since its signals are in it. Claude Code removes transcripts after 30 days by default, so `outcomes` says how many it left out, and they count for no window and in neither counter.
 
 Each window runs from the ship time to 7, or 30, days after it, to the minute, whatever time zone the commit was made in. A window is one of:
 - **`held`:** sessions saw the fix, and none had a signal with the unit in context.
@@ -74,7 +76,7 @@ A session's version is the digest of its first load of the unit that has one. **
 
 Each number says what it was counted over, and none is guessed:
 - **Median time to fix:** from the first recorded signal with the unit in context, before the fix shipped, to the ship time. A fix with no such signal has no time. Under a day it reads in hours or minutes.
-- **Regression rate:** of the fixes whose 7-day window has closed with sessions in it, how many were missed again in a closed window. With `--verify`, a fix whose probe was run again counts as judged too, and one whose probe fails today counts as regressed.
+- **Regression rate:** of the fixes with a window that has closed with sessions in it, how many were missed again in a closed window. A fix whose 7-day window had no sessions and whose 30-day window missed again is a regression. With `--verify`, a fix whose probe was run again counts as judged too, and one whose probe fails today counts as regressed.
 - **Durability at 30 days:** of the fixes whose 30-day window has closed with sessions in it, how many held.
 - **Fixes × consumers:** for each fix, the consumers in `ctxlock.yaml` its unit reaches, as [`who-uses`](graph.md) finds them, plus, with `--locks <folders...>`, each repository whose `ctxlock.lock` pins the unit at one of the fix's versions. A repository still on the older version doesn't count.
 - **Never loaded:** units that no recorded session loaded, out of those the sessions could have loaded. They are candidates for deletion. [`loads`](commands.md#ctxlock-loads) lists them.

@@ -150,7 +150,7 @@ The reply is checked against the unit: every line it quotes must be in the file,
 **The fix and the probe,** for a `defect` or a `gap`:
 - **Only a correction says what was wanted,** so a unit with interrupts alone gets a verdict and no fix.
 - **The fix is one exact replacement** in the unit's text. Its `find` must occur exactly once. It may edit an instructions or rule file, or a skill's `SKILL.md`, never config.
-- **The probe** is a task built from your correction and what the agent should then do, as an [`eval` probe](evals.md). Its prompt is redacted again.
+- **The probe** is a task built from your correction and what the agent should then do, as an [`eval` probe](evals.md). Its prompt is redacted again. Its id names the unit and its bytes, so a later fix to the same unit gets a probe of its own.
 
 **The replay** runs the probe, and every probe the unit already has, in two throwaway copies of the repository: one as it is, one with the fix. It runs as `eval` runs, with every command and edit the agent tries denied.
 - **"validated":** the probe is `improved`, its pass rate up by at least half, and none of the unit's own probes `regressed`.

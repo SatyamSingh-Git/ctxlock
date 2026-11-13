@@ -295,6 +295,23 @@ Each also goes into `journey/decisions.md` in Task 5.
   - **The journey:** `journey/16-outcomes.md`, and D89–D95 in `journey/decisions.md`.
 - [ ] **Step 3: Run** `npm run ci`. Expected: PASS. **Commit** `docs: ctxlock outcomes and verify in the guide, the exit demo, and D89-D95`, push, and watch both operating systems' CI.
 
+## Final review
+
+A fresh Opus reviewer read the whole branch (6c9aa4c..cb04507). Three Importants, and three Minors re-graded to Important by what a person gets, were fixed test-first in one commit:
+- **Run from a subfolder, every fix disappeared:** git resolved `evals/probes` and the unit's paths from the folder, not the top. Git now runs at the top.
+- **A branch that forked before the fix and merged after it counted as the fix:** its commits never had it, yet sessions on it were judged. Later versions now come from `--ancestry-path`.
+- **Sessions whose transcript is gone counted as held and helpful:** Claude Code removes transcripts after 30 days by default, and a fix that missed again would turn into one that held. Only sessions with a transcript are judged now, and `outcomes` says how many it left out.
+- **Re-graded: "neither" never happened.** An unrecorded signal carries no context, so the check could never match, and a session the person had corrected counted as helpful.
+- **Re-graded: a regression at 30 days was left out of the rate** when the 7-day window had no sessions. A fix is now judged once any window closes with sessions in it.
+- **Re-graded: a second fix to the same unit got the first fix's probe id,** so `outcomes` would date it by the first. The id now also names the unit's bytes.
+
+Mutation 9/9.
+
+**Deferred minors:**
+- Each fix version reads a whole tree through its own gitReader, all at once: slow for a unit edited hundreds of times in a very large repository (src/loop/fixes.ts).
+- The ship time is the committer date of the commit that added the probe, which on a merge-commit workflow is the branch's, before main had the fix (D90 as written).
+- The guide lists "a commit that added the probe but left the unit as it was" under "Listed apart"; it is a note under the fix (the-guide/outcomes.md).
+
 ## After this plan
 
 - **Phase 3's later parts:** clustering signals across users; the other signals (rejected tool uses, abandoned sessions, a skill not loaded); and replay with a unit taken out.

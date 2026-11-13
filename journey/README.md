@@ -3,7 +3,7 @@
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
 **Latest:** [16 — outcomes: whether a fix held, and the numbers that compound](16-outcomes.md).
-- Plan 9, the feedback loop's last part: `ctxlock outcomes` finds a fix shipped when its probe is committed, judges it at 7 and 30 days, counts helpful and harmful sessions per unit version, and gives time to fix, regression rate, durability, reach and units never loaded; `ctxlock verify` re-checks a unit when `stale-after` passes; 690 tests.
+- Plan 9, the feedback loop's last part: `ctxlock outcomes` finds a fix shipped when its probe is committed, judges it at 7 and 30 days, counts helpful and harmful sessions per unit version, and gives time to fix, regression rate, durability, reach and units never loaded; `ctxlock verify` re-checks a unit when `stale-after` passes; 695 tests.
 - Phase 3's exit demo: from a planted miss to a fix in two consumers, 54 seconds of commands, with the fix shipped under two minutes after the signal.
 - Found: the demo's two-minute fix printed as "0.0 days", and git writes a UTC offset as `Z`.
 

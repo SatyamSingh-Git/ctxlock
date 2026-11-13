@@ -15,6 +15,7 @@ const FIX = {
 
 const OUTCOMES: Outcomes = {
   sessions: 12,
+  untranscribed: 0,
   git: true,
   fixes: [
     {
@@ -35,7 +36,7 @@ const OUTCOMES: Outcomes = {
     { unit: ID, version: 'a'.repeat(64), today: false, fixed: false, helpful: 0, harmful: 2 },
     { unit: ID, version: null, today: false, fixed: false, helpful: 1, harmful: 0 },
   ],
-  numbers: { fixes: 1, medianDaysToFix: 1, timed: 1, regressed: 0, judged7: 1, held30: 0, judged30: 0, reached: 2, neverLoaded: 4, loadable: 9, sessions: 12 },
+  numbers: { fixes: 1, medianDaysToFix: 1, timed: 1, regressed: 0, judged: 1, held30: 0, judged30: 0, reached: 2, neverLoaded: 4, loadable: 9, sessions: 12 },
 };
 
 describe('renderOutcomes', () => {
@@ -73,6 +74,7 @@ describe('renderOutcomes', () => {
     const none = { ...OUTCOMES, fixes: [], orphans: [] };
 
     expect(renderOutcomes(none, 'text')).toContain('\nNo shipped fix: a fix ships when the probe ctxlock diagnose wrote for it is committed.\n');
+    expect(renderOutcomes({ ...none, numbers: { ...OUTCOMES.numbers, judged: 0 } }, 'text')).toContain("\n  Regression rate        - (no fix's window has closed with sessions in it)\n");
     expect(renderOutcomes({ ...none, git: false }, 'text')).toContain('\nNot a git repository, so no fix can be found shipped.\n');
     expect(renderOutcomes({ ...none, counters: [] }, 'text')).toContain('\nHelpful and harmful: no recorded session loaded a unit.\n');
   });

@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { main } from '../src/cli.js';
@@ -988,6 +988,19 @@ describe('ctxlock misses', () => {
       expect(code).toBe(0);
       expect(stdout).toContain('\n    Its probe today: fails\n');
       expect(stdout).toContain('\n  Regression rate        1 of 1 fix judged\n');
+    });
+
+    it('a recorded session whose transcript is gone is left out of durability and the counters, and counted', async () => {
+      const dir = recorded((real) => real);
+      const top = realpathSync.native(dir);
+      const gone = { v: 1, ts: ts(30), harness: 'claude-code', session: 'gone', cwd: top, event: 'load', file: join(top, '.claude', 'rules', 'api.md'), sha256: null, reason: 'session_start' };
+      appendFileSync(join(process.env.CTXLOCK_HOME!, 'events', '2026-11.jsonl'), `${JSON.stringify(gone)}\n`);
+
+      const json = JSON.parse((await cli('outcomes', dir, '--format', 'json')).stdout);
+      // Without its transcript, its signals are unknown: it is neither helpful nor harmful.
+      expect(json.counters).toContainEqual({ unit: 'rule/.claude/rules/api.md', version: null, today: false, fixed: false, helpful: 0, harmful: 1 });
+      expect(json).toMatchObject({ sessions: 2, untranscribed: 1 });
+      expect((await cli('outcomes', dir)).stdout).toContain('\n1 recorded session has no transcript, so it was left out: Claude Code removes transcripts after 30 days by default.\n');
     });
 
     it('outcomes outside git still counts each version\'s sessions', async () => {

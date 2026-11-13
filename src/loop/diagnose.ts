@@ -114,7 +114,10 @@ export function parseDiagnosis(text: string, unit: Unit, m: UnitMiss): Diagnosis
   let probe: Probe | null = null;
   if (r.probe) {
     // The prompt becomes a test in the person's repository, so it is redacted again.
-    const doc = stringify({ version: 1, probes: [{ id: `miss-${draftName(unit.id).slice(0, -'.md'.length)}`, unit: unit.id, prompt: redact(r.probe.prompt), expect: r.probe.expect }] });
+    // The unit's bytes are in the id: after a fix that missed again, the next fix's probe is its own, and
+    // outcomes dates it by its own commit.
+    const id = `miss-${draftName(unit.id).slice(0, -'.md'.length)}-${unit.digest.slice('sha256:'.length, 'sha256:'.length + 8)}`;
+    const doc = stringify({ version: 1, probes: [{ id, unit: unit.id, prompt: redact(r.probe.prompt), expect: r.probe.expect }] });
     try {
       probe = parseProbeFile(doc, 'diagnosis')[0]!;
     } catch (err) {
