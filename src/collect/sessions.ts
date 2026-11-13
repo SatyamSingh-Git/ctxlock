@@ -40,6 +40,9 @@ export interface SessionLoad {
   other: boolean;
   // A fallback load comes from the prediction, not from an event.
   observed: boolean;
+  // The loaded file's digest, as the collector recorded it; null for a skill call, a predicted load or a
+  // file it couldn't hash.
+  sha256: string | null;
 }
 
 export interface Timeline {
@@ -114,10 +117,10 @@ export function sessionTimelines(
       const unit = e.event === 'load' ? unitAt(e.file) : e.event === 'skill' ? skills.get(e.skill) : undefined;
       if (!unit) continue;
       const other = e.event === 'load' && e.sha256 !== null && e.sha256 !== unit.files[0]!.sha256;
-      loads.push({ unit, ts: e.ts, reason: e.event === 'load' ? loadReason(e.reason) : 'skill_invoked', other, observed: true });
+      loads.push({ unit, ts: e.ts, reason: e.event === 'load' ? loadReason(e.reason) : 'skill_invoked', other, observed: true, sha256: e.event === 'load' ? e.sha256 : null });
     }
     // At the session's start, so before every observed load.
-    const predicted = fallbackLoads(scan, new Set(loads.map((l) => l.unit.id)), site).map(({ unit, reason }) => ({ unit, ts: begun, reason, other: false, observed: false }));
+    const predicted = fallbackLoads(scan, new Set(loads.map((l) => l.unit.id)), site).map(({ unit, reason }) => ({ unit, ts: begun, reason, other: false, observed: false, sha256: null }));
     timelines.push({ session, folder, begun, last: ordered.at(-1)!.ts, loads: [...predicted, ...loads], seeable });
   }
   return timelines;

@@ -255,4 +255,21 @@ describe('sessionTimelines', () => {
       { id: 'rule/.claude/rules/api.md', ts: t(3), reason: 'glob', other: true, observed: true },
     ]);
   });
+
+  it('each load keeps the digest the collector recorded, and a skill call or a predicted load has none', async () => {
+    const files = { 'AGENTS.md': 'Use pnpm.\n', '.claude/rules/api.md': RULE, '.claude/skills/ship/SKILL.md': '---\nname: ship\ndescription: Ship it.\n---\nShip.\n' };
+    const scan = await scanRepo(memReader(files));
+    const [timeline] = sessionTimelines(
+      { events: [start('s1', t(1)), load('s1', t(2), at('.claude/rules/api.md'), 'session_start', sha('older\n')), load('s1', t(3), at('.claude/rules/api.md'), 'compact', null), skill('s1', t(4), 'ship')], skipped: 0 },
+      scan,
+      [ROOT],
+    );
+
+    expect(timeline!.loads.map((l) => [l.unit.id, l.sha256])).toEqual([
+      ['instructions/AGENTS.md', null],
+      ['rule/.claude/rules/api.md', sha('older\n')],
+      ['rule/.claude/rules/api.md', null],
+      ['skill/.claude/skills/ship', null],
+    ]);
+  });
 });

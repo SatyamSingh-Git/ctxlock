@@ -37,7 +37,7 @@ const TEST = 'rule/.claude/rules/testing.md';
 async function setup() {
   const scan = await scanRepo(memReader(FILES));
   const unit = (id: string) => scan.units.find((u) => u.id === id)!;
-  const load = (id: string, minute: number, other = false): SessionLoad => ({ unit: unit(id), ts: t(minute), reason: 'glob', other, observed: true });
+  const load = (id: string, minute: number, other = false): SessionLoad => ({ unit: unit(id), ts: t(minute), reason: 'glob', other, observed: true, sha256: null });
   const timeline = (session: string, begun: number, loads: SessionLoad[]): Timeline => ({ session, folder: '', begun: t(begun), last: t(59), loads, seeable: [] });
   return { scan, load, timeline };
 }
