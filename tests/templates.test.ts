@@ -74,7 +74,14 @@ describe('the sync workflow template', { timeout: 60_000 }, () => {
 
   it('a run that would push what the pull request already has pushes nothing, so no approval is dismissed', async () => {
     const { rerun } = await workflow({ writes: { 'ctxlock.lock': 'lockfile_version: 1\n' }, open: '7', again: true });
-    expect(rerun).toEqual({ sync: 0, pr: 0, pushed: false, log: '' });
+    expect(rerun).toEqual({ sync: 0, pr: 0, pushed: false, log: 'pr list --head ctxlock/sync --state open --json number --jq .[].number\n' });
+  });
+
+  it('a branch whose pull request was never opened, or was closed, gets one on the next run', async () => {
+    // Found on GitHub: the first run pushed the branch, then GitHub refused the pull request.
+    const { rerun } = await workflow({ writes: { 'ctxlock.lock': 'lockfile_version: 1\n' }, again: true });
+    expect(rerun!.pr).toBe(0);
+    expect(rerun!.log).toMatch(/\npr create --head ctxlock\/sync --title ctxlock sync --body-file .*body\.md\n$/);
   });
 
   it('with nothing changed, pushes nothing and calls no gh', async () => {

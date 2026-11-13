@@ -60,13 +60,15 @@ jobs:
           git switch --quiet -C ctxlock/sync
           git add -A
           git commit --quiet -m 'chore: ctxlock sync'
-          # Pushing the tree the pull request already has would only dismiss its approvals.
-          if git fetch --quiet origin ctxlock/sync 2>/dev/null && [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'FETCH_HEAD^{tree}')" ]; then
+          open="$(gh pr list --head ctxlock/sync --state open --json number --jq '.[].number')"
+          # Pushing the tree an open pull request already has would only dismiss its approvals. Without
+          # one, as when GitHub refused it or someone closed it, the branch alone reaches no reviewer.
+          if [ -n "$open" ] && git fetch --quiet origin ctxlock/sync 2>/dev/null && [ "$(git rev-parse 'HEAD^{tree}')" = "$(git rev-parse 'FETCH_HEAD^{tree}')" ]; then
             echo 'The pull request already has this.'
             exit 0
           fi
           git push --quiet --force origin ctxlock/sync
-          if [ -n "$(gh pr list --head ctxlock/sync --state open --json number --jq '.[].number')" ]; then
+          if [ -n "$open" ]; then
             gh pr edit ctxlock/sync --body-file "$RUNNER_TEMP/body.md"
           else
             gh pr create --head ctxlock/sync --title 'ctxlock sync' --body-file "$RUNNER_TEMP/body.md"

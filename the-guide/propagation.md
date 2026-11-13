@@ -106,9 +106,9 @@ ctxlock impact --base origin/main --locks ../checkouts
 - **The repository pulls; nothing pushes into it.** The workflow uses the repository's own `GITHUB_TOKEN`, with `contents: write` and `pull-requests: write`. No credential with access to every repository exists anywhere.
 - **A private org repository needs a token that can read it,** saved as the secret `CTXLOCK_UPSTREAM_TOKEN`. Only the sync step's git sees it.
 - **GitHub doesn't run other workflows on a pull request made with `GITHUB_TOKEN`.** That includes the ctxlock check, so sync's report in the pull request body is all a reviewer sees by default. To have checks run, make a GitHub App token with [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token) and give it to `actions/checkout` and as `GH_TOKEN`, in place of `github.token`.
-- **A run pushes only when there is something new.** If the open pull request already has the same files, the run leaves it alone, so its approvals stay.
+- **A run pushes only when there is something new.** If the open pull request already has the same files, the run leaves it alone, so its approvals stay. With no open pull request, because someone closed it or GitHub refused it, the next run opens one again.
 - **Pin the ctxlock it builds.** `CTXLOCK_REF` is `main` in the template. The job can push to your repository, so set it to a ctxlock commit you have read.
-- **The repository has to allow it:** under *Settings → Actions → General*, "Allow GitHub Actions to create and approve pull requests" must be on.
+- **The repository has to allow it:** under *Settings → Actions → General*, "Allow GitHub Actions to create and approve pull requests" must be on. A new repository has it off. Then the run pushes `ctxlock/sync` and fails with "GitHub Actions is not permitted to create or approve pull requests". Turn it on, or run `gh api -X PUT repos/<owner>/<repo>/actions/permissions/workflow -F can_approve_pull_request_reviews=true`, and the next run opens the pull request.
 
 ## Sharing what was loaded
 
