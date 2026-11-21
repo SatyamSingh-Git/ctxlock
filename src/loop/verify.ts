@@ -1,8 +1,10 @@
 import { type ArmResult, type ProbeOutcome, runProbes } from '../eval/eval.js';
 import { loadProbes, type Probe } from '../eval/probes.js';
 import type { Unit } from '../model.js';
+import { loadRegistry } from '../registry/registry.js';
 import { fsReader } from '../repo/reader.js';
 import { type ScanResult, scanRepo } from '../scan.js';
+import { okfTrust } from '../units/okf.js';
 
 export type Check = 'holds' | 'fails' | 'inconclusive' | 'no probes';
 
@@ -12,8 +14,9 @@ export interface UnitCheck {
   unit: Unit;
   check: Check;
   probes: ProbeOutcome[];
-  // For a unit that holds: what to set in ctxlock.yaml.
-  next?: { verifiedAt: string; staleAfter: string };
+  // For a unit that holds: what to set, in ctxlock.yaml or, for a concept dated by its own
+  // verified and stale_after, in its frontmatter (D103).
+  next?: { verifiedAt: string; staleAfter: string; in: 'ctxlock.yaml' | 'frontmatter' };
 }
 
 // D94: a failed valid run fails the unit, whatever else was cut short; holding needs every probe to pass
@@ -59,12 +62,20 @@ export async function verifyProbes(root: string, scan: ScanResult, units: Unit[]
   const ids = new Set(units.map((u) => u.id));
   const probes = (await loadProbes(fsReader(root, { local: false }))).filter((p) => ids.has(p.unit));
   const { outcomes, runs } = await headRuns(root, probes, opts);
+  // scan.registry holds OKF's dates merged in; the declared ones say which ctxlock.yaml has.
+  const declared = (await loadRegistry(fsReader(root, { local: false }))).units;
+  const where = (unit: Unit) => {
+    const own = okfTrust(unit.frontmatter);
+    const set = declared[unit.path];
+    const fromFile = unit.kind === 'knowledge' && set?.verifiedAt === undefined && set?.staleAfter === undefined && (own.verifiedAt !== undefined || own.staleAfter !== undefined);
+    return fromFile ? 'frontmatter' : 'ctxlock.yaml';
+  };
   const checks = units.map((unit): UnitCheck => {
     const own = outcomes.filter((o) => o.probe.unit === unit.id);
     if (!own.length) return { unit, check: 'no probes', probes: [] };
     const check = judgeHead(own.map((o) => o.head));
     const entry = scan.registry.units[unit.path];
-    return { unit, check, probes: own, ...(check === 'holds' && { next: nextDates(entry?.verifiedAt, entry?.staleAfter, today) }) };
+    return { unit, check, probes: own, ...(check === 'holds' && { next: { ...nextDates(entry?.verifiedAt, entry?.staleAfter, today), in: where(unit) } }) };
   });
   return { checks, runs };
 }

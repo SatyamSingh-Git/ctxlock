@@ -1126,6 +1126,33 @@ describe('ctxlock verify', { timeout: 120_000 }, () => {
     expect((await run(dir, '--runs', '1')).code).toBe(2);
   });
 
+  it("a concept dated by its own frontmatter is told to update the file; one dated in ctxlock.yaml, ctxlock.yaml", async () => {
+    const dir = tempDir();
+    const concept = '---\ntype: Reference\nverified: { by: human:a, at: 2025-10-03T09:00:00Z }\nstale_after: 2026-01-01T00:00:00Z\n---\nUse pnpm.\n';
+    writeTree(dir, {
+      'kb/index.md': '---\nokf_version: "0.2"\n---\n',
+      'kb/own.md': concept,
+      'kb/set.md': concept,
+      'kb/bare.md': '---\ntype: Reference\n---\nUse pnpm.\n',
+      '.claude/rules/r.md': concept,
+      'ctxlock.yaml': 'version: 1\nunits:\n  kb/set.md:\n    verified-at: 2025-10-03\n    stale-after: 2026-01-01\n',
+      'evals/probes/p.yaml': `version: 1\nprobes:\n${['knowledge/kb/own.md', 'knowledge/kb/set.md', 'knowledge/kb/bare.md', 'rule/.claude/rules/r.md'].map((u, i) => `  - id: p${i}\n    unit: ${u}\n    prompt: Add zod.\n    expect:\n      command: 'pnpm add'\n`).join('')}`,
+    });
+    // A concept with no dates of its own, and a rule whatever its frontmatter says, are dated in ctxlock.yaml.
+    for (const unit of ['kb/bare.md', '.claude/rules/r.md']) {
+      expect((await run(dir, '--unit', unit)).stdout).toContain(`\nIn ctxlock.yaml, for the units that hold:\n  units:\n    ${unit}:\n`);
+    }
+
+    const { stdout } = await run(dir);
+
+    const today = localDate();
+    const day = (days: number) => new Date(Date.parse(`${today}T00:00:00Z`) + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    // own.md's interval is 2025-10-03 to 2025-12-31, 89 days; OKF's stale_after is the instant after the last good day.
+    expect(stdout).toContain(`\nIn each concept's frontmatter, for the units that hold:\n  kb/own.md:\n    verified: { by: <you>, at: ${today}T00:00:00Z }\n    stale_after: ${day(90)}T00:00:00Z\n`);
+    expect(stdout).toContain(`\nIn ctxlock.yaml, for the units that hold:\n  units:\n    kb/set.md:\n      verified-at: ${today}\n      stale-after: ${day(90)}\n`);
+    expect(stdout).not.toContain('    kb/own.md:\n      verified-at');
+  });
+
   it("with no unit due it says so", async () => {
     const dir = tempDir();
     writeTree(dir, { '.claude/rules/a.md': 'Use pnpm.\n' });

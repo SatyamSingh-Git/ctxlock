@@ -99,6 +99,8 @@ export function renderOutcomes(o: Outcomes, format: 'text' | 'json'): string {
 
 const passes = (head: { passed: number; valid: number } | null) => (head ? `${head.passed} of ${head.valid} passed` : 'not run');
 
+const dayAfter = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
 export function renderVerify(r: { checks: UnitCheck[]; runs: number }, format: 'text' | 'json'): string {
   if (format === 'json') {
     const checks = r.checks.map((c) => ({ unit: c.unit.id, check: c.check, probes: c.probes.map((o) => ({ id: o.probe.id, head: o.head })), ...(c.next && { next: c.next }) }));
@@ -110,10 +112,16 @@ export function renderVerify(r: { checks: UnitCheck[]; runs: number }, format: '
     if (c.check === 'no probes') out.push(`  ${c.unit.id}  no probes: ctxlock probe draft can draft some`);
     else out.push(`  ${c.unit.id}  ${c.check}`, ...c.probes.map((o) => `    ${printable(o.probe.id)}  ${passes(o.head)}`));
   }
-  const holding = r.checks.filter((c) => c.next);
+  const holding = r.checks.filter((c) => c.next?.in === 'ctxlock.yaml');
   if (holding.length) {
     out.push('', 'In ctxlock.yaml, for the units that hold:', '  units:');
     for (const c of holding) out.push(`    ${c.unit.path}:`, `      verified-at: ${c.next!.verifiedAt}`, `      stale-after: ${c.next!.staleAfter}`);
+  }
+  // OKF's stale_after is the instant after the last good day (D103).
+  const dated = r.checks.filter((c) => c.next?.in === 'frontmatter');
+  if (dated.length) {
+    out.push('', "In each concept's frontmatter, for the units that hold:");
+    for (const c of dated) out.push(`  ${c.unit.path}:`, `    verified: { by: <you>, at: ${c.next!.verifiedAt}T00:00:00Z }`, `    stale_after: ${dayAfter(c.next!.staleAfter)}T00:00:00Z`);
   }
   return `${out.join('\n')}\n`;
 }
