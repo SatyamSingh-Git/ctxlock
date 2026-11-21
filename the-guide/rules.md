@@ -399,6 +399,8 @@ ctxlock.yaml lists gone.md, which is no unit
 consumer payments-api depends on nope.md, which is no unit
 consumer payments-api needs .claude/rules/b.md at certified; it is reviewed
 consumer payments-api lists evals evals/probes/payments.yaml, which holds no probe file
+ctxlock.yaml lists docs under knowledge, which holds no concept
+ctxlock.yaml lists semantic under metrics, which holds no model
 ```
 
 A reference names a unit by its path or its ID, so a renamed or deleted unit leaves its references behind. That is how a pull request that removes a unit is caught still being relied on. A requirement such as `@certified` is met by that tier or a more trusted one, and a unit with no `tier` counts as `reviewed`.
@@ -428,7 +430,7 @@ A file is compared as LF, so a CRLF checkout is no edit. A lock that does not pa
 Checks each [knowledge and metric unit](business-context.md) against its own format.
 
 **An OKF concept** (OKF 0.2):
-- **`must`:** it has no `type`, or one that is not a non-empty string. That is OKF's one conformance rule for a concept. Frontmatter that does not parse is `L0-frontmatter`, also `must`.
+- **`must`:** it has no `type`, or one that is not a non-empty string, including a file with no frontmatter at all. That is OKF's one conformance rule for a concept. Frontmatter that does not parse is `L0-frontmatter`, also `must`.
 - **`should`:** a `status` other than `draft`, `stable` or `deprecated`.
 - **`should`:** a `stale_after`, `generated.at` or `verified` `at` that is not an ISO 8601 time with an offset, such as `2026-12-31T00:00:00Z`.
 

@@ -24,7 +24,7 @@ version: 1
 knowledge: [docs/kb, okf/bundles/acme_retail]
 ```
 
-Google's own sample bundles don't declare `okf_version`, so naming the folder is the usual way. A docs folder whose pages carry `type:` in their frontmatter, as Hugo and Jekyll pages do, is never read as knowledge unless you name it.
+Google's own sample bundles don't declare `okf_version`, so naming the folder is the usual way. A repository that is one bundle names `.`, or has `okf_version` in its root `index.md`; every `.md` in it is then a concept, a README included. A `knowledge:` or `metrics:` entry that holds no unit is an `L15-graph` finding, so a wrong path doesn't silently check nothing. A docs folder whose pages carry `type:` in their frontmatter, as Hugo and Jekyll pages do, is never read as knowledge unless you name it.
 
 **Metrics.** A file named `*.ossie.yaml`, `*.ossie.yml` or `*.ossie.json` is a model. So is any file `ctxlock.yaml` names, or any `.yaml`, `.yml` or `.json` file in a folder it names:
 
@@ -41,7 +41,7 @@ A rule, skill or instructions file inside a bundle stays what it is.
 ## What lint checks
 
 [`L17-format`](rules.md#l17-business-context-in-its-own-format):
-- **A concept:** it needs a non-empty `type`, a `status` of `draft`, `stable` or `deprecated`, and times with an offset.
+- **A concept:** it needs a non-empty `type`, which a file with no frontmatter lacks, a `status` of `draft`, `stable` or `deprecated`, and times with an offset.
 - **A model:** it is checked against Ossie's own JSON Schema. A model written for another Ossie draft gets one finding naming both versions.
 
 The other rules that read text, such as hidden Unicode (`L1`) and stale paths (`L9`), read a concept like any Markdown. A model's YAML isn't read as Markdown, but its `stale-after` is still checked.
@@ -60,6 +60,8 @@ ctxlock reads them as the concept's `verified-at` and `stale-after`, so `lint`, 
 - **`stale-after`:** OKF's `stale_after` is the instant a concept turns stale, and ctxlock's `stale-after` is the last day it is still good. So `2027-02-01T00:00:00Z` becomes `2027-01-31`, and lint flags the concept from 1 February, as OKF does. A `stale_after` later in a day is flagged from the next day.
 
 A time without an offset fills nothing, and `L17-format` reports it.
+
+When `ctxlock verify` re-checks a concept dated this way and its probes hold, it prints the new `verified` and `stale_after` to set in the concept's frontmatter, not lines for `ctxlock.yaml`.
 
 **`ctxlock.yaml` wins** when both are set (§4.1 of the design), and `L17-trust-differs` says when they disagree. An Ossie model has no trust fields of its own, so its owner and dates live in `ctxlock.yaml`.
 

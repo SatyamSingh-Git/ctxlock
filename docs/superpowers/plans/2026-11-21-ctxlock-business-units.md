@@ -36,6 +36,24 @@ It builds on Plans 4 (the graph), 6 (sync) and 9 (`verify`). Satyam asked on 202
 | 6 | Done | `03dd31f` |
 | 7 | Done | the docs commit |
 
+## Final review
+
+A fresh Opus reviewer read the whole plan's diff, built it, and checked its claims in throwaway repositories. There was no Critical finding. Three Importants, and one Minor re-graded to Important, were fixed test-first, one commit each:
+- **A bundle at the repository root found nothing, and lint said nothing** (db61fbc). Now `.` is the whole repository, and `L15-graph` reports a `knowledge:` or `metrics:` entry that holds no unit.
+- **Re-graded: a concept with no frontmatter passed L17** (e1b2e0d), though OKF's one rule is a type. The root-bundle fix made it common: a README in a root bundle.
+- **`verify`'s advice for a concept dated by its own frontmatter made `L17-trust-differs` fire once followed** (50c42fd). It now prints the frontmatter to set.
+- **Every `index.md` was read by its own git process at a ref** (41c9f33). `diff` and the Action read twice. Measured: 24 s for 1,000 pages, now 0.23 s, in one `git cat-file --batch`.
+
+Suite 745/745.
+
+**Deferred minors:**
+- L9's message for a concept dated by its own stale_after says "(stale-after in ctxlock.yaml)", where there is none (src/lint/rules/l9-stale.ts).
+- In a UTC+ timezone, a stale_after later in a UTC day can be flagged up to a day early, since L9 and verify compare local dates; CI runs in UTC (src/units/okf.ts).
+- A link to a skill's SKILL.md makes no edge, since the skill unit's path is its folder (src/graph/graph.ts).
+- A link starting with /, which GitHub reads from the repository root, makes no edge (src/units/links.ts).
+- A pull request can take a folder out of knowledge: and edit a concept in it in one change; the diff shows the units as removed, and L1 never reads the edit. Declarations could come from the base, as settings do (src/scan.ts).
+- A link written with backslashes never resolves (src/units/links.ts).
+
 ## Phase 4, split (D100)
 
 Like Phase 3 (D77), Phase 4 is three plans:

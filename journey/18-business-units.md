@@ -40,6 +40,15 @@ A plan written from the notes would have checked models against a schema Ossie n
 - **One of three base runs passed an answer probe it should have failed.** Every reply checked by hand was right and said there was no segment field. The likely cause is a reply naming `customers.segment` as the field to add. An answer pattern has to match only the right answer. The guide says so, with the remedy.
 - **Escaped newlines in a script, again.** A test generator passed `\n` through a heredoc, and it came out as a real newline in three test files at once. The fix was the Edit tool, the same lesson as before.
 
+## The final review
+
+A fresh reviewer found no Critical, and three things a person would hit:
+- **Root bundles:** a repository that is one bundle found nothing, and lint stayed quiet.
+- **`verify`'s advice:** for a concept dated by its own frontmatter, following it made a warning.
+- **Cost:** a docs site paid one git process per `index.md` on every pull request check. Measured: 24 seconds for 1,000 pages, now a quarter of a second.
+
+It also found, as a Minor, that a concept with no frontmatter passed. That was re-graded, since fixing root bundles made it common. All four were fixed test-first, and six minors are in the plan.
+
 ## Next
 
 Plan 12 serves these units over MCP, with a `report_context_gap` tool whose reports reach `misses`, and runs eval with that server attached.
