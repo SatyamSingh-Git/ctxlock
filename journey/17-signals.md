@@ -40,7 +40,7 @@
   - **What happened:** on 2026-11-18 the window closed, and CI went red on the next push, which was this plan's first.
   - **The fix:** the test now expects the closed window, which stays true.
   - **The lesson:** a test that compares a fixed date with now has a fuse on it.
-- **The final review caught the ablation text overclaiming.** "Taking it out changes nothing: the unit does not drive the miss" printed even when the miss hadn't happened with the unit in place, which says nothing either way. It also caught a `/compact` followed by closing the session reading as abandoned. Both were fixed test-first; six minors are in the plan.
+- **The final review caught the ablation text overclaiming.** "Taking it out changes nothing: the unit does not drive the miss" printed even when the miss hadn't happened with the unit in place, which says nothing either way. It also caught a `/compact` followed by closing the session reading as abandoned. Both were fixed test-first. Its six minors were fixed the same day, one commit each (032aecf..ac3cca2). Two changed behaviour beyond what the review asked: `--ablate` now reuses the replay's base instead of running it again, so it costs `--runs` runs, not twice that; and a session waiting on a subagent counts the subagent's transcript as activity.
 - **The scratchpad was cleared again with the date,** and the mutation script went with it. It now lives in `F:\ctxlock-live\tools`, outside the scratchpad.
 - **Shell strings, once more:** a `sed` with `\n` in its replacement wrote real newlines into a test. It was redone with the Edit tool.
 

@@ -113,13 +113,13 @@ A fresh Opus reviewer read the whole plan's diff, and ran the built reader over 
 
 Mutation 4/4. Suite 709/709.
 
-**Deferred minors:**
-- Ablation has its own --max-runs and --max-minutes budget, and re-runs the base side the replay already ran; the help text doesn't say a diagnose can reach twice either (src/loop/propose.ts, src/cli.ts).
-- A main-thread Agent call that runs over an hour leaves its tool call as the session's last line, so a live session can read as abandoned (src/loop/transcript.ts).
-- Every MCP tool counts as a search, so an MCP write tool that returns an empty result gets "found nothing" (src/loop/transcript.ts).
-- --ablate with no fix or probe prints nothing about ablation; the guide says it runs only when there is a probe.
-- The dogfood table shows "0 abandoned", which the text output never prints; the counts there come from the JSON.
-- misses --format json gains signals.abandoned, and an abandoned-only unit now routes and drafts: intended by D97, but a JSON consumer sees a new key.
+**Minors** (deferred by the review, then fixed at Satyam's request, one commit each):
+- Ablation has its own --max-runs and --max-minutes budget, and re-runs the base side the replay already ran; the help text doesn't say a diagnose can reach twice either (src/loop/propose.ts, src/cli.ts). **Fixed in 032aecf:** only the side without the unit runs, from what --max-runs has left; the help says --max-minutes gives it its own window.
+- A main-thread Agent call that runs over an hour leaves its tool call as the session's last line, so a live session can read as abandoned (src/loop/transcript.ts). **Fixed in 70dfb0e:** the hour runs from the latest line in the session or its subagents' transcripts.
+- Every MCP tool counts as a search, so an MCP write tool that returns an empty result gets "found nothing" (src/loop/transcript.ts). **Fixed in 79b4c21:** an MCP tool counts only when its own name says it looks something up.
+- --ablate with no fix or probe prints nothing about ablation; the guide says it runs only when there is a probe. **Fixed in f35dc8c:** it says it was not run.
+- The dogfood table shows "0 abandoned", which the text output never prints; the counts there come from the JSON. **Fixed in 9c42e1c.**
+- misses --format json gains signals.abandoned, and an abandoned-only unit now routes and drafts: intended by D97, but a JSON consumer sees a new key. **Fixed in ac3cca2:** the guide describes the JSON and says the kinds may grow; ctxlock is unpublished, so no outside consumer had it.
 
 ### Task 1: An empty search, as evidence in the turn
 
