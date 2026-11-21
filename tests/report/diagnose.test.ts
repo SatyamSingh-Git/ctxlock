@@ -111,6 +111,18 @@ describe('renderProposal', () => {
     const skipped = { ...PROPOSAL, replay: { ...PROPOSAL.replay!, ablation: { skipped: 'the unit is reached through a link' } } };
     expect(renderDiagnosis(skipped, 'text')).toContain('\nWithout the unit: not run, as the unit is reached through a link.\n');
     expect(renderDiagnosis(PROPOSAL, 'text')).not.toContain('Without the unit');
+    // The miss didn't reproduce with the unit in place: unchanged then says nothing about the unit.
+    const passing = { ...PROPOSAL, replay: { ...PROPOSAL.replay!, ablation: outcome(miss, 2, 2, 'unchanged') } };
+    expect(renderDiagnosis(passing, 'text')).toContain("\nThe miss didn't happen with the unit in place, so taking it out says nothing about the unit.\n");
+    expect(renderDiagnosis(passing, 'text')).not.toContain('does not drive');
+    // Improved from a half-passing base still blames the unit.
+    const half = { ...PROPOSAL, replay: { ...PROPOSAL.replay!, ablation: outcome(miss, 1, 2, 'improved') } };
+    expect(renderDiagnosis(half, 'text')).toContain('\nTaking it out does what was wanted: the unit itself causes the miss.\n');
+    // Inconclusive names its own cause: a budget, or runs that errored.
+    const cut = { ...outcome(miss, 0, 0, 'inconclusive'), reason: 'run budget (16 runs)' };
+    expect(renderDiagnosis({ ...PROPOSAL, replay: { ...PROPOSAL.replay!, ablation: cut } }, 'text')).toContain('\nNot known: cut short by the run budget (16 runs).\n');
+    const errored = { ...PROPOSAL, replay: { ...PROPOSAL.replay!, ablation: outcome(miss, 0, 0, 'inconclusive') } };
+    expect(renderDiagnosis(errored, 'text')).toContain('\nNot known: fewer than 2 runs a side finished without an error.\n');
   });
 
   it('a fix that adds lines keeps them as lines, in the text, the diff and the issue', () => {

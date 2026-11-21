@@ -166,6 +166,8 @@ The reply is checked against the unit: every line it quotes must be in the file,
 - **`unchanged`:** the unit doesn't drive the miss. The agent does the same without it, and a fix that adds what was wanted can still help, as a `gap`'s does;
 - **`regressed`:** the unit helps.
 
+When the miss didn't happen even with the unit in place, it says so instead, since taking the unit out then tells nothing. When runs were cut short or errored, it says which.
+
 It doesn't change "validated", and it runs only when there is a probe. A unit reached through a link to a folder is not ablated, since taking out the link would take out what else the folder holds; the output says so.
 
 **A certified unit** is diagnosed and its fix proposed, and the output says the fix needs its owner's approval.

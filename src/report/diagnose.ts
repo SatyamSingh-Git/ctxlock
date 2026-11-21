@@ -20,7 +20,11 @@ const ABLATION: Partial<Record<ProbeOutcome['status'], string>> = {
   unchanged: 'Taking it out changes nothing: the unit does not drive the miss.',
   regressed: 'Taking it out makes it worse: the unit helps.',
 };
-const ablated = (a: ProbeOutcome) => ABLATION[a.status] ?? 'A budget cut it short, so what taking it out does is not known.';
+function ablated(a: ProbeOutcome): string {
+  // A miss that didn't happen with the unit in place can't be blamed on it or cleared by its removal.
+  if (a.status === 'unchanged' && a.base && a.base.passed * 2 >= a.base.valid) return "The miss didn't happen with the unit in place, so taking it out says nothing about the unit.";
+  return ABLATION[a.status] ?? `Not known: ${a.reason ? `cut short by the ${a.reason}` : 'fewer than 2 runs a side finished without an error'}.`;
+}
 const CERTIFIED = "This unit is certified: the fix needs its owner's approval.";
 
 const expectation = (probe: Probe) => {

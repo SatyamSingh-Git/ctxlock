@@ -152,6 +152,9 @@ describe('readTranscript', () => {
     expect(await abandoned([said(2)])).toEqual([]);
     // Less than an hour after its last line, the session may still be going: this one, say.
     expect(await abandoned([tool(2, 'Bash')], new Date('2026-11-11T10:59:59.000Z'))).toEqual([]);
+    // A /compact then closing the session: the summary carries the human mark, but nothing was left unanswered.
+    const SUMMARY = 'This session is being continued from a previous conversation that ran out of context.';
+    expect(await abandoned([said(2), typed(3, SUMMARY)])).toEqual([]);
     // A claude -p run has no typed prompt: nobody left it.
     const headless = transcript([{ ...base(1), type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'run it' }] } }, tool(2, 'Bash')]);
     expect((await readTranscript(headless, 's1', later)).signals).toEqual([]);

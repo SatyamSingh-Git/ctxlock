@@ -105,6 +105,22 @@ Before this plan, a read-only scan of the author's 1,014 transcripts, of which 4
 
 ---
 
+## Final review
+
+A fresh Opus reviewer read the whole plan's diff, and ran the built reader over all 1,014 of the author's transcripts: 2 abandoned sessions, as the report says. One Important, and one Minor re-graded to Important, were fixed test-first:
+- **The ablation wording claimed a cause it hadn't shown.** "Unchanged" said the unit doesn't drive the miss even when the miss didn't happen with the unit in place, and any inconclusive run blamed a budget. It now says when the miss didn't reproduce, and names the real cause of an inconclusive run.
+- **Re-graded: a manual `/compact` then closing the session made a false abandoned signal,** since the summary carries the human mark. A summary now leaves nothing unanswered.
+
+Mutation 4/4. Suite 709/709.
+
+**Deferred minors:**
+- Ablation has its own --max-runs and --max-minutes budget, and re-runs the base side the replay already ran; the help text doesn't say a diagnose can reach twice either (src/loop/propose.ts, src/cli.ts).
+- A main-thread Agent call that runs over an hour leaves its tool call as the session's last line, so a live session can read as abandoned (src/loop/transcript.ts).
+- Every MCP tool counts as a search, so an MCP write tool that returns an empty result gets "found nothing" (src/loop/transcript.ts).
+- --ablate with no fix or probe prints nothing about ablation; the guide says it runs only when there is a probe.
+- The dogfood table shows "0 abandoned", which the text output never prints; the counts there come from the JSON.
+- misses --format json gains signals.abandoned, and an abandoned-only unit now routes and drafts: intended by D97, but a JSON consumer sees a new key.
+
 ### Task 1: An empty search, as evidence in the turn
 
 **Files:** Modify `src/loop/transcript.ts`, `src/loop/diagnose.ts`, `tests/loop/transcript.test.ts`, `tests/loop/diagnose.test.ts`.

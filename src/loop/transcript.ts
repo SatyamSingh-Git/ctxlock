@@ -191,9 +191,9 @@ export async function readTranscript(file: string, session: string, now = new Da
     const prompt = texts(content).join('\n').trim();
     if (!prompt) continue;
     prompts.push(ts);
-    last = { ts, left: true };
-    // A new turn begins; a compaction's summary is no one's task.
+    // A new turn begins; a compaction's summary is no one's task, and leaves nothing unanswered.
     const summary = prompt.startsWith(SUMMARY);
+    last = { ts, left: !summary };
     task = summary ? undefined : cut(unpasted(prompt), 300);
     actions = [];
     open = new Map();
