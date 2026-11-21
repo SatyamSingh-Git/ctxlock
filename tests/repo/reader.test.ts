@@ -1,7 +1,8 @@
 import { symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { FileNotFound, RefNotFound, fsReader, gitReader } from '../../src/repo/reader.js';
+import { overlayReader } from '../../src/repo/overlay.js';
+import { FileNotFound, RefNotFound, type RepoReader, fsReader, gitReader } from '../../src/repo/reader.js';
 import { canSymlink, cleanup, git, gitRepo, gitSymlink, tempDir, writeTree } from '../helpers/repo.js';
 
 afterAll(cleanup);
@@ -153,6 +154,25 @@ describe('readAll', () => {
       expect(seen.get('a.md')!.toString('utf8')).toBe('x\r\ny\r\n');
       expect(seen.get('b.bin')!.equals(bin)).toBe(true);
       expect(seen.get('c/d.md')!.toString('utf8')).toBe('d');
+    }
+  });
+
+  it('given paths, yields only those, in that order, and a path not listed is FileNotFound', async () => {
+    const { dir, shas } = await gitRepo([{ 'a.md': 'a', 'b/index.md': 'b', 'c/index.md': 'c' }]);
+    const readers: Array<[RepoReader, string]> = [
+      [await gitReader(dir, shas[0]!), 'c'],
+      [fsReader(dir), 'c'],
+      // The overlay's bytes, not the base's.
+      [overlayReader(fsReader(dir), new Map([['c/index.md', Buffer.from('C')]])), 'C'],
+    ];
+    for (const [reader, c] of readers) {
+      const seen: string[] = [];
+      await reader.readAll((path, bytes) => void seen.push(`${path}=${bytes.toString('utf8')}`), ['c/index.md', 'b/index.md']);
+      expect(seen).toEqual([`c/index.md=${c}`, 'b/index.md=b']);
+      const none: string[] = [];
+      await reader.readAll((path) => void none.push(path), []);
+      expect(none).toEqual([]);
+      await expect(reader.readAll(() => {}, ['nope.md'])).rejects.toBeInstanceOf(FileNotFound);
     }
   });
 

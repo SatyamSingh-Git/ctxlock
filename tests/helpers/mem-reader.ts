@@ -1,6 +1,7 @@
 import { FileNotFound, type RepoReader } from '../../src/repo/reader.js';
 
-export type MemReader = RepoReader & { reads: number };
+// reads counts readFile calls, and batches counts readAll calls.
+export type MemReader = RepoReader & { reads: number; batches: number };
 
 export function memReader(
   files: Record<string, string | Buffer>,
@@ -11,6 +12,7 @@ export function memReader(
     root: '/mem',
     ref: null,
     reads: 0,
+    batches: 0,
     async listFiles() {
       return paths;
     },
@@ -26,8 +28,9 @@ export function memReader(
     async listSymlinks() {
       return new Map(Object.entries(symlinks));
     },
-    async readAll(onFile) {
-      for (const path of paths) await onFile(path, await reader.readFile(path));
+    async readAll(onFile, only) {
+      reader.batches++;
+      for (const path of only ?? paths) await onFile(path, await reader.readFile(path));
     },
   };
   return reader;

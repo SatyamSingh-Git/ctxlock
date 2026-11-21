@@ -17,9 +17,9 @@ export interface RepoReader {
   readFile(path: string): Promise<Buffer>;
   exists(path: string): Promise<boolean>;
   listSymlinks(): Promise<Map<string, string | null>>;
-  // Every listed file, in listFiles() order. Copying a whole tree file by file through readFile would
-  // start one git process per file.
-  readAll(onFile: (path: string, bytes: Buffer) => void | Promise<void>): Promise<void>;
+  // Every listed file in listFiles() order, or the listed paths given, in their order. Reading many files
+  // one by one through readFile would start one git process per file.
+  readAll(onFile: (path: string, bytes: Buffer) => void | Promise<void>, paths?: string[]): Promise<void>;
 }
 
 export class FileNotFound extends Error {
@@ -178,9 +178,11 @@ export function fsReader(root: string, { local = true } = {}): RepoReader {
     async listSymlinks() {
       return (await list()).links;
     },
-    async readAll(onFile) {
-      const { top, files } = await list();
-      for (const path of files) await onFile(path, await readFile(join(top, path)));
+    async readAll(onFile, paths) {
+      const { top, files, fileSet } = await list();
+      const wanted = paths ?? files;
+      for (const path of wanted) if (!fileSet.has(path)) throw new FileNotFound(path);
+      for (const path of wanted) await onFile(path, await readFile(join(top, path)));
     },
   };
 }
@@ -259,15 +261,17 @@ export async function gitReader(root: string, ref: string): Promise<RepoReader> 
       }
       return links;
     },
-    async readAll(onFile) {
+    async readAll(onFile, paths) {
+      const wanted = paths ?? files;
+      for (const path of wanted) if (!fileSet.has(path)) throw new FileNotFound(path);
       const child = spawn('git', ['-C', root, 'cat-file', '--batch'], { stdio: ['pipe', 'pipe', 'pipe'] });
       const closed = once(child, 'close');
       let stderr = '';
       child.stderr.on('data', (chunk) => (stderr += chunk));
-      child.stdin.end(files.map((path) => `${objects.get(path)}\n`).join(''));
+      child.stdin.end(wanted.map((path) => `${objects.get(path)}\n`).join(''));
       let i = 0;
       try {
-        for await (const bytes of batchBlobs(child.stdout, files.length)) await onFile(files[i++]!, bytes);
+        for await (const bytes of batchBlobs(child.stdout, wanted.length)) await onFile(wanted[i++]!, bytes);
       } catch (err) {
         // Otherwise git blocks on a pipe nobody reads any more, and ctxlock cannot exit. With the
         // pipe closed, git's next write fails and it exits.

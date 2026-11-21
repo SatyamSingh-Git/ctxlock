@@ -272,6 +272,18 @@ describe('discoverUnits', () => {
       expect(ids((await discoverUnits(memReader({ 'a.yaml': 'name: a\n', 'b.json': '{}' }), { knowledge: [], metrics: ['.'] })).units)).toEqual(['metric/a.yaml', 'metric/b.json']);
     });
 
+    it('every index.md is read in one batch, so a docs site costs one git process, not one per page', async () => {
+      const pages = Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`site/p${i}/index.md`, `---\ntitle: Page ${i}\n---\n`]));
+      const reader = memReader({ ...pages, 'kb/index.md': '---\nokf_version: "0.2"\n---\n', 'kb/a.md': concept('Reference') });
+      expect(ids((await discoverUnits(reader)).units)).toEqual(['knowledge/kb/a.md']);
+      expect(reader.batches).toBe(1);
+      // The six index files in the batch, and the concept read as a unit.
+      expect(reader.reads).toBe(7);
+      const none = memReader({ 'AGENTS.md': 'x' });
+      await discoverUnits(none);
+      expect(none.batches).toBe(0);
+    });
+
     it('a rule inside a declared bundle stays a rule', async () => {
       const { units } = await discoverUnits(memReader({ '.claude/rules/kb/x.md': concept('Reference') }), { knowledge: ['.claude/rules'], metrics: [] });
       expect(ids(units)).toEqual(['rule/.claude/rules/kb/x.md']);

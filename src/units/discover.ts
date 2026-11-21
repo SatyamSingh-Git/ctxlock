@@ -39,13 +39,16 @@ const MODEL_FILE = /\.(ya?ml|json)$/;
 const under = (path: string, folder: string) => folder === '.' || path === folder || path.startsWith(`${folder}/`);
 
 // An OKF bundle may declare itself with okf_version in its root index.md, the only frontmatter an index may carry.
+// A docs site has an index.md per page, so they are read in one batch: one git process, not one each.
 async function okfBundles(reader: RepoReader, reachable: Map<string, string>): Promise<string[]> {
+  const reachedAs = new Map<string, string[]>();
+  for (const [path, real] of reachable) if (posix.basename(path) === 'index.md') reachedAs.set(real, [...(reachedAs.get(real) ?? []), path]);
+  if (reachedAs.size === 0) return [];
   const bundles: string[] = [];
-  for (const [path, real] of reachable) {
-    if (posix.basename(path) !== 'index.md') continue;
-    const { frontmatter } = splitFrontmatter((await reader.readFile(real)).toString('utf8'));
-    if (frontmatter && 'okf_version' in frontmatter) bundles.push(posix.dirname(path));
-  }
+  await reader.readAll((real, bytes) => {
+    const { frontmatter } = splitFrontmatter(bytes.toString('utf8'));
+    if (frontmatter && 'okf_version' in frontmatter) bundles.push(...reachedAs.get(real)!.map((path) => posix.dirname(path)));
+  }, [...reachedAs.keys()]);
   return bundles;
 }
 

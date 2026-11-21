@@ -18,8 +18,8 @@ export function overlayReader(base: RepoReader, added: Map<string, Buffer>, remo
       return added.has(path) || [...added.keys()].some((p) => p.startsWith(`${path}/`)) || (!gone(path) && (await base.exists(path)));
     },
     listSymlinks: async () => new Map([...(await base.listSymlinks())].filter(([link]) => !gone(link))),
-    async readAll(onFile) {
-      for (const path of await reader.listFiles()) await onFile(path, await reader.readFile(path));
+    async readAll(onFile, paths) {
+      for (const path of paths ?? (await reader.listFiles())) await onFile(path, await reader.readFile(path));
     },
   };
   return reader;
