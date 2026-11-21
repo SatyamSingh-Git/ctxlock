@@ -34,7 +34,8 @@
     "ctxlock": "dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "NOTICE"
   ],
   "engines": {
     "node": ">=22"
@@ -46,6 +47,7 @@
     "ci": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
+    "ajv": "^8.20.0",
     "commander": "^15.0.0",
     "ignore": "^7.0.14",
     "jsonc-parser": "^3.3.1",

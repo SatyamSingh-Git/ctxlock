@@ -86,10 +86,12 @@ export const staleReferences: Rule = {
       if (unit.kind === 'config') continue;
       const dir = folder(unit);
       const path = unit.kind === 'skill' ? `${unit.path}/SKILL.md` : unit.path;
+      // A metric is YAML, not Markdown: its paths and commands are not read, but its stale-after is.
+      const prose = unit.kind === 'metric' ? '' : unit.text;
       const report = (rule: string, severity: Finding['severity'], message: string, at?: { line: number; column: number }) =>
         findings.push({ rule, severity, message, path, ...at, unitId: unit.id });
 
-      for (const { code: token, offset } of inlineCode(unit.text)) {
+      for (const { code: token, offset } of inlineCode(prose)) {
         if (NOT_A_PATH.test(token) || PLACEHOLDER.test(token) || !(PATH_LIKE.test(token) || FILE_LIKE.test(token))) continue;
         if (!(await missing(token, unit, dir))) continue;
         const at = lineAndColumn(unit.text, offset);
@@ -97,7 +99,7 @@ export const staleReferences: Rule = {
       }
 
       // Commands are read from code only: "we use pnpm instead of npm" is not one.
-      for (const match of codeOnly(unit.text).matchAll(SCRIPT)) {
+      for (const match of codeOnly(prose).matchAll(SCRIPT)) {
         const name = match[1] ?? match[2]!;
         if (name.startsWith('-')) continue;
         const pkg = await nearestScripts(dir);

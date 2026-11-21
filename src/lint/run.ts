@@ -16,6 +16,7 @@ import { shadowedAgentsMd } from './rules/l13-shadowed.js';
 import { generatedDrift } from './rules/l14-generated.js';
 import { graphRefs } from './rules/l15-graph.js';
 import { lockDrift } from './rules/l16-lock.js';
+import { format } from './rules/l17-format.js';
 import type { LintContext, Rule } from './types.js';
 
 export const RULES: Rule[] = [
@@ -37,6 +38,7 @@ export const RULES: Rule[] = [
   generatedDrift,
   graphRefs,
   lockDrift,
+  format,
 ];
 
 const RANK = { must: 0, should: 1, info: 2 };

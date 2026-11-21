@@ -1,0 +1,18 @@
+// OKF 0.2 times are ISO 8601 with an explicit offset (SPEC.md, after #323).
+const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+export const isInstant = (value: unknown): value is string => typeof value === 'string' && INSTANT.test(value) && !Number.isNaN(Date.parse(value));
+
+// Each timestamp an OKF concept's frontmatter holds, by where it is. A bare verified mapping is a list of one.
+export function okfTimes(frontmatter: Record<string, unknown>): Array<[string, unknown]> {
+  const times: Array<[string, unknown]> = [];
+  if ('stale_after' in frontmatter) times.push(['stale_after', frontmatter.stale_after]);
+  const generated = frontmatter.generated as { at?: unknown } | null | undefined;
+  if (generated && typeof generated === 'object' && 'at' in generated) times.push(['generated.at', generated.at]);
+  const verified = frontmatter.verified;
+  const list = Array.isArray(verified) ? verified : verified && typeof verified === 'object' ? [verified] : [];
+  list.forEach((v: { at?: unknown } | null, i) => {
+    if (v && typeof v === 'object' && 'at' in v) times.push([Array.isArray(verified) ? `verified[${i}].at` : 'verified.at', v.at]);
+  });
+  return times;
+}

@@ -13,8 +13,8 @@ export async function lintContext(
   symlinks: Record<string, string | null> = {},
 ): Promise<LintContext> {
   const reader = memReader(files, symlinks);
-  const { units } = await discoverUnits(reader);
   const registry = await loadRegistry(reader);
+  const { units } = await discoverUnits(reader, { knowledge: registry.knowledge, metrics: registry.metrics });
   const limits = { ...LIMITS, ...registry.limits };
   const generated = await loadGenerated(reader);
   const lock = await readLock(reader);

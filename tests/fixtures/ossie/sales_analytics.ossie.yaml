@@ -1,0 +1,16 @@
+# The top-level example in Apache Ossie's core-spec/spec.md at 1b1ebb620c6a47a85ae126ad21001b7013708ebf (Apache-2.0), unchanged below.
+version: 0.3.0.dev0
+name: sales_analytics
+description: Sales and customer analytics model
+ai_context:
+  instructions: "Use this model for sales analysis and customer insights"
+datasets:
+  - name: orders
+    source: sales.public.orders
+relationships: []
+metrics: []
+nonportable_extensions:
+  - vendor_name: DBT
+    data:
+      project_name: tpcds_analytics
+      models_path: models/semantic
