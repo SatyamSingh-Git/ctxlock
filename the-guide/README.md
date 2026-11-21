@@ -15,6 +15,7 @@ If something here is wrong, out of date, or simply does not work, open an issue 
 | installation.md | Requirements, install, and how to check it works | Arrives with the first CLI release |
 | [commands.md](commands.md) | `ctxlock scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`, `loads`, `misses`, `report`, `sync`: every flag, and what the output means | Written |
 | [propagation.md](propagation.md) | Shared skills and rules across repositories: `upstream:`, `ctxlock sync`, `ctxlock.lock`, what never syncs, and the workflow that keeps one pull request open | Written; checked live on local repositories |
+| [business-context.md](business-context.md) | Knowledge (OKF) and metric (Ossie) units: which files are units, what L17 checks, trust from OKF's dates, links as graph edges, answer probes, and sync | Written; checked live on Google's and Ossie's own examples |
 | [graph.md](graph.md) | What relies on what: `depends-on` and consumers in `ctxlock.yaml`, `who-uses`, a change's impact, and the probes it runs | Written |
 | [outcomes.md](outcomes.md) | Whether a shipped fix held at 7 and 30 days, helpful and harmful sessions per unit version, the compounding numbers and how each is counted, and `verify` when `stale-after` passes | Written; checked end to end on a planted miss, from signal to a fix in two consumers, with real Claude Code |
 | [misses.md](misses.md) | When you stopped or corrected the agent, which units were in context: the signals, the threshold, drafts for owners, and what is read, kept and sent; then `diagnose`, a verdict and the smallest fix for one unit, checked by replay and filed as an issue | Written; misses checked live on three repositories against an independent scan, diagnose on a planted miss with real Claude Code |
@@ -22,7 +23,7 @@ If something here is wrong, out of date, or simply does not work, open an issue 
 | [build.md](build.md) | `ctxlock build`: each agent's context, the gaps between them, drift, and filling what is missing without writing over anything a person wrote | Written |
 | [evals.md](evals.md) | Probes: how to write them, how `ctxlock eval` runs them without letting the agent act, and how to read the result | Written; checked live on three public repositories |
 | [configuration.md](configuration.md) | `ctxlock.yaml`: harnesses, owners, trust tiers, limit overrides, rule severities | Written; format and validation implemented |
-| [rules.md](rules.md) | Every lint rule: what it checks, why (with the research behind it), and how to fix a finding | Written for every rule built so far: L0–L11 and L13–L16 |
+| [rules.md](rules.md) | Every lint rule: what it checks, why (with the research behind it), and how to fix a finding | Written for every rule built so far: L0–L11 and L13–L17 |
 | [agents.md](agents.md) | What ctxlock predicts each agent loads, and how that prediction is checked | Written; Claude Code and Codex predictions implemented |
 | [github-action.md](github-action.md) | Adding the PR check to a repository: permissions, `fetch-depth: 0`, fork PRs | Written; run on a live pull request |
 | [troubleshooting.md](troubleshooting.md) | What goes wrong, why, and the fix | Written from the first dogfood pass |

@@ -14,6 +14,8 @@ ctxlock treats shared context as a dependency:
 
 Any git repository works. Put skills and rules in it where an agent would find them, as in any repository: skills under `.agents/skills/` or `.claude/skills/`, rules under `.claude/rules/`. Its own `ctxlock.yaml` can give each unit a `tier`. A unit keeps that tier in every repository that syncs it ([below](#trust-tiers)).
 
+Knowledge concepts and metric models sync too, as one file each ([business context](business-context.md)). The consumer needs no `knowledge:` or `metrics:` of its own: `ctxlock.lock` records what kind each one is.
+
 Check it like any other repository: `ctxlock lint`, the [Action](github-action.md) on its pull requests, and [probes](evals.md) for the units that matter.
 
 ## Taking units from it

@@ -33,6 +33,7 @@ probes:
 
 There are two kinds:
 - **Adherence probes** (`command:` or `edit:`) check that an instruction is followed. `edit:` is a regular expression over the paths the agent tried to write.
+- **Answer probes** (`answer:`) check what the agent says, for [business context](business-context.md): a regular expression over its final reply, ignoring case. The reply is used for grading and never printed.
 - **Trigger probes** (`skill:`) check that a skill's description makes the agent pick it, and that it stays out of the way otherwise.
 
 Unit IDs are the ones `ctxlock scan` prints. Every probe needs exactly one of `command`, `edit` and `skill`. A pattern that is not a valid regular expression, a duplicate `id`, or an unknown key stops the check with exit 2, naming the file and the probe, before any run.

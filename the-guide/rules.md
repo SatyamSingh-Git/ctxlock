@@ -18,7 +18,7 @@ lint:
     - "vendor/**"
 ```
 
-> **Status:** the rules on this page are implemented and tested: L0–L11 and L13–L16. L12, a model-based contradiction check, is planned for later. `ctxlock lint` runs them ([commands](commands.md)).
+> **Status:** the rules on this page are implemented and tested: L0–L11 and L13–L17. L12, a model-based contradiction check, is planned for later. `ctxlock lint` runs them ([commands](commands.md)).
 
 ## What the findings look like
 
@@ -420,3 +420,37 @@ When `ctxlock.yaml` drops the upstream altogether, the last line is instead `ctx
 A file is compared as LF, so a CRLF checkout is no edit. A lock that does not parse is one `must`, with the reason.
 
 **Fix:** make the change in the upstream repository, then sync. To keep a local version, edit it and take the unit out of `units:` under its upstream; sync then leaves the files you edited as yours, removes the ones nobody edited, and drops the unit from the lock. A change to `ctxlock.lock` itself shows in a pull request like any other file, so you can review it with CODEOWNERS.
+
+## L17: business context in its own format
+
+### `L17-format` (must, should)
+
+Checks each [knowledge and metric unit](business-context.md) against its own format.
+
+**An OKF concept** (OKF 0.2):
+- **`must`:** it has no `type`, or one that is not a non-empty string. That is OKF's one conformance rule for a concept. Frontmatter that does not parse is `L0-frontmatter`, also `must`.
+- **`should`:** a `status` other than `draft`, `stable` or `deprecated`.
+- **`should`:** a `stale_after`, `generated.at` or `verified` `at` that is not an ISO 8601 time with an offset, such as `2026-12-31T00:00:00Z`.
+
+**An Ossie model** is checked against Apache Ossie's own JSON Schema for 0.3.0.dev0, vendored in ctxlock:
+- **One finding when the version differs:** `Ossie 0.3.0.dev0 is the version this checks; the file says 0.2.0.dev0`. Every other error would follow from it.
+- **Otherwise, each schema error by where it is,** five at most, then `and N more`.
+
+```
+must  L17-format  models/a.ossie.yaml  /datasets/0: must have required property 'source'
+must  L17-format  models/b.ossie.yaml  (root): must NOT have additional properties (custom_extensions)
+```
+
+`custom_extensions` was renamed `nonportable_extensions` in Ossie 0.3.0.dev0.
+
+**Fix:** follow the message. For a model written for an earlier Ossie draft, see Ossie's `docs/spec_changes.md`.
+
+### `L17-trust-differs` (should)
+
+A concept's own `verified` or `stale_after` gives a different date from `verified-at` or `stale-after` for it in `ctxlock.yaml`:
+
+```
+should  L17-trust-differs  kb/nrr.md  ctxlock.yaml says stale-after 2027-01-31, the file's stale_after gives 2026-12-30; ctxlock.yaml wins
+```
+
+**Fix:** change one to match the other, or remove the one in `ctxlock.yaml`.

@@ -1,5 +1,5 @@
 # .github/workflows/ctxlock-sync.yml
-# Brings in the skills and rules ctxlock.yaml names from each upstream, once a week or when run by hand,
+# Brings in the skills, rules, knowledge and metrics ctxlock.yaml names from each upstream, once a week or when run by hand,
 # and keeps one pull request open with what changed. See the-guide/propagation.md.
 name: ctxlock sync
 on:

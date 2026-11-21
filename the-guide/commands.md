@@ -386,7 +386,7 @@ ctxlock report [dir] [--out <file>]
 
 ## `ctxlock sync`
 
-Brings shared skills and rules in from an upstream repository, such as your org's context repository, and pins what it brought in `ctxlock.lock`. You name the upstream and the units you want in `ctxlock.yaml`:
+Brings shared skills, rules, knowledge and metrics in from an upstream repository, such as your org's context repository, and pins what it brought in `ctxlock.lock`. You name the upstream and the units you want in `ctxlock.yaml`:
 
 ```yaml
 version: 1
@@ -419,7 +419,7 @@ Not synced:
 ```
 
 **What it does:**
-- Each unit lands at the path it has upstream. Only skills and rules sync. A path that is no unit upstream, or names an instructions file or config, stops sync with exit 2.
+- Each unit lands at the path it has upstream. Only skills, rules, knowledge and metrics sync ([business context](business-context.md)). A path that is no unit upstream, or names an instructions file or config, stops sync with exit 2.
 - Inside a skill, hooks, `settings.json`, `settings.local.json` and `.mcp.json` never sync, since they run commands or configure the agent rather than instruct it. Sync lists each one it left out.
 - `ctxlock.lock` records each upstream's commit and, for each unit, its digest, its tier upstream, and a digest of each file sync wrote. Sync rewrites it only when that changes.
 - After writing, it fills what it brought in for the other agents, as `build --fill-missing` would. Other gaps stay for `build` to report.

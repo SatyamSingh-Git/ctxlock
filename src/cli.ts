@@ -316,7 +316,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
 
   program
     .command('sync [dir]')
-    .description("bring in the skills and rules ctxlock.yaml names from each upstream, pinned in ctxlock.lock; exits 1, writing nothing, rather than overwrite a person's file or an edited one")
+    .description("bring in the skills, rules, knowledge and metrics ctxlock.yaml names from each upstream, pinned in ctxlock.lock; exits 1, writing nothing, rather than overwrite a person's file or an edited one")
     .option('--dry-run', 'show what would change; nothing is written')
     .option('--cache <dir>', 'where upstream clones are kept (default: ctxlock under $XDG_CACHE_HOME, else ~/.cache, or ~/AppData/Local on Windows)')
     .addOption(new Option('--format <format>', 'output format').choices(['text', 'json', 'markdown']).default('text'))

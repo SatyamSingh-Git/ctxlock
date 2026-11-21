@@ -28,13 +28,13 @@ It builds on Plans 4 (the graph), 6 (sync) and 9 (`verify`). Satyam asked on 202
 
 | Task | Status | Commits |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
-| 6 | | |
-| 7 | | |
+| 1 | Done | `882283c` |
+| 2 | Done | `c8e6c26` |
+| 3 | Done | `b37e110` |
+| 4 | Done | `f62acb2` |
+| 5 | Done | `0f3c920` |
+| 6 | Done | `03dd31f` |
+| 7 | Done | the docs commit |
 
 ## Phase 4, split (D100)
 
