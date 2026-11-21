@@ -54,6 +54,9 @@ export interface Registry {
   present: boolean;
   harnesses: HarnessId[];
   units: Record<string, UnitMeta>;
+  // Folders of OKF concepts, and Ossie model files or folders of them, that carry no marker of their own (D102).
+  knowledge: string[];
+  metrics: string[];
   consumers: Consumer[];
   upstreams: Upstream[];
   limits: Partial<Limits>;
@@ -106,6 +109,8 @@ const schema = z.strictObject({
       }),
     )
     .default({}),
+  knowledge: z.array(z.string().transform(repoPath)).default([]),
+  metrics: z.array(z.string().transform(repoPath)).default([]),
   consumers: z
     .record(
       z.string(),
@@ -157,7 +162,7 @@ export function describeIssue(issue: z.core.$ZodIssue): string {
 
 export async function loadRegistry(reader: RepoReader): Promise<Registry> {
   if (!(await reader.exists(FILE))) {
-    return { present: false, harnesses: ['claude-code', 'codex'], units: {}, consumers: [], upstreams: [], limits: {}, lint: { severity: {}, ignore: [] }, eval: EVAL_DEFAULTS };
+    return { present: false, harnesses: ['claude-code', 'codex'], units: {}, knowledge: [], metrics: [], consumers: [], upstreams: [], limits: {}, lint: { severity: {}, ignore: [] }, eval: EVAL_DEFAULTS };
   }
 
   let raw: unknown;
@@ -169,7 +174,7 @@ export async function loadRegistry(reader: RepoReader): Promise<Registry> {
   const result = schema.safeParse(raw ?? {});
   if (!result.success) throw new RegistryError(`${FILE}: ${result.error.issues.map(describeIssue).join('; ')}`);
 
-  const { harnesses, limits, units, consumers, upstream, lint, eval: settings } = result.data;
+  const { harnesses, limits, units, knowledge, metrics, consumers, upstream, lint, eval: settings } = result.data;
   return {
     present: true,
     harnesses,
@@ -189,6 +194,8 @@ export async function loadRegistry(reader: RepoReader): Promise<Registry> {
         ) as UnitMeta,
       ]),
     ),
+    knowledge,
+    metrics,
     consumers: Object.entries(consumers)
       .map(([name, c]): Consumer => ({
         name,

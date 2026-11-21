@@ -16,6 +16,8 @@ describe('loadRegistry', () => {
       present: false,
       harnesses: ['claude-code', 'codex'],
       units: {},
+      knowledge: [],
+      metrics: [],
       consumers: [],
       upstreams: [],
       limits: {},
@@ -173,5 +175,12 @@ consumers:
     expect((await consumer('    foo: 1\n')).message).toContain('consumers.payments-api.foo: unknown key');
     expect((await consumer('    harnesses: [cursor]\n')).message).toContain('consumers.payments-api.harnesses.0');
     expect((await consumer('    maturity: retired\n')).message).toContain('consumers.payments-api.maturity');
+  });
+
+  it('knowledge and metrics are lists of paths', async () => {
+    expect(await load('version: 1\nknowledge: [kb/]\nmetrics: [models/a.yaml, semantic/]\n')).toMatchObject({ knowledge: ['kb'], metrics: ['models/a.yaml', 'semantic'] });
+    expect(await load('version: 1\n')).toMatchObject({ knowledge: [], metrics: [] });
+    expect(await load()).toMatchObject({ knowledge: [], metrics: [] });
+    expect((await errorOf('version: 1\nmetrics: 3\n')).message).toContain('metrics');
   });
 });

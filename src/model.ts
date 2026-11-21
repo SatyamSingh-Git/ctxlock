@@ -2,7 +2,7 @@ export type Severity = 'must' | 'should' | 'info';
 
 export type HarnessId = 'claude-code' | 'codex';
 
-export type UnitKind = 'instructions' | 'rule' | 'skill' | 'config';
+export type UnitKind = 'instructions' | 'rule' | 'skill' | 'config' | 'knowledge' | 'metric';
 
 export interface UnitFile {
   path: string;
@@ -13,7 +13,7 @@ export interface UnitFile {
 export interface Unit {
   id: string;
   kind: UnitKind;
-  family: 'agents-md' | 'claude' | 'agents' | 'codex' | 'vscode';
+  family: 'agents-md' | 'claude' | 'agents' | 'codex' | 'vscode' | 'okf' | 'ossie';
   path: string;
   // In-repo symlinks that resolve to this unit, e.g. .claude/skills/x -> .agents/skills/x.
   aliases: string[];

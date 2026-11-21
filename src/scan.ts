@@ -41,15 +41,18 @@ export interface ScanOptions {
 }
 
 export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Promise<ScanResult> {
-  const { units, problems } = await discoverUnits(reader);
   const loaded = await loadRegistry(reader);
+  const lock = await readLock(reader);
+  // A synced unit is the kind its upstream said, with nothing declared here.
+  const locked = lock.lock.upstreams.flatMap((u) => u.units);
+  const lockedAs = (kind: string) => locked.filter((u) => u.id.startsWith(`${kind}/`)).map((u) => u.path);
+  const { units, problems } = await discoverUnits(reader, { knowledge: [...loaded.knowledge, ...lockedAs('knowledge')], metrics: [...loaded.metrics, ...lockedAs('metric')] });
   const registry = opts.settings ? { ...loaded, harnesses: opts.settings.harnesses, limits: opts.settings.limits, lint: opts.settings.lint } : loaded;
   const codeowners = await loadCodeowners(reader);
   const limits = { ...LIMITS, ...registry.limits };
   const contexts = await resolveAll({ reader, units, limits }, registry.harnesses);
   const extra = opts.agnix ? await agnixFindings(reader.root, opts.runAgnix) : [];
   const generated = await loadGenerated(reader);
-  const lock = await readLock(reader);
   const ctx = { reader, units, registry, codeowners, contexts, limits, today: opts.today ?? localDate(), generated: generated.files, generatedError: generated.error, lock: lock.lock, lockError: lock.error };
   const findings = await runLint(ctx, [...problems, ...extra]);
   const inventory = (await execConfig.check(ctx)).filter((f) => f.rule === 'L2-exec-config');

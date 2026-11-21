@@ -1,5 +1,6 @@
 import { posix } from 'node:path';
 import picomatch from 'picomatch';
+import { parse } from 'yaml';
 import type { Finding, Unit, UnitFile, UnitKind } from '../model.js';
 import type { RepoReader } from '../repo/reader.js';
 import { lfDigest, unitDigest } from './digest.js';
@@ -27,6 +28,49 @@ const PATTERNS: Pattern[] = [
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
 
+// Business context (D102): folders and files ctxlock.yaml or the lock names, and the formats' own marks.
+export interface Declared {
+  knowledge: string[];
+  metrics: string[];
+}
+const NOT_CONCEPTS = new Set(['index.md', 'log.md']);
+const OSSIE_FILE = glob('**/*.ossie.yaml', '**/*.ossie.yml', '**/*.ossie.json');
+const MODEL_FILE = /\.(ya?ml|json)$/;
+const under = (path: string, folder: string) => path === folder || path.startsWith(`${folder}/`);
+
+// An OKF bundle may declare itself with okf_version in its root index.md, the only frontmatter an index may carry.
+async function okfBundles(reader: RepoReader, reachable: Map<string, string>): Promise<string[]> {
+  const bundles: string[] = [];
+  for (const [path, real] of reachable) {
+    if (posix.basename(path) !== 'index.md') continue;
+    const { frontmatter } = splitFrontmatter((await reader.readFile(real)).toString('utf8'));
+    if (frontmatter && 'okf_version' in frontmatter) bundles.push(posix.dirname(path));
+  }
+  return bundles;
+}
+
+function businessPattern(path: string, declared: Declared, bundles: string[]): Pattern | undefined {
+  if (path.endsWith('.md') && !NOT_CONCEPTS.has(posix.basename(path)) && [...declared.knowledge, ...bundles].some((f) => under(path, f))) {
+    return { match: () => true, kind: 'knowledge', family: 'okf' };
+  }
+  if (OSSIE_FILE(path) || declared.metrics.some((m) => under(path, m) && MODEL_FILE.test(path))) {
+    return { match: () => true, kind: 'metric', family: 'ossie' };
+  }
+  return undefined;
+}
+
+function modelName(text: string): string | undefined {
+  try {
+    // YAML 1.2 reads JSON too.
+    const model: unknown = parse(text, { schema: 'core' });
+    const name = (model as { name?: unknown } | null)?.name;
+    return typeof name === 'string' ? name : undefined;
+  } catch {
+    // L17-format reports a model that does not parse.
+    return undefined;
+  }
+}
+
 
 // Every path an agent can open, mapped to the listed file behind it. A link to a file adds the
 // link's own path; a link to a directory adds the link path of every listed file under it.
@@ -42,16 +86,17 @@ function reachablePaths(paths: string[], links: Map<string, string | null>): Map
   return reachable;
 }
 
-export async function discoverUnits(reader: RepoReader): Promise<{ units: Unit[]; problems: Finding[] }> {
+export async function discoverUnits(reader: RepoReader, declared: Declared = { knowledge: [], metrics: [] }): Promise<{ units: Unit[]; problems: Finding[] }> {
   const links = await reader.listSymlinks();
   const reachable = reachablePaths(await reader.listFiles(), links);
+  const bundles = await okfBundles(reader, reachable);
   const units: Unit[] = [];
   const byPath = new Map<string, Unit>();
   const problems: Finding[] = [];
 
   // Listed files come first in `reachable`, so a link to an existing unit finds it and becomes its alias.
   for (const [path, real] of reachable) {
-    const pattern = PATTERNS.find((p) => p.match(path));
+    const pattern = PATTERNS.find((p) => p.match(path)) ?? businessPattern(path, declared, bundles);
     if (!pattern) continue;
 
     const unitPath = pattern.kind === 'skill' ? posix.dirname(path) : path;
@@ -84,14 +129,14 @@ export async function discoverUnits(reader: RepoReader): Promise<{ units: Unit[]
 
     let frontmatter: Record<string, unknown> | null = null;
     let body = text.replace(/\r\n/g, '\n');
-    if (pattern.kind === 'rule' || pattern.kind === 'skill') {
+    if (pattern.kind === 'rule' || pattern.kind === 'skill' || pattern.kind === 'knowledge') {
       const split = splitFrontmatter(text);
       frontmatter = split.frontmatter;
       body = split.body;
       if (split.error) {
         problems.push({
           rule: 'L0-frontmatter',
-          severity: pattern.kind === 'skill' ? 'must' : 'should',
+          severity: pattern.kind === 'rule' ? 'should' : 'must',
           message: `invalid frontmatter in ${path}: ${split.error}`,
           path,
           unitId: id,
@@ -102,6 +147,8 @@ export async function discoverUnits(reader: RepoReader): Promise<{ units: Unit[]
     let name = unitPath;
     if (pattern.kind === 'rule') name = posix.basename(path, '.md');
     if (pattern.kind === 'skill') name = typeof frontmatter?.name === 'string' ? frontmatter.name : posix.basename(unitPath);
+    if (pattern.kind === 'knowledge') name = typeof frontmatter?.title === 'string' ? frontmatter.title : posix.basename(path, '.md');
+    if (pattern.kind === 'metric') name = modelName(text) ?? posix.basename(path);
 
     const unit: Unit = {
       id,

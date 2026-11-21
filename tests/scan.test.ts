@@ -38,4 +38,29 @@ describe('scanRepo', () => {
     expect((await scanRepo(memReader(files(day(0))))).findings.map((f) => f.rule)).not.toContain('L9-stale');
     expect((await scanRepo(memReader(files(day(-1))))).findings.map((f) => f.rule)).toContain('L9-stale');
   });
+
+  it('a unit the lock records as knowledge or a metric is that kind, though nothing else declares it', async () => {
+    const lock = [
+      'lockfile_version: 1',
+      'upstreams:',
+      '  - name: org',
+      '    repo: ../org',
+      '    ref: main',
+      `    commit: ${'a'.repeat(40)}`,
+      '    units:',
+      '      - { path: org/nrr.md, id: knowledge/org/nrr.md, digest: "sha256:x", tier: reviewed, files: {} }',
+      '      - { path: org/revenue.yaml, id: metric/org/revenue.yaml, digest: "sha256:x", tier: reviewed, files: {} }',
+      '      - { path: .claude/rules/r.md, id: rule/.claude/rules/r.md, digest: "sha256:x", tier: reviewed, files: {} }',
+      '',
+    ].join('\n');
+    const files = { 'ctxlock.lock': lock, 'org/nrr.md': '---\ntype: Metric\n---\n', 'org/revenue.yaml': 'name: revenue\n', 'org/other.md': '---\ntype: Metric\n---\n', '.claude/rules/r.md': 'r' };
+    const result = await scanRepo(memReader(files), { today: '2026-11-21' });
+
+    expect(result.units.map((u) => u.id)).toEqual(['rule/.claude/rules/r.md', 'knowledge/org/nrr.md', 'metric/org/revenue.yaml']);
+  });
+
+  it('ctxlock.yaml declares bundles and models for discovery', async () => {
+    const files = { 'ctxlock.yaml': 'version: 1\nknowledge: [kb]\nmetrics: [m]\n', 'kb/a.md': '---\ntype: Reference\n---\n', 'm/x.yaml': 'name: x\n' };
+    expect((await scanRepo(memReader(files), { today: '2026-11-21' })).units.map((u) => u.id)).toEqual(['knowledge/kb/a.md', 'metric/m/x.yaml']);
+  });
 });

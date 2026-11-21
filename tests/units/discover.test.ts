@@ -215,4 +215,62 @@ describe('discoverUnits', () => {
 
     expect(reader.reads).toBe(4);
   });
+
+  describe('knowledge and metric units', () => {
+    const concept = (type: string, title?: string) => `---\ntype: ${type}\n${title ? `title: ${title}\n` : ''}---\n# Body\n`;
+    const ids = (units: Array<{ id: string }>) => units.map((u) => u.id);
+
+    it('a bundle declared by okf_version, or in ctxlock.yaml, makes each concept a knowledge unit, and index.md and log.md are not concepts', async () => {
+      const reader = memReader({
+        'kb/index.md': '---\nokf_version: "0.2"\n---\n# Index\n',
+        'kb/metrics/nrr.md': concept('Metric', 'Net revenue retention'),
+        'kb/log.md': '# Log\n',
+        'kb/metrics/index.md': '# Metrics\n',
+        'other/a.md': concept('Reference'),
+        'other/sub/b.md': concept('Reference'),
+        'other/data.csv': 'a,b',
+      });
+      const { units } = await discoverUnits(reader, { knowledge: ['other'], metrics: [] });
+
+      expect(ids(units)).toEqual(['knowledge/kb/metrics/nrr.md', 'knowledge/other/a.md', 'knowledge/other/sub/b.md']);
+      const nrr = units.find((u) => u.id === 'knowledge/kb/metrics/nrr.md')!;
+      expect(nrr).toMatchObject({ kind: 'knowledge', family: 'okf', name: 'Net revenue retention', frontmatter: { type: 'Metric' }, body: '# Body\n' });
+      expect(units.find((u) => u.id === 'knowledge/other/a.md')!.name).toBe('a');
+    });
+
+    it('a docs folder with type: in its frontmatter is not knowledge until declared', async () => {
+      const files = { 'docs/guide.md': concept('docs'), 'docs/index.md': '---\ntitle: Docs\n---\n' };
+      expect(ids((await discoverUnits(memReader(files))).units)).toEqual([]);
+      expect(ids((await discoverUnits(memReader(files), { knowledge: ['docs'], metrics: [] })).units)).toEqual(['knowledge/docs/guide.md']);
+    });
+
+    it('an *.ossie.yaml file, or a file ctxlock.yaml lists, is a metric unit named by its model', async () => {
+      const reader = memReader({
+        'models/sales.ossie.yaml': 'version: 0.3.0.dev0\nname: sales_analytics\ndatasets: []\n',
+        // An Ossie model may be JSON, which YAML 1.2 reads too.
+        'models/b.ossie.json': '{\n\t"version": "0.3.0.dev0",\n\t"name": "b_model",\n\t"datasets": []\n}',
+        'semantic/x.yaml': 'version: 0.3.0.dev0\nname: x_model\ndatasets: []\n',
+        'semantic/notes.md': 'not a model',
+        'semantic/broken.yaml': 'name: [unclosed\n',
+        'single.yml': 'name: single\n',
+        'config/other.yaml': 'name: not_a_model\n',
+      });
+      const { units } = await discoverUnits(reader, { knowledge: [], metrics: ['semantic', 'single.yml'] });
+
+      expect(ids(units)).toEqual(['metric/models/b.ossie.json', 'metric/models/sales.ossie.yaml', 'metric/semantic/broken.yaml', 'metric/semantic/x.yaml', 'metric/single.yml']);
+      expect(units.map((u) => u.name)).toEqual(['b_model', 'sales_analytics', 'broken.yaml', 'x_model', 'single']);
+      expect(units[1]).toMatchObject({ kind: 'metric', family: 'ossie', frontmatter: null });
+    });
+
+    it('a rule inside a declared bundle stays a rule', async () => {
+      const { units } = await discoverUnits(memReader({ '.claude/rules/kb/x.md': concept('Reference') }), { knowledge: ['.claude/rules'], metrics: [] });
+      expect(ids(units)).toEqual(['rule/.claude/rules/kb/x.md']);
+    });
+
+    it('knowledge frontmatter that does not parse is an L0-frontmatter must', async () => {
+      const { units, problems } = await discoverUnits(memReader({ 'kb/x.md': '---\ntype: [\n---\n' }), { knowledge: ['kb'], metrics: [] });
+      expect(ids(units)).toEqual(['knowledge/kb/x.md']);
+      expect(problems).toMatchObject([{ rule: 'L0-frontmatter', severity: 'must', unitId: 'knowledge/kb/x.md' }]);
+    });
+  });
 });
