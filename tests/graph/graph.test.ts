@@ -206,4 +206,41 @@ describe('pinnedBy', () => {
     ];
     expect(pinnedBy(['.claude/rules/a.md'], ['https://github.com/acme/org', org], locks)).toEqual([]);
   });
+
+  describe("an OKF concept's links", () => {
+    const MODEL = 'version: 0.3.0.dev0\nname: revenue\ndatasets:\n  - { name: customers, source: crm.customers }\n';
+    const BUNDLE = {
+      'kb/index.md': '---\nokf_version: "0.2"\n---\n',
+      'kb/m/nrr.ossie.yaml': MODEL,
+      'kb/c/x.md': '---\ntype: Metric\n---\nNRR comes from [the model](../m/nrr.ossie.yaml) and [the segments](./seg.md#list).\n',
+      'kb/c/seg.md': '---\ntype: Reference\n---\nSegments.\n',
+      'kb/c/y.md': '---\ntype: Reference\n---\nSee [x](x.md) and [nothing](gone.md).\n',
+    };
+
+    it('impact of a metric reaches the concepts that link to it, and who-uses names them', async () => {
+      const { dependents } = await impactOf(await scan(BUNDLE), await scan({ ...BUNDLE, 'kb/m/nrr.ossie.yaml': `${MODEL}description: changed\n` }));
+      expect(dependents.map((d) => [d.id, d.via])).toEqual([
+        ['knowledge/kb/c/x.md', []],
+        ['knowledge/kb/c/y.md', ['knowledge/kb/c/x.md']],
+      ]);
+      const graph = await graphOf(BUNDLE);
+      expect(whoUses(graph, 'knowledge/kb/c/seg.md').units.map((u) => u.id)).toEqual(['knowledge/kb/c/x.md', 'knowledge/kb/c/y.md']);
+      expect(graph.dependsOn.get('knowledge/kb/c/y.md')).toEqual([{ id: 'knowledge/kb/c/x.md' }]);
+      expect(graph.dependsOn.has('knowledge/kb/c/seg.md')).toBe(false);
+      expect(graph.dangling).toEqual([]);
+    });
+
+    it('a link through a symlink reaches the unit behind it', async () => {
+      const files = { ...BUNDLE, 'kb/c/z.md': '---\ntype: Reference\n---\nSee [segments](../../docs/segments.md).\n' };
+      const graph = await graphOf(files, { 'docs/segments.md': 'kb/c/seg.md' });
+      expect(graph.dependsOn.get('knowledge/kb/c/z.md')).toEqual([{ id: 'knowledge/kb/c/seg.md' }]);
+    });
+
+    it('a declared depends-on and a link to the same unit make one edge, and only concepts link', async () => {
+      const files = { ...BUNDLE, 'ctxlock.yaml': 'version: 1\nunits:\n  kb/c/y.md:\n    depends-on: [kb/c/x.md@certified, kb/c/seg.md]\n', 'AGENTS.md': 'Read [x](kb/c/x.md).\n' };
+      const graph = await graphOf(files);
+      expect(graph.dependsOn.get('knowledge/kb/c/y.md')).toEqual([{ id: 'knowledge/kb/c/x.md', tier: 'certified' }, { id: 'knowledge/kb/c/seg.md' }]);
+      expect(graph.dependsOn.get('instructions/AGENTS.md')).toBeUndefined();
+    });
+  });
 });

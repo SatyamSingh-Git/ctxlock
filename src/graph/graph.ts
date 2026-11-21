@@ -8,6 +8,7 @@ import { unitOwners } from '../registry/codeowners.js';
 import { type Consumer, type Requirement, type Tier, repoPath } from '../registry/registry.js';
 import type { ScanResult } from '../scan.js';
 import type { Lock } from '../sync/lock.js';
+import { linkedPaths } from '../units/links.js';
 
 export type GraphInput = Pick<ScanResult, 'units' | 'registry' | 'contexts' | 'codeowners'> & { generated: GeneratedFile[]; lock?: Lock };
 type Edge = { id: string; tier?: Tier };
@@ -96,6 +97,16 @@ export function buildGraph({ units, registry, contexts, codeowners, generated, l
     const unit = units.find((u) => u.path === path);
     if (!unit) dangling.push({ from: 'ctxlock.yaml', ref: path });
     else if (meta.dependsOn) dependsOn.set(unit.id, resolve(path, meta.dependsOn));
+  }
+  // An OKF concept's links are its own record of what it rests on (D104); links to no unit are not dangling.
+  for (const unit of units) {
+    if (unit.kind !== 'knowledge') continue;
+    const edges = dependsOn.get(unit.id) ?? [];
+    for (const path of linkedPaths(unit)) {
+      const target = units.find((u) => u.path === path || u.aliases.includes(path));
+      if (target && target.id !== unit.id && !edges.some((e) => e.id === target.id)) edges.push({ id: target.id });
+    }
+    if (edges.length > 0) dependsOn.set(unit.id, edges);
   }
   const consumers = registry.consumers.map((c) => ({ ...c, uses: resolve(`consumer ${c.name}`, c.dependsOn) }));
 
