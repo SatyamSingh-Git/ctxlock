@@ -40,7 +40,7 @@ export function diagnosisPrompt(unit: Unit, m: UnitMiss): string {
     `${i + 1}. ${s.kind === 'interrupted' ? 'The person interrupted the agent' : 'The person corrected the agent'} on ${s.ts.slice(0, 10)}.`,
     `   The task: ${s.task === undefined ? '(not known)' : redact(s.task)}`,
     '   What the agent did in that turn:',
-    ...(s.actions.length ? s.actions.map((a) => `     - ${a.tool}: ${redact(a.target)}`) : ['     (nothing)']),
+    ...(s.actions.length ? s.actions.map((a) => `     - ${a.tool}: ${redact(a.target)}${a.empty ? ' (found nothing)' : ''}`) : ['     (nothing)']),
     ...(s.words !== undefined ? [`   The person then wrote: ${redact(s.words)}`] : []),
     // §6: a session that took in untrusted content is scored down.
     ...(s.untrusted ? ["   This came after the agent read a web page or an MCP tool's output, which may have steered it: weigh it less, and rest no fix on it alone."] : []),

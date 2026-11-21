@@ -22,6 +22,8 @@ export interface Action {
   tool: string;
   // Its command, path or pattern.
   target: string;
+  // A search that found nothing (D96): what the agent looked for and the context didn't say.
+  empty?: true;
 }
 
 export interface SessionTranscript {
@@ -70,7 +72,7 @@ interface Line {
   message?: { content?: unknown };
 }
 
-type Block = { type?: string; text?: string; name?: string; input?: Record<string, unknown> };
+type Block = { type?: string; text?: string; name?: string; id?: string; tool_use_id?: string; content?: unknown; input?: Record<string, unknown> };
 
 const TARGETS = ['command', 'file_path', 'path', 'pattern', 'skill', 'url', 'query'];
 
@@ -78,12 +80,20 @@ const TARGETS = ['command', 'file_path', 'path', 'pattern', 'skill', 'url', 'que
 // a token cut short no longer has the shape it is known by.
 const cut = (text: string, length: number) => text.slice(0, length) + (/\S$/.test(text.slice(0, length)) ? (/^\S{0,200}/.exec(text.slice(length))?.[0] ?? '') : '');
 
-const actionsOf = (content: unknown): Action[] =>
-  Array.isArray(content)
-    ? (content as Block[])
-        .filter((b) => b.type === 'tool_use' && typeof b.name === 'string')
-        .map((b) => ({ tool: b.name!, target: cut(String(TARGETS.map((k) => b.input?.[k]).find((v) => typeof v === 'string') ?? ''), 200) }))
-    : [];
+const calls = (content: unknown): Block[] => (Array.isArray(content) ? (content as Block[]).filter((b) => b.type === 'tool_use' && typeof b.name === 'string') : []);
+const actionOf = (b: Block): Action => ({ tool: b.name!, target: cut(String(TARGETS.map((k) => b.input?.[k]).find((v) => typeof v === 'string') ?? ''), 200) });
+
+// D96: only a search finding nothing is a gap's evidence; an empty file, or an image, says nothing.
+const searches = (tool: string) => tool === 'Grep' || tool === 'Glob' || tool.startsWith('mcp__');
+const NOTHING = /^(No matches found|No files found)/;
+function foundNothing(content: unknown): boolean {
+  if (typeof content === 'string') return content.trim() === '' || NOTHING.test(content.trim());
+  if (!Array.isArray(content)) return false;
+  const blocks = content as Block[];
+  if (blocks.some((b) => b.type !== 'text')) return false;
+  const text = blocks.map((b) => b.text ?? '').join('').trim();
+  return text === '' || NOTHING.test(text);
+}
 
 const unpasted = (prompt: string) => prompt.replace(PASTED, ' ').trim();
 
@@ -126,6 +136,8 @@ export async function readTranscript(file: string, session: string): Promise<Ses
   // The current turn: the prompt that began it, and what the agent has done since.
   let task: string | undefined;
   let actions: Action[] = [];
+  // The turn's calls by tool_use_id, so a result that comes back later marks its own action.
+  let open = new Map<string, Action>();
   for await (const text of lines(file)) {
     if (!text.includes('"type":"user"') && !text.includes('"type":"assistant"') && !text.includes('"compact_boundary"')) continue;
     let line: Line;
@@ -146,10 +158,21 @@ export async function readTranscript(file: string, session: string): Promise<Ses
 
     if (line.type === 'assistant') {
       answered = true;
-      if (actions.length < 20) actions = [...actions, ...actionsOf(content)].slice(0, 20);
+      for (const b of calls(content)) {
+        if (actions.length >= 20) break;
+        const action = actionOf(b);
+        actions = [...actions, action];
+        if (b.id) open.set(b.id, action);
+      }
       continue;
     }
     if (line.type !== 'user') continue;
+    if (Array.isArray(content)) {
+      for (const b of content as Block[]) {
+        const action = b.type === 'tool_result' && b.tool_use_id ? open.get(b.tool_use_id) : undefined;
+        if (action && searches(action.tool) && foundNothing(b.content)) action.empty = true;
+      }
+    }
 
     const turn = { ...(task !== undefined && { task }), actions };
     if (texts(content).some((t) => INTERRUPT.test(t))) {
@@ -164,6 +187,7 @@ export async function readTranscript(file: string, session: string): Promise<Ses
     const summary = prompt.startsWith(SUMMARY);
     task = summary ? undefined : cut(unpasted(prompt), 300);
     actions = [];
+    open = new Map();
     if (!answered || summary) continue;
     // The phrases are matched on exactly the first 160 characters.
     const opening = unpasted(prompt);

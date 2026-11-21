@@ -98,6 +98,47 @@ describe('readTranscript', () => {
     expect(signal!.actions[2]!.target).toBe('d '.repeat(100));
   });
 
+  it('a search that found nothing marks its action empty, matched by its tool_use_id, and a result with an image or text is not empty', async () => {
+    const call = (second: number, id: string, name: string, input: object) => ({ ...base(second), type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } });
+    const back = (second: number, id: string, content: unknown) => ({ ...base(second), type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+    const file = transcript([
+      typed(1, 'find the retry helper'),
+      call(2, 'g1', 'Grep', { pattern: 'retryWithBackoff' }),
+      call(3, 'g2', 'Glob', { pattern: 'src/**/retry*.ts' }),
+      // Results come back out of order, after other lines.
+      back(4, 'g2', [{ type: 'text', text: 'src/net/retry.ts' }]),
+      back(5, 'g1', 'No matches found'),
+      call(6, 'm1', 'mcp__docs__search', { query: 'retry' }),
+      back(7, 'm1', []),
+      call(8, 'r1', 'Read', { file_path: 'a.png' }),
+      back(9, 'r1', [{ type: 'image', source: {} }]),
+      call(10, 'r2', 'Read', { file_path: 'empty.ts' }),
+      back(11, 'r2', ''),
+      call(12, 'g3', 'Glob', { pattern: 'lib/**' }),
+      back(13, 'g3', 'No files found'),
+      call(14, 'g4', 'Grep', { pattern: 'backoff' }),
+      back(15, 'g4', ''),
+      call(16, 'm2', 'mcp__docs__diagram', { query: 'retry' }),
+      back(17, 'm2', [{ type: 'image', source: {} }]),
+      said(18),
+      typed(19, 'no, it is in src/net'),
+    ]);
+
+    const [signal] = (await readTranscript(file, 's1')).signals;
+    expect(signal!.actions).toEqual([
+      { tool: 'Grep', target: 'retryWithBackoff', empty: true },
+      { tool: 'Glob', target: 'src/**/retry*.ts' },
+      { tool: 'mcp__docs__search', target: 'retry', empty: true },
+      { tool: 'Read', target: 'a.png' },
+      // Only a search finding nothing counts: an empty file read is not a gap.
+      { tool: 'Read', target: 'empty.ts' },
+      { tool: 'Glob', target: 'lib/**', empty: true },
+      { tool: 'Grep', target: 'backoff', empty: true },
+      // A diagram is something, though it has no text.
+      { tool: 'mcp__docs__diagram', target: 'retry' },
+    ]);
+  });
+
   it("a subagent's actions are not the turn's", async () => {
     const file = transcript([typed(1, 'start'), { ...tool(2, 'Bash', { command: 'rm -rf build' }), isSidechain: true }, tool(3, 'Read', { file_path: 'a.ts' }), interrupt(4)]);
 
