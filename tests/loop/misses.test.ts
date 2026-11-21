@@ -109,7 +109,7 @@ describe('findMisses', () => {
     const transcripts = new Map(sessions.map((s) => said(s, [1], [{ kind: 'interrupted', ts: t(3) }, { kind: 'interrupted', ts: t(4) }])));
 
     const three = findMisses(timelines, transcripts, scan, { minSessions: 3 }).units[0]!;
-    expect(three).toMatchObject({ id: API, sessions: 3, kinds: { interrupted: 6, correction: 0 }, first: t(3), last: t(4), routed: true });
+    expect(three).toMatchObject({ id: API, sessions: 3, kinds: { interrupted: 6, correction: 0, abandoned: 0 }, first: t(3), last: t(4), routed: true });
     expect(findMisses(timelines.slice(1), transcripts, scan, { minSessions: 3 }).units[0]).toMatchObject({ sessions: 2, routed: false });
   });
 
@@ -177,7 +177,7 @@ describe('findMisses', () => {
       { minSessions: 3 },
     );
 
-    expect(m).toMatchObject({ sessions: 3, withTranscript: 2, withSignal: 1, signals: { interrupted: 0, correction: 1 }, unattributed: 1, units: [] });
+    expect(m).toMatchObject({ sessions: 3, withTranscript: 2, withSignal: 1, signals: { interrupted: 0, correction: 1, abandoned: 0 }, unattributed: 1, units: [] });
   });
 
   it('a signal before the collector recorded its session is counted apart: what was in context then is unknown', async () => {

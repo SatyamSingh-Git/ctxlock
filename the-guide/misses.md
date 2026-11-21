@@ -98,6 +98,8 @@ These are signals, not a diagnosis: the unit was in context when the agent was s
 - **Your words appear only with `--excerpts`,** in the text, the JSON or the drafts.
 - **The JSON names sessions,** since it stays on your machine. `ctxlock report`, which is for sharing, has no misses in it.
 
+**The JSON** has the session counts (`sessions`, `withTranscript`, `withSignal`), `signals` with a count for each kind, `untrusted`, `unattributed`, `unrecorded`, `since` and `minSessions`, then `found`, every signal once, and `units`, whose `kinds` count the same way and whose `signals` are places in `found`. Each kind is always there, zeros included: today `interrupted`, `correction` and `abandoned`, the last added with the abandoned signal. Read the kinds as a set that may grow, not a fixed three: a unit routed only by a kind your code doesn't know is still routed.
+
 ## Diagnosing a unit
 
 `ctxlock diagnose <unit>` asks Claude what went wrong in the moments the unit was in context, and when the unit is at fault, proposes the smallest fix and checks it by replay. It runs your own `claude`, as [`eval`](evals.md) does, so it costs runs from your plan. A unit need not be routed, but it must have been in context for at least one signal.
