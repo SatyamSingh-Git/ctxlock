@@ -232,7 +232,36 @@ describe('planSync', () => {
     expect(none).toBeInstanceOf(UpstreamError);
     expect(none.message).toContain('upstream platform: .claude/rules/nope.md is no unit at 1111111');
     const instructions = await failure(sync(ORG, C1, { 'ctxlock.yaml': yaml(['AGENTS.md']) }));
-    expect(instructions.message).toContain('upstream platform: AGENTS.md is instructions; only skills and rules sync');
+    expect(instructions.message).toContain('upstream platform: AGENTS.md is instructions; only skills, rules, knowledge and metrics sync');
+  });
+
+  describe('knowledge and metric units', () => {
+    const MODEL = 'version: 0.3.0.dev0\nname: revenue\ndatasets:\n  - { name: customers, source: crm.customers }\n';
+    const NRR = '---\ntype: Metric\n---\nNRR, from [the model](../models/revenue.ossie.yaml).\n';
+    const BUSINESS = { 'kb/index.md': '---\nokf_version: "0.2"\n---\n', 'kb/nrr.md': NRR, 'models/revenue.ossie.yaml': MODEL, 'models/plain.yaml': MODEL };
+    const consumer = { 'ctxlock.yaml': yaml(['kb/nrr.md', 'models/revenue.ossie.yaml']) };
+
+    it('a concept and a model sync as one file each, and scan in the consumer as their kinds', async () => {
+      const plan = await sync(BUSINESS, C1, consumer);
+      expect(plan.writes.map((w) => w.path)).toEqual(['kb/nrr.md', 'models/revenue.ossie.yaml']);
+      expect(plan.lock.upstreams[0]!.units.map((u) => u.id)).toEqual(['knowledge/kb/nrr.md', 'metric/models/revenue.ossie.yaml']);
+
+      // The consumer has no index.md, and declares nothing: the lock says what each is.
+      const scan = await scanRepo(memReader(after(consumer, plan)));
+      expect(scan.units.filter((u) => u.kind === 'knowledge' || u.kind === 'metric').map((u) => u.id)).toEqual(['knowledge/kb/nrr.md', 'metric/models/revenue.ossie.yaml']);
+    });
+
+    it('a synced concept edited by hand is refused and flagged', async () => {
+      const first = await sync(BUSINESS, C1, consumer);
+      const edited = { ...after(consumer, first), 'kb/nrr.md': `${NRR}Our own line.\n` };
+      expect((await sync({ ...BUSINESS, 'kb/nrr.md': `${NRR}Upstream line.\n` }, C2, edited, first.lock)).refused).toEqual([{ path: 'kb/nrr.md', reason: 'edited since the last sync' }]);
+      const scan = await scanRepo(memReader(edited));
+      expect(scan.findings.filter((f) => f.rule === 'L16-lock').map((f) => f.path)).toEqual(['kb/nrr.md']);
+    });
+
+    it('a YAML file upstream that is no model, by name or declaration, is no unit to sync', async () => {
+      expect((await failure(sync(BUSINESS, C1, { 'ctxlock.yaml': yaml(['models/plain.yaml']) }))).message).toContain('models/plain.yaml is no unit at 1111111');
+    });
   });
 });
 

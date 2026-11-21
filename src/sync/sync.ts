@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { dirname, join } from 'node:path';
 import { linked, outsideRepo } from '../build/apply.js';
 import { BuildError } from '../build/index-suggest.js';
+import type { UnitKind } from '../model.js';
 import type { Registry, Upstream } from '../registry/registry.js';
 import type { RepoReader } from '../repo/reader.js';
 import { scanRepo } from '../scan.js';
@@ -49,12 +50,14 @@ const cp = String.fromCodePoint;
 const ODD = new RegExp(`[\\\\:${cp(0)}-${cp(31)}${cp(127)}]`);
 const unsafe = (path: string) => ODD.test(path) || path.split('/').some((s) => s === '' || s === '.' || s === '..');
 
+// Instructions files are a repository's own and config never syncs (D71); business context syncs as one file, like a rule.
+const SYNCED: UnitKind[] = ['skill', 'rule', 'knowledge', 'metric'];
 export const EXEC_REASON = 'its frontmatter runs hooks or grants tools; name it under allow-exec to take it';
 
 const byPath = <T extends { path: string }>(a: T, b: T) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 
 // What syncing every upstream the registry declares would write, remove and pin. A unit lands at its
-// upstream path (D69); only skills and rules sync (D71); a synced unit keeps its upstream tier (D72).
+// upstream path (D69); only the kinds in SYNCED sync (D71); a synced unit keeps its upstream tier (D72).
 export async function planSync(
   registry: Registry,
   lock: Lock,
@@ -77,7 +80,7 @@ export async function planSync(
     for (const path of u.units) {
       const unit = scan.units.find((x) => x.path === path);
       if (!unit) throw new UpstreamError(`upstream ${u.name}: ${path} is no unit at ${commit.slice(0, 7)}`);
-      if (unit.kind !== 'skill' && unit.kind !== 'rule') throw new UpstreamError(`upstream ${u.name}: ${path} is ${unit.kind}; only skills and rules sync`);
+      if (!SYNCED.includes(unit.kind)) throw new UpstreamError(`upstream ${u.name}: ${path} is ${unit.kind}; only skills, rules, knowledge and metrics sync`);
 
       // Claude Code runs a skill's hooks and grants its allowed-tools without asking (§7).
       if (scan.inventory.some((f) => f.unitId === unit.id)) {
