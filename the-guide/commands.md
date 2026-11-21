@@ -348,7 +348,7 @@ ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs 
 
 **`--open`** files that proposal as a GitHub issue through your own `gh` (`--gh <path>` names another), in the repository the unit belongs to, for a `defect` or `gap` only. A rerun updates the same issue, and reopens it if it was closed. It holds nothing from the session itself.
 
-**`--ablate`** replays the probe with the unit taken out as well, and says whether the unit itself causes the miss, doesn't drive it, or helps.
+**`--ablate`** replays the probe with the unit taken out as well, in `--runs` more runs from what `--max-runs` has left, and says whether the unit itself causes the miss, doesn't drive it, or helps.
 
 **It never writes to the repository.** A unit need not be routed to be diagnosed, but it must have been in context for at least one signal.
 

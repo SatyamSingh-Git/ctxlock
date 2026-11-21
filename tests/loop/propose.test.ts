@@ -123,11 +123,19 @@ describe('diagnose', { timeout: 120_000 }, () => {
 
     expect(p.replay!.status).toBe('validated');
     expect(p.replay!.ablation).toMatchObject({ status: 'improved', base: { passed: 0, valid: 2 }, head: { passed: 2, valid: 2 } });
-    // 1 diagnosis, 8 replay runs, 4 ablation runs.
-    expect(p.runs).toBe(13);
+    // 1 diagnosis, 8 replay runs, 2 ablation runs: the base side is the replay's, not run again.
+    expect(p.runs).toBe(11);
+    expect(p.replay!.ablation).toMatchObject({ base: p.replay!.miss.base });
     expect(readFileSync(join(root, '.claude/rules/deps.md'), 'utf8')).toBe(RULE);
     // Without --ablate, nothing extra runs.
     expect((await run(repo())).replay!.ablation).toBeUndefined();
+
+    // --max-runs covers the ablation too: 9 leaves 1 after the replay's 8, too few for a side of 2.
+    const short = await diagnose({ root: repo(), miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 2, maxRuns: 9, maxMinutes: 15, ablate: true });
+    expect(short.replay!.ablation).toEqual({ skipped: 'the replay left too few of the 9 runs --max-runs allows' });
+    expect(short.runs).toBe(9);
+    const enough = await diagnose({ root: repo(), miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 2, maxRuns: 10, maxMinutes: 15, ablate: true });
+    expect(enough.replay!.ablation).toMatchObject({ status: 'improved' });
   });
 
   it('ablation is skipped, and says why, for a unit reached through a link', async () => {

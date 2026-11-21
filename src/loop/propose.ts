@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { runClaude } from '../eval/claude.js';
-import { type ProbeOutcome, type ProbeRun, runProbes } from '../eval/eval.js';
+import { type ProbeOutcome, type ProbeRun, runProbes, status } from '../eval/eval.js';
 import { loadProbes } from '../eval/probes.js';
 import { ancestorContext } from '../eval/workspace.js';
 import { buildGraph } from '../graph/graph.js';
@@ -84,10 +84,11 @@ export async function diagnose(opts: DiagnoseOptions): Promise<Proposal> {
       { probe: diagnosis.probe, source: 'head', changedInHead: false, selectedFor: 'the miss' },
       ...own.map((probe) => ({ probe, source: 'base' as const, changedInHead: false, selectedFor: 'changed' })),
     ];
-    const run = async (side: RepoReader, on: ProbeRun[], folder: string) =>
+    const run = async (side: RepoReader, on: ProbeRun[], folder: string, maxRuns: number, arms?: ['head']) =>
       runProbes({ base: reader, head: side }, { base: scan, head: await scanRepo(side) }, on, {
         runs: opts.runs,
-        maxRuns: opts.maxRuns,
+        maxRuns,
+        arms,
         maxMinutes: opts.maxMinutes,
         model: opts.model,
         claude: opts.claude,
@@ -97,17 +98,22 @@ export async function diagnose(opts: DiagnoseOptions): Promise<Proposal> {
         keepRuns: false,
         trees: { base: null, head: null },
       });
-    const ran = await run(head, probes, 'replay');
+    const ran = await run(head, probes, 'replay', opts.maxRuns);
     const [miss, ...others] = ran.outcomes;
     const replay: Replay = { status: judge(miss!, others), runsPerArm: opts.runs, miss: miss!, others };
     let runs = 1 + ran.totals.runs;
     if (opts.ablate) {
       if (real !== fixed.path) {
         replay.ablation = { skipped: 'the unit is reached through a link, and taking out the link would take out what else it holds' };
+      } else if (opts.maxRuns - ran.totals.runs < opts.runs) {
+        replay.ablation = { skipped: `the replay left too few of the ${opts.maxRuns} runs --max-runs allows` };
       } else {
-        // The unit's file, or a skill's whole folder, and every link to it.
-        const ablated = await run(overlayReader(reader, new Map(), new Set([unit.path, ...unit.aliases])), [probes[0]!], 'ablation');
-        replay.ablation = ablated.outcomes[0]!;
+        // The unit's file, or a skill's whole folder, and every link to it. The side with the unit is
+        // the replay's base, so only the side without it runs.
+        const without = overlayReader(reader, new Map(), new Set([unit.path, ...unit.aliases]));
+        const ablated = await run(without, [probes[0]!], 'ablation', opts.maxRuns - ran.totals.runs, ['head']);
+        const a = ablated.outcomes[0]!;
+        replay.ablation = { ...a, base: miss!.base, status: a.head && !a.reason ? status(miss!.base, a.head) : a.status };
         runs += ablated.totals.runs;
       }
     }

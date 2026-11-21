@@ -161,7 +161,7 @@ The reply is checked against the unit: every line it quotes must be in the file,
 - **How strong it is:** at the default 2 runs a side, 0 of 2 to 2 of 2 is a direction, not proof. `--runs 3` makes 0 of 3 to 3 of 3 a one-sided Fisher p of 0.05, the bar `eval` gates on.
 - **Defaults:** `--max-runs` 16 and `--max-minutes` 15.
 
-**`--ablate` replays the probe once more, with the unit taken out:** its file, or a skill's whole folder, and any link to it. It compares the repository as it is with the repository without the unit, at the same number of runs a side. The text and the proposal then say which of these it found:
+**`--ablate` replays the probe once more, with the unit taken out:** its file, or a skill's whole folder, and any link to it. It compares the repository as it is with the repository without the unit, at the same number of runs a side. The side with the unit is the replay's own base, so only the side without it runs: `--runs` more runs, out of what `--max-runs` has left after the replay, and with its own `--max-minutes`. When too few runs are left, the output says so. The text and the proposal then say which of these it found:
 - **`improved`:** taking it out does what was wanted, so the unit itself causes the miss;
 - **`unchanged`:** the unit doesn't drive the miss. The agent does the same without it, and a fix that adds what was wanted can still help, as a `gap`'s does;
 - **`regressed`:** the unit helps.
