@@ -1,7 +1,7 @@
 import { Ajv2020, type ErrorObject } from 'ajv/dist/2020.js';
 import { parse } from 'yaml';
 import type { Finding } from '../../model.js';
-import { isInstant, okfTimes } from '../../units/okf.js';
+import { isInstant, okfTimes, okfTrust } from '../../units/okf.js';
 import { OSSIE_SCHEMA } from '../../units/ossie-schema.js';
 import type { Rule } from '../types.js';
 
@@ -16,7 +16,7 @@ const said = (e: ErrorObject) => `${e.instancePath || '(root)'}: ${e.message}${e
 
 export const format: Rule = {
   id: 'L17-format',
-  check({ units }) {
+  check({ units, registry }) {
     const findings: Finding[] = [];
     for (const unit of units) {
       const report = (severity: Finding['severity'], message: string) => findings.push({ rule: 'L17-format', severity, message, path: unit.path, unitId: unit.id });
@@ -29,6 +29,14 @@ export const format: Rule = {
         if ('status' in fm && !STATUSES.includes(fm.status as string)) report('should', `${unit.path} has status ${String(fm.status)}; OKF knows draft, stable and deprecated`);
         for (const [where, value] of okfTimes(fm)) {
           if (!isInstant(value)) report('should', `${unit.path}: ${where} is ${String(value)}, not an ISO 8601 time with an offset`);
+        }
+        const own = okfTrust(fm);
+        const set = registry.units[unit.path];
+        for (const [key, yaml, okf] of [['verifiedAt', 'verified-at', 'verified'], ['staleAfter', 'stale-after', 'stale_after']] as const) {
+          const mine = own[key];
+          const theirs = set?.[key];
+          if (mine === undefined || theirs === undefined || mine === theirs) continue;
+          findings.push({ rule: 'L17-trust-differs', severity: 'should', message: `ctxlock.yaml says ${yaml} ${theirs}, the file's ${okf} gives ${mine}; ctxlock.yaml wins`, path: unit.path, unitId: unit.id });
         }
       }
 

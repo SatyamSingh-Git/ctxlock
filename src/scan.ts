@@ -12,6 +12,7 @@ import type { RepoReader } from './repo/reader.js';
 import { type BudgetRow, budgetReport } from './report/budget.js';
 import { type Lock, readLock } from './sync/lock.js';
 import { discoverUnits } from './units/discover.js';
+import { okfTrust } from './units/okf.js';
 
 export interface ScanResult {
   root: string;
@@ -47,7 +48,15 @@ export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Prom
   const locked = lock.lock.upstreams.flatMap((u) => u.units);
   const lockedAs = (kind: string) => locked.filter((u) => u.id.startsWith(`${kind}/`)).map((u) => u.path);
   const { units, problems } = await discoverUnits(reader, { knowledge: [...loaded.knowledge, ...lockedAs('knowledge')], metrics: [...loaded.metrics, ...lockedAs('metric')] });
-  const registry = opts.settings ? { ...loaded, harnesses: opts.settings.harnesses, limits: opts.settings.limits, lint: opts.settings.lint } : loaded;
+  const settled = opts.settings ? { ...loaded, harnesses: opts.settings.harnesses, limits: opts.settings.limits, lint: opts.settings.lint } : loaded;
+  // An OKF concept's own verified and stale_after fill what ctxlock.yaml leaves unset, which wins (§4.1).
+  const trusted = { ...settled.units };
+  for (const unit of units) {
+    if (unit.kind !== 'knowledge') continue;
+    const own = okfTrust(unit.frontmatter);
+    if (own.verifiedAt !== undefined || own.staleAfter !== undefined) trusted[unit.path] = { ...own, ...trusted[unit.path] };
+  }
+  const registry = { ...settled, units: trusted };
   const codeowners = await loadCodeowners(reader);
   const limits = { ...LIMITS, ...registry.limits };
   const contexts = await resolveAll({ reader, units, limits }, registry.harnesses);

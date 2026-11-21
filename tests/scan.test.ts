@@ -59,6 +59,31 @@ describe('scanRepo', () => {
     expect(result.units.map((u) => u.id)).toEqual(['rule/.claude/rules/r.md', 'knowledge/org/nrr.md', 'metric/org/revenue.yaml']);
   });
 
+  it('a concept past its stale_after is flagged by L9, and ctxlock.yaml wins when both are set', async () => {
+    const concept = '---\ntype: Reference\nstale_after: 2026-12-31T00:00:00Z\nverified: { by: human:a, at: 2026-06-25T09:00:00Z }\n---\n# Body\n';
+    const files = (units = '') => ({ 'ctxlock.yaml': `version: 1\nknowledge: [kb]\n${units}`, 'kb/a.md': concept });
+    const rules = async (f: Record<string, string>, today: string) => (await scanRepo(memReader(f), { today })).findings.map((x) => x.rule);
+
+    const scan = await scanRepo(memReader(files()), { today: '2026-12-31' });
+    expect(scan.registry.units['kb/a.md']).toEqual({ verifiedAt: '2026-06-25', staleAfter: '2026-12-30' });
+    expect(scan.findings.map((x) => x.rule)).toContain('L9-stale');
+    expect(await rules(files(), '2026-12-30')).not.toContain('L9-stale');
+
+    const later = files('units:\n  kb/a.md:\n    owner: "@finance"\n    stale-after: 2027-01-31\n');
+    const own = await scanRepo(memReader(later), { today: '2026-12-31' });
+    expect(own.registry.units['kb/a.md']).toEqual({ owner: '@finance', verifiedAt: '2026-06-25', staleAfter: '2027-01-31' });
+    expect(own.findings.map((x) => x.rule)).not.toContain('L9-stale');
+    expect(own.findings.filter((x) => x.rule === 'L17-trust-differs').map((x) => [x.severity, x.path, x.message])).toEqual([
+      ['should', 'kb/a.md', "ctxlock.yaml says stale-after 2027-01-31, the file's stale_after gives 2026-12-30; ctxlock.yaml wins"],
+    ]);
+    // The same date in both places is no disagreement.
+    expect(await rules(files('units:\n  kb/a.md:\n    verified-at: 2026-06-25\n'), '2026-11-21')).not.toContain('L17-trust-differs');
+    expect(await rules(files('units:\n  kb/a.md:\n    verified-at: 2026-06-01\n'), '2026-11-21')).toContain('L17-trust-differs');
+    // Only an OKF concept's frontmatter is OKF.
+    const rule = await scanRepo(memReader({ '.claude/rules/r.md': concept }), { today: '2026-12-31' });
+    expect(rule.registry.units).toEqual({});
+  });
+
   it('ctxlock.yaml declares bundles and models for discovery', async () => {
     const files = { 'ctxlock.yaml': 'version: 1\nknowledge: [kb]\nmetrics: [m]\n', 'kb/a.md': '---\ntype: Reference\n---\n', 'm/x.yaml': 'name: x\n' };
     expect((await scanRepo(memReader(files), { today: '2026-11-21' })).units.map((u) => u.id)).toEqual(['knowledge/kb/a.md', 'metric/m/x.yaml']);

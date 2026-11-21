@@ -16,3 +16,18 @@ export function okfTimes(frontmatter: Record<string, unknown>): Array<[string, u
   });
   return times;
 }
+
+const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+// D103: OKF's trust times as ctxlock's dates. stale_after is the instant a concept turns stale, and
+// stale-after the last day it is still good, so the day before; one later in a day is flagged a day late.
+export function okfTrust(frontmatter: Record<string, unknown> | null): { verifiedAt?: string; staleAfter?: string } {
+  if (!frontmatter) return {};
+  const times = okfTimes(frontmatter);
+  const verified = times.filter(([where, at]) => where.startsWith('verified') && isInstant(at)).map(([, at]) => Date.parse(at as string));
+  const stale = frontmatter.stale_after;
+  return {
+    ...(verified.length > 0 && { verifiedAt: utcDay(Math.max(...verified)) }),
+    ...(isInstant(stale) && { staleAfter: utcDay(Date.parse(stale) - 1) }),
+  };
+}
