@@ -471,6 +471,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
       io.stdout(renderDiagnosis(p, opts.format));
       const text = renderProposal(p, shareable(repo));
       const say = opts.format === 'json' ? io.stderr : io.stdout;
+      if (opts.ablate && !p.replay) say('\nWithout the unit: not run, as there is no probe to replay.\n');
       if (opts.drafts !== undefined) say(writeDrafts(resolve(opts.drafts), [{ name: `${draftName(unit.id).slice(0, -'.md'.length)}.fix.md`, id: unit.id, kind: 'fix', text }], 'Proposal written'));
       if (!opts.open) return;
       const { verdict } = p.diagnosis;

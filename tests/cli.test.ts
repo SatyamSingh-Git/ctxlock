@@ -890,7 +890,20 @@ describe('ctxlock misses', () => {
       expect(code).toBe(0);
       expect(stdout).toContain('\nWithout the unit, 2 runs a side: unchanged\n');
       expect(stdout).toContain('\nTaking it out changes nothing: the unit does not drive the miss.\n');
+      expect(stdout).not.toContain('no probe to replay');
       expect((await run()).stdout).not.toContain('Without the unit');
+    });
+
+    it('diagnose --ablate says so when there is no probe to replay without the unit', async () => {
+      // The scenario's verdict is agent-error: no fix, no probe.
+      const dir = recorded((real) => real);
+      const run = (...extra: string[]) => cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--ablate', ...extra);
+
+      expect((await run()).stdout).toContain('\nWithout the unit: not run, as there is no probe to replay.\n');
+      const json = await run('--format', 'json');
+      expect(JSON.parse(json.stdout)).toMatchObject({ verdict: 'agent-error' });
+      expect(json.stderr).toContain('Without the unit: not run, as there is no probe to replay.');
+      expect((await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'))).stdout).not.toContain('Without the unit');
     });
 
     it("diagnose --open files for a defect, in the upstream's repository for a synced unit, and files nothing for a preference", async () => {

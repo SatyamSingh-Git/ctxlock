@@ -168,7 +168,7 @@ The reply is checked against the unit: every line it quotes must be in the file,
 
 When the miss didn't happen even with the unit in place, it says so instead, since taking the unit out then tells nothing. When runs were cut short or errored, it says which.
 
-It doesn't change "validated", and it runs only when there is a probe. A unit reached through a link to a folder is not ablated, since taking out the link would take out what else the folder holds; the output says so.
+It doesn't change "validated", and it runs only when there is a probe; without one, the output says it was not run. A unit reached through a link to a folder is not ablated, since taking out the link would take out what else the folder holds; the output says so.
 
 **A certified unit** is diagnosed and its fix proposed, and the output says the fix needs its owner's approval.
 
