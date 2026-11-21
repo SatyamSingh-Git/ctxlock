@@ -7,12 +7,19 @@ import { ancestorContext } from '../eval/workspace.js';
 import { buildGraph } from '../graph/graph.js';
 import type { Tier } from '../registry/registry.js';
 import { overlayReader } from '../repo/overlay.js';
-import { fsReader } from '../repo/reader.js';
+import { fsReader, type RepoReader } from '../repo/reader.js';
 import { scanRepo } from '../scan.js';
 import { applyFix, type Diagnosis, DiagnosisError, diagnosisPrompt, parseDiagnosis } from './diagnose.js';
 import type { UnitMiss } from './misses.js';
 
-export type Replay = { status: 'validated' | 'not-validated' | 'inconclusive'; runsPerArm: number; miss: ProbeOutcome; others: ProbeOutcome[] };
+export type Replay = {
+  status: 'validated' | 'not-validated' | 'inconclusive';
+  runsPerArm: number;
+  miss: ProbeOutcome;
+  others: ProbeOutcome[];
+  // With --ablate (D98): the miss's probe with the unit as it is (base) and taken out (head).
+  ablation?: ProbeOutcome | { skipped: string };
+};
 
 export interface Proposal {
   unit: UnitMiss;
@@ -33,6 +40,7 @@ export interface DiagnoseOptions {
   runs: number;
   maxRuns: number;
   maxMinutes: number;
+  ablate?: boolean;
 }
 
 // D86: validated when the miss's probe goes from failing to passing with the fix, and nothing on the
@@ -76,20 +84,34 @@ export async function diagnose(opts: DiagnoseOptions): Promise<Proposal> {
       { probe: diagnosis.probe, source: 'head', changedInHead: false, selectedFor: 'the miss' },
       ...own.map((probe) => ({ probe, source: 'base' as const, changedInHead: false, selectedFor: 'changed' })),
     ];
-    const ran = await runProbes({ base: reader, head }, { base: scan, head: await scanRepo(head) }, probes, {
-      runs: opts.runs,
-      maxRuns: opts.maxRuns,
-      maxMinutes: opts.maxMinutes,
-      model: opts.model,
-      claude: opts.claude,
-      workdir: join(runRoot, 'replay'),
-      cacheDir: null,
-      ctxlockVersion: '',
-      keepRuns: false,
-      trees: { base: null, head: null },
-    });
+    const run = async (side: RepoReader, on: ProbeRun[], folder: string) =>
+      runProbes({ base: reader, head: side }, { base: scan, head: await scanRepo(side) }, on, {
+        runs: opts.runs,
+        maxRuns: opts.maxRuns,
+        maxMinutes: opts.maxMinutes,
+        model: opts.model,
+        claude: opts.claude,
+        workdir: join(runRoot, folder),
+        cacheDir: null,
+        ctxlockVersion: '',
+        keepRuns: false,
+        trees: { base: null, head: null },
+      });
+    const ran = await run(head, probes, 'replay');
     const [miss, ...others] = ran.outcomes;
-    return { unit: opts.miss, diagnosis, replay: { status: judge(miss!, others), runsPerArm: opts.runs, miss: miss!, others }, runs: 1 + ran.totals.runs, tier };
+    const replay: Replay = { status: judge(miss!, others), runsPerArm: opts.runs, miss: miss!, others };
+    let runs = 1 + ran.totals.runs;
+    if (opts.ablate) {
+      if (real !== fixed.path) {
+        replay.ablation = { skipped: 'the unit is reached through a link, and taking out the link would take out what else it holds' };
+      } else {
+        // The unit's file, or a skill's whole folder, and every link to it.
+        const ablated = await run(overlayReader(reader, new Map(), new Set([unit.path, ...unit.aliases])), [probes[0]!], 'ablation');
+        replay.ablation = ablated.outcomes[0]!;
+        runs += ablated.totals.runs;
+      }
+    }
+    return { unit: opts.miss, diagnosis, replay, runs, tier };
   } finally {
     rmSync(runRoot, { recursive: true, force: true });
   }

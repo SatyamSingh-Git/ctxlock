@@ -100,6 +100,19 @@ describe('renderProposal', () => {
     expect(renderProposal(trusted, 'acme/web')).not.toContain('web page');
   });
 
+  it('the text and the proposal say what taking the unit out did', () => {
+    const ablated = (status: ProbeOutcome['status']) => ({ ...PROPOSAL, replay: { ...PROPOSAL.replay!, ablation: outcome(miss, 0, status === 'improved' ? 2 : 0, status) } });
+
+    const text = renderDiagnosis(ablated('improved'), 'text');
+    expect(text).toContain('\nWithout the unit, 2 runs a side: improved\n  miss-deps  base 0/2  without 2/2  improved\nTaking it out does what was wanted: the unit itself causes the miss.\n');
+    expect(renderDiagnosis(ablated('unchanged'), 'text')).toContain('\nTaking it out changes nothing: the unit does not drive the miss.\n');
+    expect(renderDiagnosis(ablated('regressed'), 'text')).toContain('\nTaking it out makes it worse: the unit helps.\n');
+    expect(renderProposal(ablated('improved'), 'acme/web')).toContain('\n- **Without the unit:** improved, base 0/2, without 2/2. Taking it out does what was wanted: the unit itself causes the miss.\n');
+    const skipped = { ...PROPOSAL, replay: { ...PROPOSAL.replay!, ablation: { skipped: 'the unit is reached through a link' } } };
+    expect(renderDiagnosis(skipped, 'text')).toContain('\nWithout the unit: not run, as the unit is reached through a link.\n');
+    expect(renderDiagnosis(PROPOSAL, 'text')).not.toContain('Without the unit');
+  });
+
   it('a fix that adds lines keeps them as lines, in the text, the diff and the issue', () => {
     const fix = { find: '## Setup', replace: `## Setup\n\tUse pnpm.${CONTROL}` };
     const p = { ...PROPOSAL, diagnosis: { ...PROPOSAL.diagnosis, fix } };

@@ -103,6 +103,45 @@ describe('diagnose', { timeout: 120_000 }, () => {
     expect(readFileSync(join(root, 'docs/deps.md'), 'utf8')).toBe(RULE);
   });
 
+  it('diagnose --ablate replays the miss probe without the unit: a rule that causes the miss is improved by its removal', async () => {
+    // The agent follows the rule's npm; without the rule it reads package.json and uses pnpm.
+    const file = join(tempDir(), 'scenario.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        behaviours: [
+          { when: { promptContains: 'You are diagnosing a miss' }, text: `\`\`\`json\n${JSON.stringify(DEFECT)}\n\`\`\``, calls: [] },
+          { when: { file: '.claude/rules/deps.md', contains: 'npm install' }, calls: [{ tool: 'Bash', input: { command: 'npm install dayjs' } }] },
+          { calls: [{ tool: 'Bash', input: { command: 'pnpm add dayjs' } }] },
+        ],
+      }),
+    );
+    process.env.FAKE_CLAUDE_SCENARIO = file;
+    const root = repo();
+
+    const p = await diagnose({ root, miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 2, maxRuns: 16, maxMinutes: 15, ablate: true });
+
+    expect(p.replay!.status).toBe('validated');
+    expect(p.replay!.ablation).toMatchObject({ status: 'improved', base: { passed: 0, valid: 2 }, head: { passed: 2, valid: 2 } });
+    // 1 diagnosis, 8 replay runs, 4 ablation runs.
+    expect(p.runs).toBe(13);
+    expect(readFileSync(join(root, '.claude/rules/deps.md'), 'utf8')).toBe(RULE);
+    // Without --ablate, nothing extra runs.
+    expect((await run(repo())).replay!.ablation).toBeUndefined();
+  });
+
+  it('ablation is skipped, and says why, for a unit reached through a link', async () => {
+    scenario(DEFECT);
+    const root = tempDir();
+    writeTree(root, { 'shared/rules/deps.md': RULE });
+    mkdirSync(join(root, '.claude'));
+    symlinkSync(join(root, 'shared', 'rules'), join(root, '.claude', 'rules'), 'junction');
+
+    const p = await diagnose({ root, miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 2, maxRuns: 16, maxMinutes: 15, ablate: true });
+
+    expect(p.replay!.ablation).toEqual({ skipped: 'the unit is reached through a link, and taking out the link would take out what else it holds' });
+  });
+
   it("a fix that changes nothing the agent does, or that makes the unit's other probe worse, is not validated", async () => {
     scenario({ ...DEFECT, fix: { find: 'Keep the lockfile committed.', replace: 'Keep the lockfile in git.' } });
     const unchanged = await run(repo());

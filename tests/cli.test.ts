@@ -873,6 +873,26 @@ describe('ctxlock misses', () => {
       expect(readFileSync(file, 'utf8')).toBe(edited);
     });
 
+    it('diagnose --ablate prints what taking the unit out did', async () => {
+      const file = join(tempDir(), 'scenario.json');
+      const DEFECT = { verdict: 'defect', reason: 'It names no version.', quotes: ['API rule.'], fix: { find: 'API rule.', replace: 'API rule: call the v2 endpoint.' }, probe: { prompt: 'Add the endpoint.', expect: { command: 'v2' } } };
+      const behaviours = [
+        { when: { promptContains: 'You are diagnosing a miss' }, text: `\`\`\`json\n${JSON.stringify(DEFECT)}\n\`\`\``, calls: [] },
+        { when: { file: '.claude/rules/api.md', contains: 'v2' }, calls: [{ tool: 'Bash', input: { command: 'curl /v2/items' } }] },
+        { calls: [{ tool: 'Bash', input: { command: 'curl /v1/items' } }] },
+      ];
+      writeFileSync(file, JSON.stringify({ behaviours }));
+      vi.stubEnv('FAKE_CLAUDE_SCENARIO', file);
+      const dir = recorded((real) => real);
+
+      const run = (...extra: string[]) => cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), ...extra);
+      const { code, stdout } = await run('--ablate');
+      expect(code).toBe(0);
+      expect(stdout).toContain('\nWithout the unit, 2 runs a side: unchanged\n');
+      expect(stdout).toContain('\nTaking it out changes nothing: the unit does not drive the miss.\n');
+      expect((await run()).stdout).not.toContain('Without the unit');
+    });
+
     it("diagnose --open files for a defect, in the upstream's repository for a synced unit, and files nothing for a preference", async () => {
       const reply = (o: object) => {
         const file = join(tempDir(), 'scenario.json');

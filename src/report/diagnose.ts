@@ -14,6 +14,13 @@ const NO_FIX: Record<string, string> = {
   unclear: 'the moments are too thin to tell.',
 };
 const noFix = (p: Proposal) => NO_FIX[p.diagnosis.verdict] ?? 'only a correction says what was wanted.';
+// D98: what taking the unit out did to the miss's probe.
+const ABLATION: Partial<Record<ProbeOutcome['status'], string>> = {
+  improved: 'Taking it out does what was wanted: the unit itself causes the miss.',
+  unchanged: 'Taking it out changes nothing: the unit does not drive the miss.',
+  regressed: 'Taking it out makes it worse: the unit helps.',
+};
+const ablated = (a: ProbeOutcome) => ABLATION[a.status] ?? 'A budget cut it short, so what taking it out does is not known.';
 const CERTIFIED = "This unit is certified: the fix needs its owner's approval.";
 
 const expectation = (probe: Probe) => {
@@ -51,6 +58,9 @@ export function renderDiagnosis(p: Proposal, format: 'text' | 'json'): string {
   if (p.replay) {
     const row = (o: ProbeOutcome, role: string) => [`  ${printable(o.probe.id)}`, role, passes('base', o.base), passes('head', o.head), o.status];
     out.push('', `Replay, ${p.replay.runsPerArm} runs a side: ${p.replay.status}`, table([row(p.replay.miss, 'the miss'), ...p.replay.others.map((o) => row(o, 'existing'))]));
+    const a = p.replay.ablation;
+    if (a && 'skipped' in a) out.push('', `Without the unit: not run, as ${a.skipped}.`);
+    else if (a) out.push('', `Without the unit, ${p.replay.runsPerArm} runs a side: ${a.status}`, table([[`  ${printable(a.probe.id)}`, passes('base', a.base), passes('without', a.head), a.status]]), ablated(a));
   }
   const notes = [...steered(p), ...(p.unit.olderVersion ? [older(p)] : []), ...(p.tier === 'certified' ? [CERTIFIED] : [])];
   if (notes.length) out.push('', ...notes);
@@ -80,6 +90,9 @@ export function renderProposal(p: Proposal, repo: string): string {
   if (p.replay) {
     const said = (o: ProbeOutcome) => `${code(o.probe.id)}: ${passes('base', o.base)}, ${passes('head', o.head)}, ${o.status}`;
     out.push('', `- **Replay:** ${p.replay.status}, ${p.replay.runsPerArm} runs a side`, `  - the miss, ${said(p.replay.miss)}`, ...p.replay.others.map((o) => `  - ${said(o)}`));
+    const a = p.replay.ablation;
+    if (a && 'skipped' in a) out.push(`- **Without the unit:** not run, as ${a.skipped}.`);
+    else if (a) out.push(`- **Without the unit:** ${a.status}, ${passes('base', a.base)}, ${passes('without', a.head)}. ${ablated(a)}`);
   }
   for (const note of steered(p)) out.push('', note);
   if (p.unit.olderVersion) out.push('', older(p));

@@ -192,6 +192,7 @@ interface DiagnoseFlags {
   workdir?: string;
   drafts?: string;
   open?: boolean;
+  ablate?: boolean;
   gh?: string;
 }
 
@@ -441,6 +442,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .option('--claude <path>', "Claude Code's executable (default: claude on PATH)")
     .option('--workdir <dir>', 'where run folders go (default: $RUNNER_TEMP, or the system temp folder)')
     .option('--drafts <folder>', "write the proposal for the unit's owner into this folder")
+    .option('--ablate', "also replay the miss's probe with the unit taken out, to see whether the unit itself causes the miss")
     .option('--open', "file the proposal as an issue in the unit's GitHub repository, or update the one filed before; for a defect or a gap")
     .option('--gh <path>', "GitHub CLI's executable (default: gh on PATH)")
     .action(async (ref: string, dir: string | undefined, opts: DiagnoseFlags) => {
@@ -464,6 +466,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
         runs: opts.runs,
         maxRuns: opts.maxRuns,
         maxMinutes: opts.maxMinutes,
+        ablate: opts.ablate ?? false,
       });
       io.stdout(renderDiagnosis(p, opts.format));
       const text = renderProposal(p, shareable(repo));
