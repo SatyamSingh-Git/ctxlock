@@ -160,6 +160,28 @@ describe('readTranscript', () => {
     expect((await readTranscript(headless, 's1', later)).signals).toEqual([]);
   });
 
+  it('a session waiting on a subagent is quiet only once the subagent is: its own transcript counts', async () => {
+    const file = transcript([typed(1, 'review the branch'), tool(2, 'Agent', { description: 'review' })]);
+    const subagents = join(dirname(file), 's1', 'subagents');
+    mkdirSync(subagents, { recursive: true });
+    const agentAt = (ts: string) => writeFileSync(join(subagents, 'agent-a1.jsonl'), `${JSON.stringify({ ...tool(3, 'Read'), timestamp: '2026-11-11T10:00:03.000Z', isSidechain: true })}\n${JSON.stringify({ ...tool(4, 'Grep'), timestamp: ts, isSidechain: true })}\n`);
+    const kinds = async (now: string) => (await readTranscript(file, 's1', new Date(now))).signals.map((s) => s.kind);
+
+    // Two hours after the Agent call, its subagent wrote ten minutes ago: still going.
+    agentAt('2026-11-11T11:50:00.000Z');
+    expect(await kinds('2026-11-11T12:00:00.000Z')).toEqual([]);
+    // An hour after the subagent's last line, the session is abandoned, at the main thread's last line.
+    expect((await readTranscript(file, 's1', new Date('2026-11-11T12:50:00.000Z'))).signals).toMatchObject([{ kind: 'abandoned', ts: t(2) }]);
+    // A subagent quiet as long as the session changes nothing.
+    agentAt('2026-11-11T10:00:05.000Z');
+    expect(await kinds('2026-11-11T12:00:00.000Z')).toEqual(['abandoned']);
+    // A subagent that finished long before the session's last line doesn't make the session older.
+    const busy = transcript([typed(1, 'review the branch'), { ...tool(2, 'Bash'), timestamp: '2026-11-11T11:30:00.000Z' }]);
+    mkdirSync(join(dirname(busy), 's1', 'subagents'), { recursive: true });
+    writeFileSync(join(dirname(busy), 's1', 'subagents', 'agent-a1.jsonl'), `${JSON.stringify({ ...tool(3, 'Read'), isSidechain: true })}\n`);
+    expect((await readTranscript(busy, 's1', new Date('2026-11-11T12:00:00.000Z'))).signals).toEqual([]);
+  });
+
   it("a subagent's actions are not the turn's", async () => {
     const file = transcript([typed(1, 'start'), { ...tool(2, 'Bash', { command: 'rm -rf build' }), isSidechain: true }, tool(3, 'Read', { file_path: 'a.ts' }), interrupt(4)]);
 

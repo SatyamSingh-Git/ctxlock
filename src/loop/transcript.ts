@@ -105,13 +105,17 @@ const readsUntrusted = (line: Line) =>
   line.type === 'assistant' && Array.isArray(line.message?.content) && (line.message.content as Block[]).some((b) => b.type === 'tool_use' && typeof b.name === 'string' && untrustedTool(b.name));
 
 // A subagent keeps its own transcript beside the session's, and what it read reaches the session in its
-// report: the earliest web or MCP read there marks every signal after it.
-async function firstUntrustedInSubagents(file: string, session: string): Promise<string | null> {
+// report: the earliest web or MCP read there marks every signal after it. A subagent still running
+// keeps writing there while the session waits on it, so its latest line is the session's too.
+async function subagents(file: string, session: string): Promise<{ untrusted: string | null; latest: string | null }> {
   const folder = join(dirname(file), session, 'subagents');
-  if (!statSync(folder, { throwIfNoEntry: false })?.isDirectory()) return null;
   let first: string | null = null;
+  let latest: string | null = null;
+  if (!statSync(folder, { throwIfNoEntry: false })?.isDirectory()) return { untrusted: first, latest };
   for (const name of readdirSync(folder).filter((n) => n.endsWith('.jsonl'))) {
     for await (const text of lines(join(folder, name))) {
+      const ts = /"timestamp":"([^"]+)"/.exec(text)?.[1];
+      if (ts !== undefined && (latest === null || ts > latest)) latest = ts;
       if (!text.includes('"type":"assistant"')) continue;
       let line: Line;
       try {
@@ -122,7 +126,7 @@ async function firstUntrustedInSubagents(file: string, session: string): Promise
       if (typeof line.timestamp === 'string' && readsUntrusted(line) && (first === null || line.timestamp < first)) first = line.timestamp;
     }
   }
-  return first;
+  return { untrusted: first, latest };
 }
 
 // Transcripts run past 100 MB, so they are streamed. Only user and assistant lines matter.
@@ -133,7 +137,8 @@ export async function readTranscript(file: string, session: string, now = new Da
   const prompts: string[] = [];
   const compactions: string[] = [];
   const signals: Signal[] = [];
-  const fromSubagent = await firstUntrustedInSubagents(file, session);
+  const fromSubagents = await subagents(file, session);
+  const fromSubagent = fromSubagents.untrusted;
   let answered = false;
   let untrusted = false;
   // The current turn: the prompt that began it, and what the agent has done since.
@@ -203,8 +208,9 @@ export async function readTranscript(file: string, session: string, now = new Da
     if (CORRECTION.some((r) => r.test(opening.slice(0, 160)))) signals.push({ kind: 'correction', ts, untrusted, words: cut(opening, 160), ...turn });
   }
   // D97: a typed session that ended with the agent stopped, mid-tool or unanswered, and has been quiet since.
-  if (prompts.length > 0 && last?.left && now.getTime() - Date.parse(last.ts) >= HOUR) {
-    signals.push({ kind: 'abandoned', ts: last.ts, untrusted, ...(task !== undefined && { task }), actions });
+  if (prompts.length > 0 && last?.left) {
+    const quiet = fromSubagents.latest !== null && fromSubagents.latest > last.ts ? fromSubagents.latest : last.ts;
+    if (now.getTime() - Date.parse(quiet) >= HOUR) signals.push({ kind: 'abandoned', ts: last.ts, untrusted, ...(task !== undefined && { task }), actions });
   }
   return { session, prompts, compactions, signals };
 }
