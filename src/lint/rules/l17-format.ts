@@ -1,6 +1,7 @@
 import { Ajv2020, type ErrorObject } from 'ajv/dist/2020.js';
 import { parse } from 'yaml';
 import type { Finding } from '../../model.js';
+import { splitFrontmatter } from '../../units/frontmatter.js';
 import { isInstant, okfTimes, okfTrust } from '../../units/okf.js';
 import { OSSIE_SCHEMA } from '../../units/ossie-schema.js';
 import type { Rule } from '../types.js';
@@ -22,9 +23,9 @@ export const format: Rule = {
       const report = (severity: Finding['severity'], message: string) => findings.push({ rule: 'L17-format', severity, message, path: unit.path, unitId: unit.id });
 
       if (unit.kind === 'knowledge') {
-        // Frontmatter that does not parse is already L0-frontmatter's.
-        const fm = unit.frontmatter;
-        if (!fm) continue;
+        // Frontmatter that does not parse is already L0-frontmatter's; none at all is no type.
+        if (splitFrontmatter(unit.text).error !== null) continue;
+        const fm = unit.frontmatter ?? {};
         if (typeof fm.type !== 'string' || fm.type.trim() === '') report('must', `${unit.path} has no type: OKF needs a non-empty type string`);
         if ('status' in fm && !STATUSES.includes(fm.status as string)) report('should', `${unit.path} has status ${String(fm.status)}; OKF knows draft, stable and deprecated`);
         for (const [where, value] of okfTimes(fm)) {

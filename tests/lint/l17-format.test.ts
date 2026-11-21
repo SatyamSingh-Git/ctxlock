@@ -42,6 +42,9 @@ describe('L17-format', () => {
   it('a concept needs a type, a known status and timestamps with an offset', async () => {
     expect(await run({ ...KB, 'kb/a.md': concept("type: ''") })).toEqual([['L17-format', 'must', 'kb/a.md', 'kb/a.md has no type: OKF needs a non-empty type string']]);
     expect(await run({ ...KB, 'kb/a.md': concept('title: A') })).toEqual([['L17-format', 'must', 'kb/a.md', 'kb/a.md has no type: OKF needs a non-empty type string']]);
+    // No frontmatter at all is no type either; frontmatter that does not parse is L0-frontmatter's alone.
+    expect(await run({ ...KB, 'kb/README.md': '# Notes\n' })).toEqual([['L17-format', 'must', 'kb/README.md', 'kb/README.md has no type: OKF needs a non-empty type string']]);
+    expect(await run({ ...KB, 'kb/a.md': '---\ntype: [\n---\n' })).toEqual([]);
     expect(await run({ ...KB, 'kb/a.md': concept('type: Reference\nstatus: final') })).toEqual([
       ['L17-format', 'should', 'kb/a.md', 'kb/a.md has status final; OKF knows draft, stable and deprecated'],
     ]);
