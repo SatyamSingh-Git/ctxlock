@@ -122,8 +122,20 @@ describe('readTranscript', () => {
       back(15, 'g4', ''),
       call(16, 'm2', 'mcp__docs__diagram', { query: 'retry' }),
       back(17, 'm2', [{ type: 'image', source: {} }]),
-      said(18),
-      typed(19, 'no, it is in src/net'),
+      // An MCP tool that writes says nothing back when it works; one whose name says it reads is a search.
+      call(20, 'm3', 'mcp__github__create_issue', { title: 'retry' }),
+      back(21, 'm3', ''),
+      call(22, 'm4', 'mcp__github__list_issues', { query: 'retry' }),
+      back(23, 'm4', ''),
+      call(24, 'm5', 'mcp__gmail__searchThreads', { query: 'retry' }),
+      back(25, 'm5', ''),
+      // The server's name doesn't make its tools lookups.
+      call(28, 'm6', 'mcp__search__create_index', { query: 'retry' }),
+      back(29, 'm6', ''),
+      call(30, 'm7', 'mcp__docs__SearchPages', { query: 'retry' }),
+      back(31, 'm7', ''),
+      said(32),
+      typed(33, 'no, it is in src/net'),
     ]);
 
     const [signal] = (await readTranscript(file, 's1', SOON)).signals;
@@ -138,6 +150,11 @@ describe('readTranscript', () => {
       { tool: 'Grep', target: 'backoff', empty: true },
       // A diagram is something, though it has no text.
       { tool: 'mcp__docs__diagram', target: 'retry' },
+      { tool: 'mcp__github__create_issue', target: '' },
+      { tool: 'mcp__github__list_issues', target: 'retry', empty: true },
+      { tool: 'mcp__gmail__searchThreads', target: 'retry', empty: true },
+      { tool: 'mcp__search__create_index', target: 'retry' },
+      { tool: 'mcp__docs__SearchPages', target: 'retry', empty: true },
     ]);
   });
 

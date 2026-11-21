@@ -134,7 +134,7 @@ Runs: 5
 **What it sends to Claude,** and nothing else:
 - the unit's text;
 - for each signal it was in context for, the opening of the prompt that began the turn;
-- what the agent did in that turn: each tool's name, with its command, path or pattern, and "found nothing" after a Grep, Glob or MCP search whose result was empty. That says what the agent looked for and the unit didn't tell it, which is a gap's evidence;
+- what the agent did in that turn: each tool's name, with its command, path or pattern, and "found nothing" after a Grep, Glob or MCP search whose result was empty. An MCP tool is a search when its name says it looks something up (search, find, list, query, get, read, fetch, lookup or resolve); one that writes returns nothing when it works. That says what the agent looked for and the unit didn't tell it, which is a gap's evidence;
 - your correction.
 
 Everything after the unit's text is [redacted](#drafts-for-owners) first. The diagnosing run has no tools, so it can only answer.

@@ -84,7 +84,10 @@ const calls = (content: unknown): Block[] => (Array.isArray(content) ? (content 
 const actionOf = (b: Block): Action => ({ tool: b.name!, target: cut(String(TARGETS.map((k) => b.input?.[k]).find((v) => typeof v === 'string') ?? ''), 200) });
 
 // D96: only a search finding nothing is a gap's evidence; an empty file, or an image, says nothing.
-const searches = (tool: string) => tool === 'Grep' || tool === 'Glob' || tool.startsWith('mcp__');
+// An MCP tool counts only when its name says it looks something up: one that writes says nothing back
+// when it works.
+const LOOKS_UP = /(^|[_-])(search|find|list|query|lookup|get|read|fetch|resolve)/i;
+const searches = (tool: string) => tool === 'Grep' || tool === 'Glob' || (tool.startsWith('mcp__') && LOOKS_UP.test(tool.slice(tool.lastIndexOf('__') + 2)));
 const NOTHING = /^(No matches found|No files found)/;
 function foundNothing(content: unknown): boolean {
   if (typeof content === 'string') return content.trim() === '' || NOTHING.test(content.trim());
