@@ -29,6 +29,12 @@ export const graphRefs: Rule = {
         if (!files.some((f) => isProbeFile(f) && (f === path || f.startsWith(`${path}/`)))) report(`consumer ${c.name} lists evals ${path}, which holds no probe file`);
       }
     }
+
+    // A wrong path under knowledge: or metrics: would otherwise check nothing, and say nothing.
+    const holds = (kind: 'knowledge' | 'metric', path: string) =>
+      ctx.units.some((u) => u.kind === kind && (path === '.' || u.path === path || u.path.startsWith(`${path}/`)));
+    for (const path of ctx.registry.knowledge) if (!holds('knowledge', path)) report(`ctxlock.yaml lists ${path} under knowledge, which holds no concept`);
+    for (const path of ctx.registry.metrics) if (!holds('metric', path)) report(`ctxlock.yaml lists ${path} under metrics, which holds no model`);
     return findings;
   },
 };

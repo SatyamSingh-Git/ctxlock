@@ -36,7 +36,7 @@ export interface Declared {
 const NOT_CONCEPTS = new Set(['index.md', 'log.md']);
 const OSSIE_FILE = glob('**/*.ossie.yaml', '**/*.ossie.yml', '**/*.ossie.json');
 const MODEL_FILE = /\.(ya?ml|json)$/;
-const under = (path: string, folder: string) => path === folder || path.startsWith(`${folder}/`);
+const under = (path: string, folder: string) => folder === '.' || path === folder || path.startsWith(`${folder}/`);
 
 // An OKF bundle may declare itself with okf_version in its root index.md, the only frontmatter an index may carry.
 async function okfBundles(reader: RepoReader, reachable: Map<string, string>): Promise<string[]> {

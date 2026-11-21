@@ -66,4 +66,18 @@ consumers:
     expect(await run({ ...RULES, 'ctxlock.yaml': yaml })).toEqual([]);
     expect(await run({ ...rest, 'ctxlock.yaml': yaml })).toEqual([['should', 'ctxlock.yaml', '.claude/rules/b.md depends on .claude/rules/a.md, which is no unit']]);
   });
+
+  it('reports a knowledge: or metrics: entry that makes no unit', async () => {
+    const yaml = 'version: 1\nknowledge: [kb, docs]\nmetrics: [models/sales.yaml, semantic]\n';
+    const files = { 'ctxlock.yaml': yaml, 'kb/a.md': '---\ntype: Reference\n---\n', 'models/sales.yaml': 'name: sales\n', 'docs/readme.txt': 'not markdown' };
+    expect(await run(files)).toEqual([
+      ['should', 'ctxlock.yaml', 'ctxlock.yaml lists docs under knowledge, which holds no concept'],
+      ['should', 'ctxlock.yaml', 'ctxlock.yaml lists semantic under metrics, which holds no model'],
+    ]);
+    expect(await run({ 'ctxlock.yaml': 'version: 1\nknowledge: [.]\n', 'kb/a.md': '---\ntype: Reference\n---\n' })).toEqual([]);
+    // A folder of concepts holds no model.
+    expect(await run({ 'ctxlock.yaml': 'version: 1\nknowledge: [kb]\nmetrics: [kb]\n', 'kb/a.md': '---\ntype: Reference\n---\n' })).toEqual([
+      ['should', 'ctxlock.yaml', 'ctxlock.yaml lists kb under metrics, which holds no model'],
+    ]);
+  });
 });
