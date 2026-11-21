@@ -763,10 +763,11 @@ describe('ctxlock misses', () => {
     const m = JSON.parse(stdout);
     expect(m).toMatchObject({ sessions: 1, withTranscript: 1, withSignal: 1, signals: { interrupted: 1, correction: 1 }, minSessions: 3 });
     expect(m.units.map((u: { id: string; sessions: number; kinds: object }) => [u.id, u.sessions, u.kinds])).toEqual([
-      ['rule/.claude/rules/api.md', 1, { interrupted: 1, correction: 1 }],
-      ['instructions/CLAUDE.md', 1, { interrupted: 1, correction: 1 }],
+      ['rule/.claude/rules/api.md', 1, { interrupted: 1, correction: 1, abandoned: 1 }],
+      ['instructions/CLAUDE.md', 1, { interrupted: 1, correction: 1, abandoned: 1 }],
     ]);
-    expect(m.found.map((s: { words?: string }) => s.words)).toEqual([undefined, 'no, the v2 endpoint']);
+    // The interrupt, the correction, and the session left on that unanswered correction.
+    expect(m.found.map((s: { kind: string; words?: string }) => [s.kind, s.words])).toEqual([['interrupted', undefined], ['correction', 'no, the v2 endpoint'], ['abandoned', undefined]]);
     expect((await cli('misses', dir, '--min-sessions', '1')).stdout).toContain('Routed at 1 session or more: 2 units.');
   });
 
@@ -954,7 +955,8 @@ describe('ctxlock misses', () => {
       const { code, stdout } = await cli('outcomes', dir);
       expect(code).toBe(0);
       expect(stdout).toContain(`\nShipped fixes:\n  rule/.claude/rules/api.md  shipped 2026-11-11 in ${commit.slice(0, 7)}, 2.0 hours after its first signal\n`);
-      expect(stdout).toContain('\n    7 days   pending: so far 0 sessions\n');
+      // The fixture's fix shipped on 2026-11-11, so its 7-day window has closed, with no session that loaded it.
+      expect(stdout).toContain('\n    7 days   no session loaded the fix\n');
       expect(stdout).toContain('\n  Median time to fix     2.0 hours, over 1 fix\n');
 
       const json = JSON.parse((await cli('outcomes', dir, '--format', 'json')).stdout);

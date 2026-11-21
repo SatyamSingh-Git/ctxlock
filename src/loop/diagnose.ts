@@ -34,10 +34,12 @@ const lf = (text: string) => text.replace(/\r\n/g, '\n');
 // Only a correction says what was wanted (D84).
 const corrected = (m: UnitMiss) => m.signals.some((s) => s.kind === 'correction');
 
+const MOMENT = { interrupted: 'The person interrupted the agent', correction: 'The person corrected the agent', abandoned: 'The person left the session with the agent stopped or unanswered' } as const;
+
 // What the diagnosing run is told. Everything from the session is redacted first (D83).
 export function diagnosisPrompt(unit: Unit, m: UnitMiss): string {
   const moments = m.signals.flatMap((s, i) => [
-    `${i + 1}. ${s.kind === 'interrupted' ? 'The person interrupted the agent' : 'The person corrected the agent'} on ${s.ts.slice(0, 10)}.`,
+    `${i + 1}. ${MOMENT[s.kind]} on ${s.ts.slice(0, 10)}.`,
     `   The task: ${s.task === undefined ? '(not known)' : redact(s.task)}`,
     '   What the agent did in that turn:',
     ...(s.actions.length ? s.actions.map((a) => `     - ${a.tool}: ${redact(a.target)}${a.empty ? ' (found nothing)' : ''}`) : ['     (nothing)']),

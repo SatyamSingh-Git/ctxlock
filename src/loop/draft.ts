@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { code, plural } from '../report/markdown.js';
 import { lfDigest } from '../units/digest.js';
 import type { UnitMiss } from './misses.js';
+import { kindsText } from '../report/misses.js';
 import { redact } from './redact.js';
 
 // The first line of every draft, with the digest of what follows it. A file in the drafts folder without
@@ -30,7 +31,6 @@ export function fenced(text: string, lang = ''): string {
 
 // repo is where the unit belongs: this repository's name, or the upstream's repository for a synced unit.
 export function renderDraft(m: UnitMiss, repo: string, excerpts: boolean): string {
-  const kinds = [m.kinds.interrupted ? `${m.kinds.interrupted} interrupted` : '', m.kinds.correction ? plural(m.kinds.correction, 'correction') : ''].filter(Boolean);
   const [first, last] = [m.first.slice(0, 10), m.last.slice(0, 10)];
 
   const lines = [
@@ -42,7 +42,7 @@ export function renderDraft(m: UnitMiss, repo: string, excerpts: boolean): strin
       ? `- **Owners:** in ${code(m.upstream.name)}'s ctxlock.yaml or CODEOWNERS${m.owners.length ? `; in this repository, ${m.owners.join(', ')}` : ''}`
       : `- **Owners:** ${m.owners.length ? m.owners.join(', ') : 'none in ctxlock.yaml or CODEOWNERS'}`,
     `- **Sessions:** ${m.sessions}, of ${m.loadedIn} that loaded it${m.halved ? `; ${m.halved} counted at half, since it had read web or MCP content first` : ''}`,
-    `- **Signals:** ${kinds.join(', ')}, ${first === last ? `on ${first}` : `from ${first} to ${last}`}${m.inTurn ? `; ${m.inTurn} came in the turn it loaded` : ''}`,
+    `- **Signals:** ${kindsText(m.kinds)}, ${first === last ? `on ${first}` : `from ${first} to ${last}`}${m.inTurn ? `; ${m.inTurn} came in the turn it loaded` : ''}`,
     `- **Digest today:** ${code(m.digest)}${m.olderVersion ? `; ${m.olderVersion} of these sessions loaded other bytes` : ''}`,
     ...(m.everySession ? ['', "It loaded in every session, so exposure alone can't single it out."] : []),
   ];

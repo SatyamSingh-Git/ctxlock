@@ -99,7 +99,7 @@ describe('findMisses', () => {
     const { scan, load, timeline } = await setup();
     const m = findMisses([timeline('s1', 0, [load(CLAUDE, 0)])], new Map([said('s1', [1], [{ kind: 'interrupted', ts: t(2) }])]), scan, { minSessions: 3 });
 
-    expect(m.units.map((u) => [u.id, u.kinds])).toEqual([[CLAUDE, { interrupted: 1, correction: 0 }]]);
+    expect(m.units.map((u) => [u.id, u.kinds])).toEqual([[CLAUDE, { interrupted: 1, correction: 0, abandoned: 0 }]]);
   });
 
   it('a unit reached in three sessions is routed, and in two it is not; two signals in one session count once', async () => {
@@ -111,6 +111,14 @@ describe('findMisses', () => {
     const three = findMisses(timelines, transcripts, scan, { minSessions: 3 }).units[0]!;
     expect(three).toMatchObject({ id: API, sessions: 3, kinds: { interrupted: 6, correction: 0 }, first: t(3), last: t(4), routed: true });
     expect(findMisses(timelines.slice(1), transcripts, scan, { minSessions: 3 }).units[0]).toMatchObject({ sessions: 2, routed: false });
+  });
+
+  it('an abandoned session is routed once per unit with its other signals, and its kinds say both', async () => {
+    const { scan, load, timeline } = await setup();
+    const m = findMisses([timeline('s1', 0, [load(API, 2)])], new Map([said('s1', [1], [{ kind: 'interrupted', ts: t(3) }, { kind: 'abandoned', ts: t(3) }])]), scan, { minSessions: 1 });
+
+    expect(m.units[0]).toMatchObject({ id: API, sessions: 1, kinds: { interrupted: 1, correction: 0, abandoned: 1 }, routed: true });
+    expect(m.signals).toEqual({ interrupted: 1, correction: 0, abandoned: 1 });
   });
 
   it('a session whose signals came after a web or MCP tool counts half', async () => {
@@ -182,7 +190,7 @@ describe('findMisses', () => {
       ['correction', t(5), true, []],
       ['interrupted', t(13), false, [API]],
     ]);
-    expect(m.units.map((u) => [u.id, u.kinds])).toEqual([[API, { interrupted: 1, correction: 0 }]]);
+    expect(m.units.map((u) => [u.id, u.kinds])).toEqual([[API, { interrupted: 1, correction: 0, abandoned: 0 }]]);
   });
 
   it('since is a date where the person is, not in UTC', async () => {

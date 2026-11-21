@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Misses, UnitMiss } from '../../src/loop/misses.js';
-import { renderMisses } from '../../src/report/misses.js';
+import { renderDraft } from '../../src/loop/draft.js';
+import { kindsText, renderMisses } from '../../src/report/misses.js';
 
 const t = (day: number) => `2026-11-${String(day).padStart(2, '0')}T10:00:00.000Z`;
 const unit = (over: Partial<UnitMiss>): UnitMiss => ({
@@ -15,7 +16,7 @@ const unit = (over: Partial<UnitMiss>): UnitMiss => ({
   loadedIn: 2,
   everySession: false,
   olderVersion: 0,
-  kinds: { interrupted: 1, correction: 0 },
+  kinds: { interrupted: 1, correction: 0, abandoned: 0 },
   first: t(9),
   last: t(9),
   routed: false,
@@ -30,7 +31,7 @@ const MISSES: Misses = {
   sessions: 9,
   withTranscript: 7,
   withSignal: 3,
-  signals: { interrupted: 1, correction: 2 },
+  signals: { interrupted: 1, correction: 2, abandoned: 0 },
   untrusted: 1,
   unattributed: 1,
   unrecorded: 2,
@@ -38,11 +39,22 @@ const MISSES: Misses = {
   minSessions: 3,
   found: [correction, unjoined],
   units: [
-    unit({ sessions: 3, inTurn: 2, loadedIn: 5, owners: ['@platform'], routed: true, kinds: { interrupted: 1, correction: 2 }, signals: [correction] }),
+    unit({ sessions: 3, inTurn: 2, loadedIn: 5, owners: ['@platform'], routed: true, kinds: { interrupted: 1, correction: 2, abandoned: 0 }, signals: [correction] }),
     unit({ id: 'skill/.claude/skills/release', path: '.claude/skills/release', upstream: { name: 'platform', repo: '../org' } }),
     unit({ id: 'instructions/CLAUDE.md', path: 'CLAUDE.md', sessions: 2.5, loadedIn: 9, everySession: true }),
   ],
 };
+
+describe('kindsText', () => {
+  it('misses text, drafts and diagnose name abandoned sessions', () => {
+    expect(kindsText({ interrupted: 1, correction: 2, abandoned: 1 })).toBe('1 interrupted, 2 corrections, 1 abandoned');
+    expect(kindsText({ interrupted: 0, correction: 1, abandoned: 0 })).toBe('1 correction');
+    const abandoned = { ...MISSES, signals: { interrupted: 0, correction: 0, abandoned: 2 } };
+    expect(renderMisses(abandoned, 'text', false)).toContain('Signals: 2 abandoned, in 3 sessions');
+    const unit = { ...MISSES.units[0]!, kinds: { interrupted: 0, correction: 1, abandoned: 1 } };
+    expect(renderDraft(unit, 'web', false)).toContain('- **Signals:** 1 correction, 1 abandoned, ');
+  });
+});
 
 describe('renderMisses', () => {
   it('text lists units by sessions, marks routed and everySession, and names an upstream', () => {
@@ -79,7 +91,7 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
   });
 
   it('says when nothing is routed, when there are no signals, and when no session was recorded', () => {
-    const quiet: Misses = { ...MISSES, withSignal: 0, signals: { interrupted: 0, correction: 0 }, untrusted: 0, unattributed: 0, unrecorded: 0, units: [], since: '2026-11-10' };
+    const quiet: Misses = { ...MISSES, withSignal: 0, signals: { interrupted: 0, correction: 0, abandoned: 0 }, untrusted: 0, unattributed: 0, unrecorded: 0, units: [], since: '2026-11-10' };
     expect(renderMisses(quiet, 'text', false)).toBe(`ctxlock misses · 9 sessions, 7 with a transcript · since 2026-11-10
 
 Signals: none

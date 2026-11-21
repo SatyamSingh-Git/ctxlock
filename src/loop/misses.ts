@@ -62,7 +62,7 @@ export interface Misses {
   units: UnitMiss[];
 }
 
-const none = (): Record<SignalKind, number> => ({ interrupted: 0, correction: 0 });
+const none = (): Record<SignalKind, number> => ({ interrupted: 0, correction: 0, abandoned: 0 });
 
 const ids = (loads: SessionLoad[]) => [...new Set(loads.map((l) => l.unit.id))].sort();
 

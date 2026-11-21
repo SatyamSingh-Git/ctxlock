@@ -5,6 +5,7 @@ import { fenced, marked } from '../loop/draft.js';
 import type { Proposal, Replay } from '../loop/propose.js';
 import { sessions } from './graph.js';
 import { code, plural } from './markdown.js';
+import { kindsText } from './misses.js';
 import { printable, table } from './render.js';
 
 const NO_FIX: Record<string, string> = {
@@ -20,8 +21,7 @@ const expectation = (probe: Probe) => {
   return `${probe.not ? 'not ' : ''}${kind} /${pattern}/`;
 };
 const passes = (side: string, a: ArmResult | null) => (a ? `${side} ${a.passed}/${a.valid}` : `${side} -`);
-const signals = (p: Proposal) =>
-  [p.unit.kinds.interrupted ? `${p.unit.kinds.interrupted} interrupted` : '', p.unit.kinds.correction ? plural(p.unit.kinds.correction, 'correction') : ''].filter(Boolean).join(', ');
+const signals = (p: Proposal) => kindsText(p.unit.kinds);
 // Split before printable, which would turn the newlines and tabs of a fix into ?.
 const lines = (prefix: string, text: string) => text.split('\n').map((l) => `${prefix}${l.split('\t').map(printable).join('\t')}`);
 const PROBE_SAYS: Record<Replay['status'], string> = {

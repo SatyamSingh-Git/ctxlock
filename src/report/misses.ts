@@ -1,4 +1,5 @@
 import type { Misses, UnitMiss } from '../loop/misses.js';
+import type { SignalKind } from '../loop/transcript.js';
 import { block, sessions } from './graph.js';
 import { INSTALL } from './loads.js';
 import { plural } from './markdown.js';
@@ -17,6 +18,9 @@ const rows = (units: UnitMiss[]) =>
 const SAID = new Set(['words', 'task', 'actions']);
 
 // A person's words appear only with --excerpts (D82).
+export const kindsText = (k: Record<SignalKind, number>, sep = ', ') =>
+  [k.interrupted ? `${k.interrupted} interrupted` : '', k.correction ? plural(k.correction, 'correction') : '', k.abandoned ? `${k.abandoned} abandoned` : ''].filter(Boolean).join(sep);
+
 export function renderMisses(m: Misses, format: 'text' | 'json', excerpts: boolean): string {
   if (format === 'json') {
     // A signal is in context for many units; each unit names it by its place in found.
@@ -27,11 +31,10 @@ export function renderMisses(m: Misses, format: 'text' | 'json', excerpts: boole
   if (m.sessions === 0) return `${['ctxlock misses · no Claude Code sessions recorded for this repository', '', ...INSTALL].join('\n')}\n`;
 
   const lines = [`ctxlock misses · ${sessions(m.sessions)}, ${m.withTranscript} with a transcript${m.since ? ` · since ${m.since}` : ''}`, ''];
-  const total = m.signals.interrupted + m.signals.correction;
+  const total = m.signals.interrupted + m.signals.correction + m.signals.abandoned;
   if (total === 0) return `${[...lines, 'Signals: none'].join('\n')}\n`;
 
-  const kinds = [m.signals.interrupted ? `${m.signals.interrupted} interrupted` : '', m.signals.correction ? plural(m.signals.correction, 'correction') : ''].filter(Boolean);
-  lines.push(`Signals: ${kinds.join(' · ')}, in ${sessions(m.withSignal)}${m.untrusted ? ` · ${m.untrusted} after web or MCP content` : ''}`);
+  lines.push(`Signals: ${kindsText(m.signals, ' · ')}, in ${sessions(m.withSignal)}${m.untrusted ? ` · ${m.untrusted} after web or MCP content` : ''}`);
   lines.push(...block('Units in context when the agent was stopped or corrected', rows(m.units.filter((u) => !u.everySession))));
   lines.push(...block("In every session, so exposure can't single them out", rows(m.units.filter((u) => u.everySession))));
   if (excerpts) {

@@ -18,7 +18,7 @@ const signal: MissSignal = {
 };
 const MISS: UnitMiss = {
   id: ID, path: '.claude/rules/deps.md', digest: 'sha256:x', owners: [], upstream: null, sessions: 1, halved: 0, inTurn: 1, loadedIn: 1, everySession: false, olderVersion: 0,
-  kinds: { interrupted: 0, correction: 1 }, first: signal.ts, last: signal.ts, routed: false, signals: [signal],
+  kinds: { interrupted: 0, correction: 1, abandoned: 0 }, first: signal.ts, last: signal.ts, routed: false, signals: [signal],
 };
 
 const DEFECT = {

@@ -17,7 +17,7 @@ const MISS: UnitMiss = {
   loadedIn: 5,
   everySession: false,
   olderVersion: 1,
-  kinds: { interrupted: 2, correction: 1 },
+  kinds: { interrupted: 2, correction: 1, abandoned: 0 },
   first: t(8),
   last: t(11),
   routed: true,

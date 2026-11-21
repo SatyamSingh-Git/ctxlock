@@ -24,7 +24,7 @@ async function unit(id = ID) {
 const signal = (over: Partial<MissSignal>): MissSignal => ({ session: 's1', kind: 'correction', ts: '2026-11-12T10:00:00.000Z', untrusted: false, actions: [], context: [ID], turn: [ID], ...over });
 const miss = (signals: MissSignal[]): UnitMiss => ({
   id: ID, path: '.claude/rules/deps.md', digest: 'sha256:x', owners: [], upstream: null, sessions: 1, halved: 0, inTurn: 1, loadedIn: 1, everySession: false, olderVersion: 0,
-  kinds: { interrupted: 0, correction: 1 }, first: signals[0]!.ts, last: signals[0]!.ts, routed: true, signals,
+  kinds: { interrupted: 0, correction: 1, abandoned: 0 }, first: signals[0]!.ts, last: signals[0]!.ts, routed: true, signals,
 });
 const CORRECTED = miss([signal({ task: `add dayjs, token ${TOKEN}`, actions: [{ tool: 'Bash', target: 'npm install dayjs --prefix C:\\Users\\Satyam Singh\\app' }], words: 'no, we use pnpm here: mail sam@example.com' })]);
 const STOPPED = miss([signal({ kind: 'interrupted', task: 'add dayjs', actions: [{ tool: 'Bash', target: 'npm install dayjs' }] })]);
@@ -57,6 +57,8 @@ describe('diagnosisPrompt', () => {
     const p = diagnosisPrompt(await unit(), searched);
 
     expect(p).toContain('\n     - Grep: packageManager (found nothing)\n     - Bash: npm install dayjs\n');
+    const left = diagnosisPrompt(await unit(), miss([signal({ kind: 'abandoned' })]));
+    expect(left).toContain('1. The person left the session with the agent stopped or unanswered on 2026-11-12.');
   });
 
   it('a moment after web or MCP content is marked, to be weighed less', async () => {

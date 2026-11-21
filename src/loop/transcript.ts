@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-export type SignalKind = 'interrupted' | 'correction';
+export type SignalKind = 'interrupted' | 'correction' | 'abandoned';
 
 export interface Signal {
   kind: SignalKind;
@@ -126,7 +126,10 @@ async function firstUntrustedInSubagents(file: string, session: string): Promise
 }
 
 // Transcripts run past 100 MB, so they are streamed. Only user and assistant lines matter.
-export async function readTranscript(file: string, session: string): Promise<SessionTranscript> {
+const HOUR = 60 * 60 * 1000;
+
+// now is when the transcript is read: a session quiet for less than an hour may still be going (D97).
+export async function readTranscript(file: string, session: string, now = new Date()): Promise<SessionTranscript> {
   const prompts: string[] = [];
   const compactions: string[] = [];
   const signals: Signal[] = [];
@@ -138,6 +141,8 @@ export async function readTranscript(file: string, session: string): Promise<Ses
   let actions: Action[] = [];
   // The turn's calls by tool_use_id, so a result that comes back later marks its own action.
   let open = new Map<string, Action>();
+  // The main thread's last line, and whether it left the agent stopped, mid-tool or unanswered.
+  let last: { ts: string; left: boolean } | null = null;
   for await (const text of lines(file)) {
     if (!text.includes('"type":"user"') && !text.includes('"type":"assistant"') && !text.includes('"compact_boundary"')) continue;
     let line: Line;
@@ -158,6 +163,7 @@ export async function readTranscript(file: string, session: string): Promise<Ses
 
     if (line.type === 'assistant') {
       answered = true;
+      last = { ts, left: calls(content).length > 0 };
       for (const b of calls(content)) {
         if (actions.length >= 20) break;
         const action = actionOf(b);
@@ -172,17 +178,20 @@ export async function readTranscript(file: string, session: string): Promise<Ses
         const action = b.type === 'tool_result' && b.tool_use_id ? open.get(b.tool_use_id) : undefined;
         if (action && searches(action.tool) && foundNothing(b.content)) action.empty = true;
       }
+      if ((content as Block[]).some((b) => b.type === 'tool_result')) last = { ts, left: true };
     }
 
     const turn = { ...(task !== undefined && { task }), actions };
     if (texts(content).some((t) => INTERRUPT.test(t))) {
       signals.push({ kind: 'interrupted', ts, untrusted, ...turn });
+      last = { ts, left: true };
       continue;
     }
     if (line.isMeta || (line.origin?.kind !== 'human' && line.turnOrigin !== 'human')) continue;
     const prompt = texts(content).join('\n').trim();
     if (!prompt) continue;
     prompts.push(ts);
+    last = { ts, left: true };
     // A new turn begins; a compaction's summary is no one's task.
     const summary = prompt.startsWith(SUMMARY);
     task = summary ? undefined : cut(unpasted(prompt), 300);
@@ -192,6 +201,10 @@ export async function readTranscript(file: string, session: string): Promise<Ses
     // The phrases are matched on exactly the first 160 characters.
     const opening = unpasted(prompt);
     if (CORRECTION.some((r) => r.test(opening.slice(0, 160)))) signals.push({ kind: 'correction', ts, untrusted, words: cut(opening, 160), ...turn });
+  }
+  // D97: a typed session that ended with the agent stopped, mid-tool or unanswered, and has been quiet since.
+  if (prompts.length > 0 && last?.left && now.getTime() - Date.parse(last.ts) >= HOUR) {
+    signals.push({ kind: 'abandoned', ts: last.ts, untrusted, ...(task !== undefined && { task }), actions });
   }
   return { session, prompts, compactions, signals };
 }

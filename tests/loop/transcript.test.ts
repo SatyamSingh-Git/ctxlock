@@ -7,6 +7,8 @@ import { cleanup, tempDir } from '../helpers/repo.js';
 
 afterAll(cleanup);
 
+// Read just after the fixtures were written, so a session that ends mid-tool isn't yet abandoned.
+const SOON = new Date('2026-11-11T10:30:00.000Z');
 const t = (second: number) => `2026-11-11T10:00:${String(second).padStart(2, '0')}.000Z`;
 const base = (second: number) => ({ parentUuid: null, isSidechain: false, timestamp: t(second), sessionId: 's1', cwd: 'F:\\repo' });
 // A prompt the person typed, in the shape Claude Code 2.1 writes.
@@ -35,7 +37,7 @@ describe('readTranscript', () => {
       said(5),
     ]);
 
-    expect(await readTranscript(file, 's1')).toEqual({
+    expect(await readTranscript(file, 's1', SOON)).toEqual({
       session: 's1',
       prompts: [t(1), t(4)],
       compactions: [],
@@ -57,7 +59,7 @@ describe('readTranscript', () => {
       typed(7, 'stop, that was enough'),
     ]);
 
-    const [stopped, corrected, again] = (await readTranscript(file, 's1')).signals;
+    const [stopped, corrected, again] = (await readTranscript(file, 's1', SOON)).signals;
     expect(stopped).toMatchObject({ kind: 'interrupted', task: 'add the dayjs package', actions: [{ tool: 'Read', target: 'package.json' }, { tool: 'Bash', target: 'npm install dayjs' }] });
     // A correction answers the turn before it.
     expect(corrected).toMatchObject({ kind: 'correction', task: 'add the dayjs package', actions: [{ tool: 'Read', target: 'package.json' }, { tool: 'Bash', target: 'npm install dayjs' }] });
@@ -68,7 +70,7 @@ describe('readTranscript', () => {
     const many = Array.from({ length: 25 }, (_, i) => tool(2 + i, 'Bash', { command: `echo ${i} ${'x '.repeat(150)}` }));
     const file = transcript([typed(1, `fix it <pasted_content id="p">secret paste</pasted_content id="p"> ${'please '.repeat(60)}`), ...many, interrupt(40)]);
 
-    const [signal] = (await readTranscript(file, 's1')).signals;
+    const [signal] = (await readTranscript(file, 's1', SOON)).signals;
     expect(signal!.actions).toHaveLength(20);
     expect(signal!.actions[0]!.target).toHaveLength(200);
     expect(signal!.task).toBe(`fix it   ${'please '.repeat(41)}please`);
@@ -87,7 +89,7 @@ describe('readTranscript', () => {
       typed(5, `no, ${'c '.repeat(76)}${token} ok`),
     ]);
 
-    const [signal] = (await readTranscript(file, 's1')).signals;
+    const [signal] = (await readTranscript(file, 's1', SOON)).signals;
     expect(signal!.task!.endsWith(token)).toBe(true);
     expect(signal!.actions[0]!.target.endsWith(token)).toBe(true);
     expect(signal!.words!.endsWith(token)).toBe(true);
@@ -124,7 +126,7 @@ describe('readTranscript', () => {
       typed(19, 'no, it is in src/net'),
     ]);
 
-    const [signal] = (await readTranscript(file, 's1')).signals;
+    const [signal] = (await readTranscript(file, 's1', SOON)).signals;
     expect(signal!.actions).toEqual([
       { tool: 'Grep', target: 'retryWithBackoff', empty: true },
       { tool: 'Glob', target: 'src/**/retry*.ts' },
@@ -139,16 +141,32 @@ describe('readTranscript', () => {
     ]);
   });
 
+  it('a session that ends on an interrupt, a tool call, a tool result or an unanswered prompt, an hour or more ago, is abandoned at its last line; one that ends on an answer, or less than an hour ago, is not', async () => {
+    const later = new Date('2026-11-11T11:00:59.000Z');
+    const abandoned = async (tail: object[], now = later) => (await readTranscript(transcript([typed(1, 'add the endpoint'), ...tail]), 's1', now)).signals.filter((s) => s.kind === 'abandoned');
+
+    expect(await abandoned([tool(2, 'Bash', { command: 'npm test' })])).toEqual([{ kind: 'abandoned', ts: t(2), untrusted: false, task: 'add the endpoint', actions: [{ tool: 'Bash', target: 'npm test' }] }]);
+    expect((await abandoned([tool(2, 'Bash'), result(3, 'ok')])).map((s) => s.ts)).toEqual([t(3)]);
+    expect((await abandoned([said(2), typed(3, 'and the tests')])).map((s) => s.ts)).toEqual([t(3)]);
+    expect((await abandoned([tool(2, 'Bash'), interrupt(3)])).map((s) => s.ts)).toEqual([t(3)]);
+    expect(await abandoned([said(2)])).toEqual([]);
+    // Less than an hour after its last line, the session may still be going: this one, say.
+    expect(await abandoned([tool(2, 'Bash')], new Date('2026-11-11T10:59:59.000Z'))).toEqual([]);
+    // A claude -p run has no typed prompt: nobody left it.
+    const headless = transcript([{ ...base(1), type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'run it' }] } }, tool(2, 'Bash')]);
+    expect((await readTranscript(headless, 's1', later)).signals).toEqual([]);
+  });
+
   it("a subagent's actions are not the turn's", async () => {
     const file = transcript([typed(1, 'start'), { ...tool(2, 'Bash', { command: 'rm -rf build' }), isSidechain: true }, tool(3, 'Read', { file_path: 'a.ts' }), interrupt(4)]);
 
-    expect((await readTranscript(file, 's1')).signals[0]!.actions).toEqual([{ tool: 'Read', target: 'a.ts' }]);
+    expect((await readTranscript(file, 's1', SOON)).signals[0]!.actions).toEqual([{ tool: 'Read', target: 'a.ts' }]);
   });
 
   it("a long correction keeps only its opening, without pasted text, as its words", async () => {
     const file = transcript([typed(1, 'start'), said(2), typed(3, `no, <pasted_content id="p">secret</pasted_content id="p"> use ${'the shared helper '.repeat(20)}`)]);
 
-    const words = (await readTranscript(file, 's1')).signals[0]!.words!;
+    const words = (await readTranscript(file, 's1', SOON)).signals[0]!.words!;
     // 160 characters, to the end of the word the cut falls in.
     expect(words).toBe(`no,   use ${'the shared helper '.repeat(8)}the shared`);
     expect(words).not.toContain('secret');
@@ -167,7 +185,7 @@ describe('readTranscript', () => {
       typed(8, `${'Here is the plan for the release notes and the changelog. '.repeat(3)}Then I meant to add a section.`),
     ]);
 
-    expect((await readTranscript(file, 's1')).signals).toEqual([]);
+    expect((await readTranscript(file, 's1', SOON)).signals).toEqual([]);
   });
 
   it('a prompt before the agent\'s first answer, a claude -p prompt, a meta line and a sidechain line are no correction', async () => {
@@ -179,7 +197,7 @@ describe('readTranscript', () => {
       { ...typed(5, 'no, use bun'), isSidechain: true },
     ]);
 
-    const read = await readTranscript(file, 's1');
+    const read = await readTranscript(file, 's1', SOON);
     expect(read.signals).toEqual([]);
     expect(read.prompts).toEqual([t(1)]);
   });
@@ -187,10 +205,10 @@ describe('readTranscript', () => {
   it('a signal after WebFetch, WebSearch or an MCP tool is untrusted, and one before is not', async () => {
     for (const name of ['WebFetch', 'WebSearch', 'mcp__github__get_issue']) {
       const file = transcript([typed(1, 'start'), said(2), interrupt(3), tool(4, name), interrupt(5)]);
-      expect((await readTranscript(file, 's1')).signals.map((s) => s.untrusted), name).toEqual([false, true]);
+      expect((await readTranscript(file, 's1', SOON)).signals.map((s) => s.untrusted), name).toEqual([false, true]);
     }
     const file = transcript([typed(1, 'start'), tool(2, 'Read'), interrupt(3)]);
-    expect((await readTranscript(file, 's1')).signals[0]!.untrusted).toBe(false);
+    expect((await readTranscript(file, 's1', SOON)).signals[0]!.untrusted).toBe(false);
   });
 
   it("a signal after a subagent's web fetch is untrusted too, read from the session's subagent transcripts", async () => {
@@ -200,27 +218,27 @@ describe('readTranscript', () => {
     writeFileSync(join(subagents, 'agent-a1.jsonl'), `${JSON.stringify({ ...tool(4, 'WebFetch'), isSidechain: true })}\n`);
     writeFileSync(join(subagents, 'agent-a1.meta.json'), '{}');
 
-    expect((await readTranscript(file, 's1')).signals.map((s) => s.untrusted)).toEqual([false, true]);
+    expect((await readTranscript(file, 's1', SOON)).signals.map((s) => s.untrusted)).toEqual([false, true]);
     // A second subagent, read after the first, fetched earlier still.
     writeFileSync(join(subagents, 'agent-b2.jsonl'), `${JSON.stringify({ ...tool(2, 'WebSearch'), isSidechain: true })}\n`);
-    expect((await readTranscript(file, 's1')).signals.map((s) => s.untrusted)).toEqual([true, true]);
+    expect((await readTranscript(file, 's1', SOON)).signals.map((s) => s.untrusted)).toEqual([true, true]);
 
     // Older versions write the subagent's lines into the session's own file.
     const inline = transcript([typed(1, 'start'), said(2), interrupt(3), { ...tool(4, 'mcp__docs__search'), isSidechain: true }, interrupt(5)]);
-    expect((await readTranscript(inline, 's1')).signals.map((s) => s.untrusted)).toEqual([false, true]);
+    expect((await readTranscript(inline, 's1', SOON)).signals.map((s) => s.untrusted)).toEqual([false, true]);
   });
 
   it("records when the session was compacted, and not when a subagent's was", async () => {
     const boundary = (second: number) => ({ ...base(second), type: 'system', subtype: 'compact_boundary', content: 'Conversation compacted' });
     const file = transcript([typed(1, 'start'), said(2), boundary(3), { ...boundary(4), isSidechain: true }, said(5), boundary(6)]);
 
-    expect((await readTranscript(file, 's1')).compactions).toEqual([t(3), t(6)]);
+    expect((await readTranscript(file, 's1', SOON)).compactions).toEqual([t(3), t(6)]);
   });
 
   it('a last line cut short is skipped and the rest is read', async () => {
     const file = transcript([typed(1, 'start'), said(2), interrupt(3)], JSON.stringify(interrupt(4)).slice(0, 40));
 
-    expect((await readTranscript(file, 's1')).signals.map((s) => s.ts)).toEqual([t(3)]);
+    expect((await readTranscript(file, 's1', SOON)).signals.map((s) => s.ts)).toEqual([t(3)]);
   });
 });
 
