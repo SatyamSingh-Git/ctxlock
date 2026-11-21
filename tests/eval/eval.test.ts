@@ -74,6 +74,26 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect(r.claudeVersion).toBe('2.1.292');
   });
 
+  it('eval runs an answer probe on a knowledge unit, base against head', async () => {
+    scenario({
+      behaviours: [
+        { when: { file: 'kb/nrr.md', contains: 'segment' }, text: 'NRR by segment: SMB 98%, enterprise 112%.', calls: [] },
+        { text: 'NRR is 104%; the model has no breakdown.', calls: [] },
+      ],
+    });
+    const probe = "version: 1\nprobes:\n  - id: nrr-by-segment\n    unit: knowledge/kb/nrr.md\n    prompt: What is NRR by customer segment?\n    expect:\n      answer: 'by segment'\n";
+    const concept = (body: string) => `---\ntype: Metric\n---\n${body}\n`;
+    const root = await repo(
+      { 'kb/index.md': '---\nokf_version: "0.2"\n---\n', 'kb/nrr.md': concept('Net revenue retention.'), 'evals/probes/nrr.yaml': probe },
+      { 'kb/nrr.md': concept('Net revenue retention, reported by customer segment.') },
+    );
+
+    const r = await runEval(options(root));
+
+    expect(r.changedUnits).toEqual(['knowledge/kb/nrr.md']);
+    expect(r.outcomes).toMatchObject([{ probe: { id: 'nrr-by-segment' }, status: 'improved', base: { passed: 0, valid: 3 }, head: { passed: 3, valid: 3 } }]);
+  });
+
   it('runs the probes of what depends on the change and of the consumers it reaches, says why each ran, and runs the changed first', async () => {
     const yaml =
       'version: 1\nunits:\n  AGENTS.md:\n    depends-on: [.claude/rules/x.md]\nconsumers:\n  payments-api:\n    depends-on: [.claude/rules/x.md]\n    evals: [evals/probes/payments.yaml]\n  web:\n    depends-on: [.claude/rules/z.md]\n    evals: [evals/probes/other.yaml]\n';

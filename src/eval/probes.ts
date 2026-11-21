@@ -5,7 +5,8 @@ import type { RepoReader } from '../repo/reader.js';
 import { sha256Hex } from '../units/digest.js';
 import type { Transcript } from './claude.js';
 
-export type Expectation = { command: string } | { edit: string } | { skill: string };
+// answer is tested against the final reply, which only grading reads (D105).
+export type Expectation = { command: string } | { edit: string } | { skill: string } | { answer: string };
 
 export interface Probe {
   id: string;
@@ -32,6 +33,7 @@ const schema = z.strictObject({
         command: z.string().optional(),
         edit: z.string().optional(),
         skill: z.string().optional(),
+        answer: z.string().optional(),
         not: z.boolean().default(false),
       }),
     }),
@@ -49,8 +51,8 @@ export function parseProbeFile(text: string, file: string): Probe[] {
   if (!result.success) throw new ProbeError(`${file}: ${result.error.issues.map(describeIssue).join('; ')}`);
 
   return result.data.probes.map(({ id, unit, prompt, expect: { not, ...given } }) => {
-    const keys = Object.keys(given) as Array<'command' | 'edit' | 'skill'>;
-    if (keys.length !== 1) throw new ProbeError(`${file}: probe ${id}: expect needs exactly one of command, edit, skill`);
+    const keys = Object.keys(given) as Array<'command' | 'edit' | 'skill' | 'answer'>;
+    if (keys.length !== 1) throw new ProbeError(`${file}: probe ${id}: expect needs exactly one of command, edit, skill, answer`);
     const key = keys[0]!;
     const value = given[key]!;
     if (key !== 'skill') {
@@ -87,6 +89,8 @@ export function grade(probe: Probe, t: Transcript): boolean {
   const met =
     'command' in e ? t.commands.some((c) => new RegExp(e.command).test(c))
     : 'edit' in e ? t.edits.some((p) => new RegExp(e.edit).test(p))
+    // A fact's wording varies in case; a command's does not.
+    : 'answer' in e ? new RegExp(e.answer, 'i').test(t.text)
     : t.skills.includes(e.skill);
   return met !== probe.not;
 }

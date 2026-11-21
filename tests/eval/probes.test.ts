@@ -70,7 +70,7 @@ describe('loadProbes', () => {
       /duplicate probe id deps-use-pnpm \(evals\/probes\/a\.yaml, evals\/probes\/b\.yaml\)/,
     );
     expect(await errorOf({ 'evals/probes/a.yaml': PNPM.replace('      command:', '      skill: x\n      command:') })).toMatch(
-      /probe deps-use-pnpm: expect needs exactly one of command, edit, skill/,
+      /probe deps-use-pnpm: expect needs exactly one of command, edit, skill, answer/,
     );
     expect(await errorOf({ 'evals/probes/a.yaml': PNPM.replace('prompt:', 'promt:') })).toMatch(/unknown key/);
     expect(await errorOf({ 'evals/probes/a.yaml': PNPM.replace('version: 1', 'version: 2') })).toMatch(/^evals\/probes\/a\.yaml: .*version/);
@@ -96,5 +96,17 @@ describe('grade', () => {
   it('inverts with not: a should-not-trigger probe passes when the skill was not invoked', () => {
     expect(grade(quiet!, transcript({ skills: [] }))).toBe(true);
     expect(grade(quiet!, transcript({ skills: ['release'] }))).toBe(false);
+  });
+
+  it('answer matches the final reply, ignoring case, and not inverts it', () => {
+    const answer = (extra = '') => `version: 1\nprobes:\n  - id: nrr-segment\n    unit: knowledge/kb/nrr.md\n    prompt: What is NRR by segment?\n    expect:\n      answer: 'by segment'\n${extra}`;
+    const [p] = parseProbeFile(answer(), 'a.yaml');
+    expect(p).toMatchObject({ kind: 'adherence', expect: { answer: 'by segment' } });
+    expect(grade(p!, transcript({ text: 'NRR by Segment: SMB 104%' }))).toBe(true);
+    expect(grade(p!, transcript({ text: 'NRR is 104%.', commands: ['echo by segment'] }))).toBe(false);
+    const [not] = parseProbeFile(answer('      not: true\n'), 'a.yaml');
+    expect(grade(not!, transcript({ text: 'NRR by Segment: SMB 104%' }))).toBe(false);
+    expect(() => parseProbeFile(answer().replace("'by segment'", "'(('"), 'a.yaml')).toThrow(/probe nrr-segment: invalid regular expression/);
+    expect(() => parseProbeFile(answer().replace("      answer:", "      skill: x\n      answer:"), 'a.yaml')).toThrow(/expect needs exactly one of command, edit, skill, answer/);
   });
 });
