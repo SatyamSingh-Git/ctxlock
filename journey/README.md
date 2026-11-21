@@ -2,7 +2,12 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [16 — outcomes: whether a fix held, and the numbers that compound](16-outcomes.md).
+**Latest:** [17 — the rest of the signals, and taking a unit out](17-signals.md).
+- Plan 10: an abandoned session is a signal; a search that found nothing is evidence in a signal's turn; and `diagnose --ablate` replays the miss with the unit taken out. Clustering waits for real signals to check it against.
+- Live, the one abandoned session the collector recorded matched an independent scan, and ablation showed the planted rule wasn't what caused its miss.
+- Found: a test written against the real clock broke CI a week later.
+
+**Earlier:** [16 — outcomes: whether a fix held, and the numbers that compound](16-outcomes.md).
 - Plan 9, the feedback loop's last part: `ctxlock outcomes` finds a fix shipped when its probe is committed, judges it at 7 and 30 days, counts helpful and harmful sessions per unit version, and gives time to fix, regression rate, durability, reach and units never loaded; `ctxlock verify` re-checks a unit when `stale-after` passes; 699 tests.
 - Phase 3's exit demo: from a planted miss to a fix in two consumers, 54 seconds of commands, with the fix shipped under two minutes after the signal.
 - Found: the demo's two-minute fix printed as "0.0 days", and git writes a UTC offset as `Z`.

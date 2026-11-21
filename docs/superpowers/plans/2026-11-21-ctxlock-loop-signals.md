@@ -27,10 +27,10 @@ Satyam asked on 2026-11-21 to "continue the work" without design questions. Ever
 
 | Task | Status | Commits |
 |---|---|---|
-| 1 | Not started | |
-| 2 | Not started | |
-| 3 | Not started | |
-| 4 | Not started | |
+| 1 | Done | `0251677` |
+| 2 | Done | `6714525` |
+| 3 | Done | `95e7eaf` |
+| 4 | Done | the docs commit |
 
 ## What the real transcripts hold
 

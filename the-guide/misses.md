@@ -19,6 +19,7 @@ ctxlock misses [dir] [--format text|json] [--since YYYY-MM-DD] [--min-sessions <
 - **A correction:** a prompt you typed, after the agent has answered at least once, whose opening is a correction. That means it starts with "no", "nope", "wrong", "stop", "undo", "revert" or "actually", or with "that's not" or "this is wrong". It also counts when the opening contains "I meant", "I said", "I told you", "not what I", "you forgot", "why did you" or "you should have".
   - Only the first 160 characters are read, with pasted text taken out.
   - A summary Claude Code writes when it compacts a session never counts, though it quotes your earlier prompts.
+- **An abandoned session:** one you typed into that ended with the agent stopped, in the middle of a tool, or with your prompt unanswered, and has been quiet for at least an hour since. The hour is there because a session still running looks the same. It is counted at its last line's time. Like an interrupt, it says something went wrong, not what you wanted, so `diagnose` gives it a verdict and no fix.
 
 Each was checked on real transcripts. On 676 of the author's prompts that followed an answer, the phrases matched 5, and all 5 were real corrections. Corrections phrased some other way are missed, and how many is unknown.
 
@@ -26,6 +27,8 @@ Each was checked on real transcripts. On 676 of the author's prompts that follow
 - **A tool use you rejected:** its record wasn't available to check against.
 - **Thumbs ratings:** they leave nothing in the transcript.
 - **"The right skill wasn't loaded":** needs a diagnosis to mean anything.
+- **A search that found nothing**, on its own. Agents search and miss all the time: 142 times in the author's 41 typed sessions. As a signal it would drown the rest. It is kept as evidence in a signal's turn instead, below.
+- **Clustering corrections by what they say.** Routing already groups signals by unit, across distinct sessions. Grouping them by their text waits until there are enough real ones to check it against: the author's repositories have fewer than ten.
 
 ## What it reports
 
@@ -100,7 +103,7 @@ These are signals, not a diagnosis: the unit was in context when the agent was s
 `ctxlock diagnose <unit>` asks Claude what went wrong in the moments the unit was in context, and when the unit is at fault, proposes the smallest fix and checks it by replay. It runs your own `claude`, as [`eval`](evals.md) does, so it costs runs from your plan. A unit need not be routed, but it must have been in context for at least one signal.
 
 ```
-ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>] [--drafts <folder>] [--open] [--gh <path>]
+ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>] [--ablate] [--drafts <folder>] [--open] [--gh <path>]
 ```
 
 This is real output, from a repository whose rule said `npm install` while its `package.json` named pnpm, and a session in which the person wrote "no, we use pnpm here" ([report](../docs/dogfood/2026-11-12-diagnose.md)):
@@ -131,7 +134,7 @@ Runs: 5
 **What it sends to Claude,** and nothing else:
 - the unit's text;
 - for each signal it was in context for, the opening of the prompt that began the turn;
-- what the agent did in that turn: each tool's name, with its command, path or pattern;
+- what the agent did in that turn: each tool's name, with its command, path or pattern, and "found nothing" after a Grep, Glob or MCP search whose result was empty. That says what the agent looked for and the unit didn't tell it, which is a gap's evidence;
 - your correction.
 
 Everything after the unit's text is [redacted](#drafts-for-owners) first. The diagnosing run has no tools, so it can only answer.
@@ -157,6 +160,13 @@ The reply is checked against the unit: every line it quotes must be in the file,
 - **"not-validated"** is reported as it is. So is **"inconclusive"**: a probe was cut short by `--max-runs` or `--max-minutes`, or has fewer than 2 runs on a side that finished without an error. That is also why `--runs` must be at least 2.
 - **How strong it is:** at the default 2 runs a side, 0 of 2 to 2 of 2 is a direction, not proof. `--runs 3` makes 0 of 3 to 3 of 3 a one-sided Fisher p of 0.05, the bar `eval` gates on.
 - **Defaults:** `--max-runs` 16 and `--max-minutes` 15.
+
+**`--ablate` replays the probe once more, with the unit taken out:** its file, or a skill's whole folder, and any link to it. It compares the repository as it is with the repository without the unit, at the same number of runs a side. The text and the proposal then say which of these it found:
+- **`improved`:** taking it out does what was wanted, so the unit itself causes the miss;
+- **`unchanged`:** the unit doesn't drive the miss. The agent does the same without it, and a fix that adds what was wanted can still help, as a `gap`'s does;
+- **`regressed`:** the unit helps.
+
+It doesn't change "validated", and it runs only when there is a probe. A unit reached through a link to a folder is not ablated, since taking out the link would take out what else the folder holds; the output says so.
 
 **A certified unit** is diagnosed and its fix proposed, and the output says the fix needs its owner's approval.
 
