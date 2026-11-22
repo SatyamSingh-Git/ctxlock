@@ -89,7 +89,7 @@ function reachablePaths(paths: string[], links: Map<string, string | null>): Map
   return reachable;
 }
 
-export async function discoverUnits(reader: RepoReader, declared: Declared = { knowledge: [], metrics: [] }): Promise<{ units: Unit[]; problems: Finding[] }> {
+export async function discoverUnits(reader: RepoReader, declared: Declared = { knowledge: [], metrics: [] }): Promise<{ units: Unit[]; problems: Finding[]; bundles: string[] }> {
   const links = await reader.listSymlinks();
   const reachable = reachablePaths(await reader.listFiles(), links);
   const bundles = await okfBundles(reader, reachable);
@@ -186,5 +186,5 @@ export async function discoverUnits(reader: RepoReader, declared: Declared = { k
   }
 
   units.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-  return { units, problems };
+  return { units, problems, bundles };
 }

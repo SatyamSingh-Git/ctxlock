@@ -51,7 +51,7 @@ Suite 745/745.
 - In a UTC+ timezone, a stale_after later in a UTC day can be flagged up to a day early, since L9 and verify compare local dates; CI runs in UTC (src/units/okf.ts).
 - A link to a skill's SKILL.md makes no edge, since the skill unit's path is its folder (src/graph/graph.ts).
 - A link starting with /, which GitHub reads from the repository root, makes no edge (src/units/links.ts).
-- A pull request can take a folder out of knowledge: and edit a concept in it in one change; the diff shows the units as removed, and L1 never reads the edit. Declarations could come from the base, as settings do (src/scan.ts).
+- (fixed, D106) A pull request can take a folder out of knowledge: and edit a concept in it in one change; the diff shows the units as removed, and L1 never reads the edit. The lock and an OKF index.md had the same hole. The head is now scanned with the base's folders as well as its own (src/scan.ts).
 - A link written with backslashes never resolves (src/units/links.ts).
 
 ## Phase 4, split (D100)

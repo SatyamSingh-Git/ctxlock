@@ -65,7 +65,7 @@ async function scansAt(root: string, opts: { base: string; head?: string }) {
     }
   };
   const base = await scanRepo(await at(opts.base, 'base', ' — in GitHub Actions use actions/checkout with fetch-depth: 0'));
-  const head = await scanRepo(opts.head ? await at(opts.head, 'head') : fsReader(root), { settings: base.registry });
+  const head = await scanRepo(opts.head ? await at(opts.head, 'head') : fsReader(root), { settings: base.registry, declared: base.declared });
   return { base, head };
 }
 

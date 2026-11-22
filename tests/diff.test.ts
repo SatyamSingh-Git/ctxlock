@@ -162,6 +162,64 @@ describe('ctxlock diff', () => {
     expect(result.execChanges).toHaveLength(1);
   });
 
+  it.each([
+    ['knowledge', 'kb/a.md', (text: string) => `---\ntype: Reference\n---\n${text}\n`],
+    ['metrics', 'kb/a.yaml', (text: string) => `name: nrr\ndescription: ${text}\n`],
+  ])('a pull request cannot take a folder out of %s: to edit a unit in it unchecked', async (key, path, unit) => {
+    const declared = { 'ctxlock.yaml': `version: 1\n${key}: [kb]\n`, [path]: unit('Net revenue retention.') };
+    const { dir, shas } = await gitRepo([declared, { 'ctxlock.yaml': 'version: 1\n', [path]: unit(`Net revenue retention.${zwsp}`) }]);
+
+    const { code, stdout } = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, dir, '--format', 'json');
+    expect(code).toBe(1);
+    expect(JSON.parse(stdout).newFindings).toContainEqual(expect.objectContaining({ rule: 'L1-hidden-unicode', path }));
+
+    // Taking the folder out without hiding anything is not a finding.
+    const clean = await gitRepo([declared, { 'ctxlock.yaml': 'version: 1\n', [path]: unit('Net revenue retention.') }]);
+    expect((await cli('diff', '--base', clean.shas[0]!, '--head', clean.shas[1]!, clean.dir)).code).toBe(0);
+  });
+
+  it('a pull request cannot drop a synced concept from the lock to edit it unchecked', async () => {
+    const lock = [
+      'lockfile_version: 1',
+      'upstreams:',
+      '  - name: org',
+      '    repo: ../org',
+      '    ref: main',
+      `    commit: ${'a'.repeat(40)}`,
+      '    units:',
+      '      - { path: org/nrr.md, id: knowledge/org/nrr.md, digest: "sha256:x", tier: reviewed, files: {} }',
+      '',
+    ].join('\n');
+    const { dir, shas } = await gitRepo([
+      { 'ctxlock.lock': lock, 'org/nrr.md': '---\ntype: Metric\n---\nNRR.\n' },
+      { 'ctxlock.lock': 'lockfile_version: 1\nupstreams: []\n', 'org/nrr.md': `---\ntype: Metric\n---\nNRR.${zwsp}\n` },
+    ]);
+
+    const { code, stdout } = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, dir, '--format', 'json');
+    expect(code).toBe(1);
+    expect(JSON.parse(stdout).newFindings).toContainEqual(expect.objectContaining({ rule: 'L1-hidden-unicode', path: 'org/nrr.md' }));
+  });
+
+  it('a pull request cannot unmark an OKF bundle to edit a concept in it unchecked', async () => {
+    const concept = (text: string) => `---\ntype: Reference\n---\n${text}\n`;
+    const { dir, shas } = await gitRepo([
+      { 'kb/index.md': '---\nokf_version: "0.2"\n---\n', 'kb/a.md': concept('NRR.') },
+      { 'kb/index.md': '# Notes\n', 'kb/a.md': concept(`NRR.${zwsp}`) },
+    ]);
+
+    const { code, stdout } = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, dir, '--format', 'json');
+    expect(code).toBe(1);
+    expect(JSON.parse(stdout).newFindings).toContainEqual(expect.objectContaining({ rule: 'L1-hidden-unicode', path: 'kb/a.md' }));
+  });
+
+  it('a knowledge folder the pull request declares is checked in the same pull request', async () => {
+    const { dir, shas } = await gitRepo([{ 'AGENTS.md': 'a' }, { 'AGENTS.md': 'a', 'ctxlock.yaml': 'version: 1\nknowledge: [kb]\n', 'kb/a.md': `---\ntype: Reference\n---\nNRR.${zwsp}\n` }]);
+
+    const { code, stdout } = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, dir, '--format', 'json');
+    expect(code).toBe(1);
+    expect(JSON.parse(stdout).newFindings).toContainEqual(expect.objectContaining({ rule: 'L1-hidden-unicode', path: 'kb/a.md' }));
+  });
+
   it('budget rows show before and after bytes for changed sites only', async () => {
     const { dir, shas } = await gitRepo([
       { 'AGENTS.md': 'a'.repeat(100), 'pkg/AGENTS.md': 'b'.repeat(50) },

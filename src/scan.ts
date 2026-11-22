@@ -11,7 +11,7 @@ import { loadRegistry, type Registry } from './registry/registry.js';
 import type { RepoReader } from './repo/reader.js';
 import { type BudgetRow, budgetReport } from './report/budget.js';
 import { type Lock, readLock } from './sync/lock.js';
-import { discoverUnits } from './units/discover.js';
+import { type Declared, discoverUnits } from './units/discover.js';
 import { okfTrust } from './units/okf.js';
 
 export interface ScanResult {
@@ -28,6 +28,7 @@ export interface ScanResult {
   // The L2-exec-config items before lint settings apply. diff compares these, so quieting the info
   // rule in lint does not switch off the check on new hooks; L2-exec-config-changed controls that.
   inventory: Finding[];
+  declared: Declared;
 }
 
 export const localDate = (d = new Date()) => [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
@@ -39,6 +40,9 @@ export interface ScanOptions {
   // Settings that decide what is checked, taken from elsewhere: diff scans a pull request with the
   // base branch's, so the pull request cannot switch off the checks that judge it.
   settings?: Pick<Registry, 'harnesses' | 'limits' | 'lint'>;
+  // Knowledge and metric folders the base declared, scanned as well as the pull request's own, so taking
+  // a folder out of ctxlock.yaml or the lock does not take its edits out of the check (D30).
+  declared?: Declared;
 }
 
 export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Promise<ScanResult> {
@@ -47,7 +51,11 @@ export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Prom
   // A synced unit is the kind its upstream said, with nothing declared here.
   const locked = lock.lock.upstreams.flatMap((u) => u.units);
   const lockedAs = (kind: string) => locked.filter((u) => u.id.startsWith(`${kind}/`)).map((u) => u.path);
-  const { units, problems } = await discoverUnits(reader, { knowledge: [...loaded.knowledge, ...lockedAs('knowledge')], metrics: [...loaded.metrics, ...lockedAs('metric')] });
+  const declared = {
+    knowledge: [...loaded.knowledge, ...lockedAs('knowledge'), ...(opts.declared?.knowledge ?? [])],
+    metrics: [...loaded.metrics, ...lockedAs('metric'), ...(opts.declared?.metrics ?? [])],
+  };
+  const { units, problems, bundles } = await discoverUnits(reader, declared);
   const settled = opts.settings ? { ...loaded, harnesses: opts.settings.harnesses, limits: opts.settings.limits, lint: opts.settings.lint } : loaded;
   // An OKF concept's own verified and stale_after fill what ctxlock.yaml leaves unset, which wins (§4.1).
   const trusted = { ...settled.units };
@@ -65,5 +73,5 @@ export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Prom
   const ctx = { reader, units, registry, codeowners, contexts, limits, today: opts.today ?? localDate(), generated: generated.files, generatedError: generated.error, lock: lock.lock, lockError: lock.error };
   const findings = await runLint(ctx, [...problems, ...extra]);
   const inventory = (await execConfig.check(ctx)).filter((f) => f.rule === 'L2-exec-config');
-  return { root: reader.root, ref: reader.ref, units, registry, contexts, budget: budgetReport(contexts, limits), findings, generated, lock: lock.lock, codeowners, inventory };
+  return { root: reader.root, ref: reader.ref, units, registry, contexts, budget: budgetReport(contexts, limits), findings, generated, lock: lock.lock, codeowners, inventory, declared: { ...declared, knowledge: [...declared.knowledge, ...bundles] } };
 }
