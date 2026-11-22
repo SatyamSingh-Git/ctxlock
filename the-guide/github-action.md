@@ -7,8 +7,6 @@ Runs [`ctxlock diff`](commands.md#ctxlock-diff) on every pull request, and, when
 > - posted one comment, and updated that same comment on the next push;
 > - said the behavioral section was skipped, as there were no credentials;
 > - failed the check on a hidden character.
->
-> Until there is a release tag, use `@main`.
 
 ## Add it to a repository
 
@@ -28,12 +26,14 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: SatyamSingh-Git/ctxlock@main
+      - uses: SatyamSingh-Git/ctxlock@v0
 ```
 
 Two lines matter:
 - **`fetch-depth: 0`.** `actions/checkout` clones only the latest commit by default, and ctxlock needs the base commit to compare against. Without the history, the check stops with `base ref <sha> not found — in GitHub Actions use actions/checkout with fetch-depth: 0`.
 - **`pull-requests: write`.** This lets the Action post its comment. Without it, the result appears in the job summary only.
+
+`@v0` moves to each 0.x release. To take updates only when you choose, use `@v0.1.0`, or a commit SHA, which no one can move.
 
 The Action builds ctxlock from its own source on the runner (Node 22, `npm ci`, `npm run build`), then reads your checkout. Node 22 stays on the `PATH` for later steps in the same job; a step that needs another version should set it up again. It never writes to your repository, and nothing it reads is sent anywhere. The pull request comment is the only thing it posts.
 
@@ -60,7 +60,7 @@ The Action builds ctxlock from its own source on the runner (Node 22, `npm ci`, 
 With a credential, the Action installs Claude Code at `claude-code-version` and runs `ctxlock eval` against the same base. Probes run only when the pull request changes a unit a probe names, so most pull requests start no run at all.
 
 ```yaml
-      - uses: SatyamSingh-Git/ctxlock@main
+      - uses: SatyamSingh-Git/ctxlock@v0
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```

@@ -37,7 +37,7 @@ Want to help? Start with **[Contributing](#contributing)**.
 10. **Business context:** OKF knowledge concepts and Apache Ossie metric models are units too. `L17` checks each against its own format, OKF's `verified` and `stale_after` are its trust dates, a concept's links are graph edges, both sync, and a probe can check the answer an agent gives ([guide](the-guide/business-context.md), [report](docs/dogfood/2026-11-21-business-units.md)).
 
 > [!NOTE]
-> Pre-alpha: everything above runs from source, and is tested on Windows and Linux. Nothing is on npm yet, and there is no release tag. The feedback loop runs end to end, from a miss to a fix shipped in its consumers, on a planted miss; real misses joined to units are still to come.
+> Pre-alpha: everything above is tested on Windows and Linux. Version 0.1.0 is on npm (`npx ctxlock`), and the Action is tagged `v0`. The feedback loop runs end to end, from a miss to a fix shipped in its consumers, on a planted miss; real misses joined to units are still to come.
 
 ---
 
@@ -229,7 +229,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # ctxlock compares against the base commit, so it needs the history
-      - uses: SatyamSingh-Git/ctxlock@main   # pin a release tag once one exists
+      - uses: SatyamSingh-Git/ctxlock@v0   # follows 0.x releases; @v0.1.0 or a commit SHA pins exactly
 ```
 
 The check fails when the pull request introduces a **must** finding. That means something an agent would read wrongly or not at all, or something that hides text from reviewers (hidden Unicode, a hidden HTML comment, a skill whose frontmatter agents can't load), or any new or changed hook, MCP server, environment variable or auto-approval in agent config or in a skill's frontmatter. A `must` finding that was already on the base branch is reported but does not fail the check. The pull request is judged with the base branch's `ctxlock.yaml`, so it cannot switch off the checks that judge it.
@@ -237,7 +237,7 @@ The check fails when the pull request introduces a **must** finding. That means 
 To add the behavioral check, pass a Claude credential from a secret:
 
 ```yaml
-      - uses: SatyamSingh-Git/ctxlock@main
+      - uses: SatyamSingh-Git/ctxlock@v0
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 ```
@@ -259,17 +259,17 @@ Probes run only when the pull request changes a unit a probe names, so most pull
 
 ### Locally
 
+Needs Node 22 or later.
+
 ```sh
-git clone https://github.com/SatyamSingh-Git/ctxlock.git
-cd ctxlock && npm ci && npm run build
-node dist/cli.js lint /path/to/your/repo
-node dist/cli.js diff --base origin/main /path/to/your/repo
-node dist/cli.js build /path/to/your/repo                  # add --fill-missing to write the gaps
-node dist/cli.js impact --base origin/main /path/to/your/repo   # what a change reaches, from ctxlock.yaml
+npx ctxlock lint /path/to/your/repo
+npx ctxlock diff --base origin/main /path/to/your/repo
+npx ctxlock build /path/to/your/repo                  # add --fill-missing to write the gaps
+npx ctxlock impact --base origin/main /path/to/your/repo   # what a change reaches, from ctxlock.yaml
 
 # The behavioral check needs Claude Code, logged in
-node dist/cli.js eval --base origin/main /path/to/your/repo
-node dist/cli.js probe draft --unit instructions/AGENTS.md /path/to/your/repo
+npx ctxlock eval --base origin/main /path/to/your/repo
+npx ctxlock probe draft --unit instructions/AGENTS.md /path/to/your/repo
 ```
 
 [The guide](the-guide/commands.md) covers every command, flag and exit code, and [rules.md](the-guide/rules.md) covers every rule.

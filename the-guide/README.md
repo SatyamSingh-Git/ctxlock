@@ -2,7 +2,7 @@
 
 Everything you need to install ctxlock, run it, understand what it tells you, and get unstuck.
 
-> **Not on npm yet.** ctxlock is pre-alpha. `scan`, `lint`, `budget`, `diff`, `eval`, `probe draft`, `build`, `who-uses`, `impact`, `loads`, `report`, `sync`, `misses`, `diagnose`, `outcomes` and `verify` work when built from source ([commands.md](commands.md) shows how). Each page below is written when its feature ships, so this guide only ever describes things that exist; [the design](../docs/superpowers/specs/2026-11-05-ctxlock-design.md) describes what is planned.
+> **Pre-alpha.** ctxlock 0.1.0 is on npm (`npx ctxlock`). `scan`, `lint`, `budget`, `diff`, `eval`, `probe draft`, `build`, `who-uses`, `impact`, `loads`, `report`, `sync`, `misses`, `diagnose`, `outcomes` and `verify` work ([commands.md](commands.md)). Each page below is written when its feature ships, so this guide only ever describes things that exist; [the design](../docs/superpowers/specs/2026-11-05-ctxlock-design.md) describes what is planned.
 
 If something here is wrong, out of date, or simply does not work, open an issue on [the repository](https://github.com/SatyamSingh-Git/ctxlock/issues). A report that says "I ran X, expected Y, got Z" is worth more than a polite one.
 

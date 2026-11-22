@@ -4,7 +4,7 @@
 
 Agents never read this file. It is for ctxlock and for the people reviewing context changes, the way `CODEOWNERS` is.
 
-> **Status:** the file format and its validation are implemented, and `ctxlock scan`, `lint`, `budget`, `diff` and `eval` read it when built from source. ctxlock is not on npm yet.
+> **Status:** the file format and its validation are implemented, and `ctxlock scan`, `lint`, `budget`, `diff` and `eval` read it.
 
 ## A complete example
 

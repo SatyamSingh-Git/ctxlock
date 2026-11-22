@@ -2,12 +2,10 @@
 
 ctxlock reads your repository's agent context and reports on it. The checks never change a file in the repository. Three commands write files when you ask them to: `ctxlock build --fill-missing`, `ctxlock probe draft` and `ctxlock sync`. Nothing leaves your machine except through `eval` and `probe draft`, which run Claude Code; `sync` only fetches.
 
-> **Status:** these commands are implemented and tested. ctxlock is not on npm yet. To run it today, build it from source:
+> **Status:** these commands are implemented and tested, and on npm. They need Node 22 or later:
 >
 > ```sh
-> git clone https://github.com/SatyamSingh-Git/ctxlock.git
-> cd ctxlock && npm ci && npm run build
-> node dist/cli.js scan /path/to/your/repo
+> npx ctxlock scan /path/to/your/repo
 > ```
 >
 > To run `ctxlock diff` on every pull request, use [the GitHub Action](github-action.md).
