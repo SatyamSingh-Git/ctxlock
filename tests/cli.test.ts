@@ -71,6 +71,12 @@ describe('ctxlock CLI', () => {
     expect((await cli('lint', '--help')).code).toBe(0);
   });
 
+  it('--version prints the version in package.json and exits 0', async () => {
+    const { version } = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
+
+    expect(await cli('--version')).toEqual({ code: 0, stdout: `${version}\n`, stderr: '' });
+  });
+
   it('--format json never contains unit text', async () => {
     const dir = tempDir();
     writeTree(dir, { 'AGENTS.md': 'The sentinel phrase is purple-elephant-42.\n', '.agents/skills/notes/SKILL.md': '---\nname: notes\ndescription: Writes notes\n---\nsecret-steps-17\n' });

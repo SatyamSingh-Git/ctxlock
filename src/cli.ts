@@ -236,6 +236,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
   let markdown = false;
   const program = new Command('ctxlock')
     .description('CI, a dependency graph and a feedback loop for AI agent context')
+    .version(VERSION)
     .exitOverride()
     .configureOutput({ writeOut: io.stdout, writeErr: io.stderr });
 

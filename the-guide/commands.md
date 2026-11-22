@@ -12,6 +12,8 @@ ctxlock reads your repository's agent context and reports on it. The checks neve
 >
 > To run `ctxlock diff` on every pull request, use [the GitHub Action](github-action.md).
 
+`ctxlock --version` prints the version. Include it when you report a problem.
+
 `scan`, `lint` and `budget` take the directory to check, defaulting to the current one, and these options:
 
 | Option | Meaning |

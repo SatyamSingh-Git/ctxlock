@@ -1,6 +1,6 @@
 {
   "name": "ctxlock",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "CI for AI agent context. Lints AGENTS.md, CLAUDE.md, skills and rules against what each agent actually loads, flags unsafe changes in pull requests, and checks Claude Code's behavior, base vs head.",
   "keywords": [
     "ai-agents",
@@ -27,7 +27,6 @@
   "bugs": {
     "url": "https://github.com/SatyamSingh-Git/ctxlock/issues"
   },
-  "private": true,
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
@@ -44,7 +43,8 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "ci": "npm run typecheck && npm test && npm run build"
+    "ci": "npm run typecheck && npm test && npm run build",
+    "prepublishOnly": "npm run ci"
   },
   "dependencies": {
     "ajv": "^8.20.0",
