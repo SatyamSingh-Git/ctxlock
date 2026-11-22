@@ -8,7 +8,7 @@ Every significant decision, why it was made, and whether it still stands. Revers
 |---|---|---|---|
 | D1 | Research before asking product questions, in eight parallel tracks | The brief asked for deep research first, and "who is it for?" can't be answered well before you know what exists | Stands. It surfaced the open gap and the reuse inventory |
 | D2 | Invent no new context file format | AGENTS.md, Agent Skills and MCP are governed by AAIF and read by about 80 agents | Stands |
-| D3 | Reuse open-source code and published methods wherever they fit, license-checked, with credit | Satyam's instruction: "you can always use it anywhere and everywhere needed" | Stands. ctxlock depends on rulesync, agnix and promptfoo rather than rebuilding them |
+| D3 | Reuse open-source code and published methods wherever they fit, license-checked, with credit | Satyam's instruction: "you can always use it anywhere and everywhere needed" | Stands. In practice agnix runs on request through `npx` (`lint --agnix`), promptfoo gave way to ctxlock's own runner (D35), and rulesync is not a dependency: it is planned only for agents ctxlock does not model (D49) |
 | D4 | Build the layer above the formats: dependency graph, behavioral CI, load telemetry joined to sources, feedback loop | The research found all four missing in the open; only closed products have pieces | Stands |
 | D5 | First user: developer teams running several coding agents | Satyam's call. The formats are open and the agents observable, so it is fast to prove | Stands |
 | D6 | Open source, Apache-2.0 | Satyam's call (OSS). Apache-2.0 for its patent grant, and because it is compatible with every reuse pick | Stands |
