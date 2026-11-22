@@ -64,6 +64,15 @@ With `core.symlinks=false`, the default on Windows, git checks a symlink out as 
 
 A symlink that leads out of the repository is never followed and gives an `L0-symlink-outside` info finding.
 
+## Every test file fails on Windows with `reading 'config'`
+
+```
+TypeError: Cannot read properties of undefined (reading 'config')
+ ❯ tests/hygiene.test.ts:21:1
+```
+
+This happens when you run ctxlock's own tests (`npm test`) from a folder whose drive letter is lower case, which is what Git Bash gives you after `cd /f/ContextFS`. Node keeps `file:///f:/…` and `file:///F:/…` as two modules, so vitest loads two copies of its runner and no test file finds the one that is running it. This is a vitest bug ([vitest#11872](https://github.com/vitest-dev/vitest/issues/11872)), not a ctxlock one. Change into the folder with an upper-case drive letter, `cd /F/ContextFS`, or run the tests from PowerShell, which upper-cases the drive letter even after `cd f:\ContextFS`.
+
 ## `L0-encoding: <file> is not valid UTF-8`
 
 ctxlock reads context files as UTF-8, as the agents do. A file saved as UTF-16 (some Windows editors do this) is skipped, and its other checks do not run. Re-save it as UTF-8.
