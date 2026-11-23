@@ -92,7 +92,7 @@ describe('ctxlock CLI', () => {
     expect(Object.keys(scan)).toEqual(['version', 'root', 'ref', 'units', 'contexts', 'budget', 'findings']);
     expect(Object.keys(await json('lint'))).toEqual(['version', 'root', 'ref', 'findings']);
     expect(Object.keys(await json('budget'))).toEqual(['version', 'root', 'ref', 'budget']);
-    expect(Object.keys(scan.units[0])).toEqual(['id', 'kind', 'path', 'name', 'digest', 'aliases']);
+    expect(Object.keys(scan.units[0])).toEqual(['id', 'kind', 'family', 'path', 'name', 'digest', 'aliases']);
   });
 
   it('budget prints one row per site and harness', async () => {
@@ -121,6 +121,21 @@ describe('ctxlock CLI', () => {
     expect(stdout).toMatch(/claude-code at \.: 2 always/);
     expect(stdout).toMatch(/codex at \.: 1 always/);
     expect(stdout).toMatch(/findings: 0 must, 0 should, \d+ info/);
+  });
+
+  it("scan names the agent of another agent's file, in text, and the family of every unit in JSON", async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'AGENTS.md': 'a', '.cursor/rules/api.mdc': 'Use zod.\n' });
+
+    const text = (await cli('scan', dir)).stdout;
+    expect(text).toMatch(/rule\s+\.cursor\/rules\/api\.mdc \(Cursor only: safety checks\)\n/);
+    expect(text).toMatch(/instructions\s+AGENTS\.md\n/);
+
+    const units = JSON.parse((await cli('scan', dir, '--format', 'json')).stdout).units;
+    expect(units.map((u: { path: string; family: string }) => [u.path, u.family])).toEqual([
+      ['.cursor/rules/api.mdc', 'cursor'],
+      ['AGENTS.md', 'agents-md'],
+    ]);
   });
 });
 

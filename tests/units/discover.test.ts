@@ -409,6 +409,21 @@ describe('discoverUnits', () => {
       expect(await today({ '.claude/skills/x/SKILL.md': skill('x') }, { '.github/skills/x': '.claude/skills/x' })).toEqual([['skill/.claude/skills/x', 'claude', ['.github/skills/x']]]);
     });
 
+    it("frontmatter strict YAML rejects is not an L0 problem in another agent's rule, whose parser ctxlock does not model, but is in its skill", async () => {
+      const { problems } = await discoverUnits(
+        memReader({
+          '.cursor/rules/a.mdc': '---\ndescription: MULTIMODAL: Trigger visual feedback\nglobs: *.tsx\n---\nUse it.\n',
+          '.github/skills/x/SKILL.md': '---\nname: x\ndescription: a: b\n---\nbody\n',
+          '.claude/rules/r.md': '---\ndescription: a: b\n---\nbody\n',
+        }),
+      );
+
+      expect(problems.map((p) => [p.rule, p.severity, p.path])).toEqual([
+        ['L0-frontmatter', 'should', '.claude/rules/r.md'],
+        ['L0-frontmatter', 'must', '.github/skills/x/SKILL.md'],
+      ]);
+    });
+
     it('a .mdc rule may be empty or have no frontmatter, and a rule that is not UTF-8 is an L0-encoding problem', async () => {
       const { units, problems } = await discoverUnits(
         memReader({ '.cursor/rules/empty.mdc': '', '.cursor/rules/plain.mdc': 'Use pnpm.\n', '.cursor/rules/latin1.mdc': Buffer.from([0x63, 0x61, 0x66, 0xe9]) }),

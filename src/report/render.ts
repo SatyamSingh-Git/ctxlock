@@ -1,5 +1,5 @@
 import type { DiffResult } from '../diff.js';
-import type { Finding } from '../model.js';
+import { FAMILY_NAMES, type Finding, modelled } from '../model.js';
 import type { ScanResult } from '../scan.js';
 import type { BudgetRow } from './budget.js';
 import { impactSection } from './graph.js';
@@ -30,7 +30,10 @@ function findingLines(findings: Finding[]): string {
 }
 
 function scanText(r: ScanResult): string {
-  const units = r.units.map((u) => [`  ${u.kind}`, u.aliases.length ? `${u.path} (also at ${u.aliases.join(', ')})` : u.path]);
+  const units = r.units.map((u) => {
+    const at = u.aliases.length ? `${u.path} (also at ${u.aliases.join(', ')})` : u.path;
+    return [`  ${u.kind}`, modelled(u) ? at : `${at} (${FAMILY_NAMES[u.family]} only: safety checks)`];
+  });
   const contexts = r.contexts.map((c) => {
     const n = (mode: string) => c.entries.filter((e) => e.mode === mode).length;
     return `  ${c.harness} at ${site(c.site)}: ${n('always')} always (${c.alwaysBytes} bytes), ${n('lazy')} lazy, ${n('listed')} listed`;
@@ -68,7 +71,7 @@ function scanJson(r: ScanResult, view: 'scan' | 'lint' | 'budget'): object {
   if (view === 'budget') return { ...head, budget: r.budget };
   return {
     ...head,
-    units: r.units.map(({ id, kind, path, name, digest, aliases }) => ({ id, kind, path, name, digest, aliases })),
+    units: r.units.map(({ id, kind, family, path, name, digest, aliases }) => ({ id, kind, family, path, name, digest, aliases })),
     contexts: r.contexts,
     budget: r.budget,
     findings: r.findings,

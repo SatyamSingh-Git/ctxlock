@@ -200,7 +200,9 @@ export async function discoverUnits(reader: RepoReader, declared: Declared = { k
       const split = splitFrontmatter(text);
       frontmatter = split.frontmatter;
       body = split.body;
-      if (split.error) {
+      // Other agents' rule parsers are not strict YAML (Cursor documents `globs: *.ts`), so a parse error
+      // there says nothing about what the agent loads. Agent Skills are YAML for every agent.
+      if (split.error && (MODELLED_FAMILIES.has(pattern.family) || pattern.kind === 'skill')) {
         problems.push({
           rule: 'L0-frontmatter',
           severity: pattern.kind === 'rule' ? 'should' : 'must',
