@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { type ArmResult, EvalError, type EvalOptions, runEval, runProbes, status } from '../../src/eval/eval.js';
+import { type ArmResult, EvalError, type EvalOptions, fisherOneSided, gated, type ProbeOutcome, runEval, runProbes, status } from '../../src/eval/eval.js';
 import { parseProbeFile } from '../../src/eval/probes.js';
 import { overlayReader } from '../../src/repo/overlay.js';
 import { fsReader } from '../../src/repo/reader.js';
@@ -151,7 +151,7 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect(all.outcomes[0]).toMatchObject({ status: 'unchanged', base: { passed: 0 }, head: { passed: 0 }, selectedFor: 'all' });
   });
 
-  it('the gate fails only a base probe whose every base run passed and no head run did', async () => {
+  it('only a probe that passes at least 0.9 of its base runs can gate, and never one the pull request adds', async () => {
     const regressed = await runEval(options(await repo({ 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use npm.\n' })));
     expect(regressed.outcomes[0]!.status).toBe('regressed');
     expect(regressed.gateFailures).toEqual(['deps']);
@@ -416,13 +416,44 @@ describe('runEval', { timeout: 120_000 }, () => {
 describe('status', () => {
   const arm = (passed: number, valid: number) => ({ passed, valid }) as ArmResult;
 
-  it('needs a change of at least half the runs, either way, and two valid runs per arm', () => {
-    expect(status(arm(1, 2), arm(2, 2))).toBe('improved');
-    expect(status(arm(2, 2), arm(1, 2))).toBe('regressed');
+  it('improved and regressed need a one-sided Fisher p of at most 0.05; a gap of half the runs without it is uncertain', () => {
+    expect(fisherOneSided(arm(3, 3), arm(0, 3), 'down')).toBeCloseTo(0.05, 10);
+    expect(fisherOneSided(arm(3, 3), arm(0, 3), 'up')).toBeCloseTo(1, 10);
+    expect(fisherOneSided(arm(3, 3), arm(1, 3), 'down')).toBeCloseTo(0.2, 10);
+    expect(fisherOneSided(arm(9, 10), arm(3, 10), 'down')).toBeCloseTo(0.0099, 4);
+    expect(fisherOneSided(arm(10, 10), arm(6, 10), 'down')).toBeCloseTo(0.0433, 4);
+    expect(fisherOneSided(arm(0, 2), arm(2, 2), 'up')).toBeCloseTo(1 / 6, 10);
+
+    expect(status(arm(3, 3), arm(0, 3))).toBe('regressed');
+    expect(status(arm(0, 3), arm(3, 3))).toBe('improved');
+    expect(status(arm(3, 3), arm(1, 3))).toBe('uncertain');
+    expect(status(arm(0, 2), arm(2, 2))).toBe('uncertain');
+    expect(status(arm(3, 3), arm(0, 2))).toBe('uncertain');
+    expect(status(arm(10, 10), arm(6, 10))).toBe('regressed');
+    expect(status(arm(2, 2), arm(1, 2))).toBe('uncertain');
     expect(status(arm(3, 3), arm(2, 3))).toBe('unchanged');
-    expect(status(arm(1, 3), arm(2, 3))).toBe('unchanged');
+    expect(status(arm(3, 3), arm(3, 3))).toBe('unchanged');
     expect(status(arm(0, 1), arm(3, 3))).toBe('inconclusive');
     expect(status(null, arm(3, 3))).toBe('inconclusive');
+  });
+});
+
+describe('gated', () => {
+  const outcome = (base: [number, number], head: [number, number], source: 'base' | 'head' = 'base') => {
+    const b = { passed: base[0], valid: base[1] } as ArmResult;
+    const h = { passed: head[0], valid: head[1] } as ArmResult;
+    return { source, base: b, head: h, status: status(b, h) } as ProbeOutcome;
+  };
+
+  it('a base probe gates on a regression only when it passed at least 0.9 of its base runs', () => {
+    expect(gated(outcome([9, 10], [3, 10]))).toBe(true);
+    expect(gated(outcome([8, 10], [1, 10]))).toBe(false);
+    expect(gated(outcome([3, 3], [0, 3]))).toBe(true);
+    expect(gated(outcome([3, 3], [0, 3], 'head'))).toBe(false);
+    expect(outcome([10, 10], [0, 2]).status).toBe('regressed');
+    expect(gated(outcome([10, 10], [0, 2]))).toBe(false);
+    expect(outcome([2, 2], [0, 10]).status).toBe('regressed');
+    expect(gated(outcome([2, 2], [0, 10]))).toBe(false);
   });
 });
 

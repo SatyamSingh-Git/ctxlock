@@ -47,7 +47,7 @@ export interface ArmResult {
   targetLoaded: { observed: number; predicted: number };
 }
 
-export type ProbeStatus = 'improved' | 'regressed' | 'unchanged' | 'inconclusive' | 'not-run';
+export type ProbeStatus = 'improved' | 'regressed' | 'uncertain' | 'unchanged' | 'inconclusive' | 'not-run';
 
 export interface ProbeOutcome {
   probe: Probe;
@@ -130,17 +130,34 @@ function summarise(probe: Probe, records: RunRecord[], cached: number): ArmResul
   };
 }
 
+function choose(n: number, k: number): number {
+  let c = 1;
+  for (let i = 1; i <= k; i++) c = (c * (n - k + i)) / i;
+  return c;
+}
+
+// The chance, with both arms' pass totals fixed, of a head pass count at least as far in this
+// direction as the one seen.
+export function fisherOneSided(base: { passed: number; valid: number }, head: { passed: number; valid: number }, direction: 'down' | 'up'): number {
+  const runs = base.valid + head.valid;
+  const passes = base.passed + head.passed;
+  const [from, to] = direction === 'down' ? [0, head.passed] : [head.passed, head.valid];
+  let p = 0;
+  for (let x = from; x <= to; x++) p += choose(passes, x) * choose(runs - passes, head.valid - x);
+  return p / choose(runs, head.valid);
+}
+
 export function status(base: ArmResult | null, head: ArmResult | null): ProbeStatus {
   if (!base || !head || base.valid < 2 || head.valid < 2) return 'inconclusive';
   const d = head.passed / head.valid - base.passed / base.valid;
-  return d >= 0.5 ? 'improved' : d <= -0.5 ? 'regressed' : 'unchanged';
+  if (fisherOneSided(base, head, d < 0 ? 'down' : 'up') <= 0.05) return d < 0 ? 'regressed' : 'improved';
+  return Math.abs(d) >= 0.5 ? 'uncertain' : 'unchanged';
 }
 
-// The strongest result 3 runs per arm can give: every base run passed and no head run did, a
-// one-sided Fisher p of 0.05 at 3 against 3. Head-only probes never gate: the pull request wrote them.
-// A probe the time budget cut short is inconclusive, and never gates.
-const gated = (o: ProbeOutcome) =>
-  o.source === 'base' && o.status === 'regressed' && o.base!.valid >= 3 && o.head!.valid >= 3 && o.base!.passed === o.base!.valid && o.head!.passed === 0;
+// Head-only probes never gate: the pull request wrote them. A probe the time budget cut short is
+// inconclusive, and never gates.
+export const gated = (o: ProbeOutcome) =>
+  o.source === 'base' && o.status === 'regressed' && o.base!.valid >= 3 && o.head!.valid >= 3 && o.base!.passed / o.base!.valid >= 0.9;
 
 const treeOf = async (root: string, ref: string) => (await exec('git', ['-C', root, 'rev-parse', `${ref}^{tree}`])).stdout.trim();
 
