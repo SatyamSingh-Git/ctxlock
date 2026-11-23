@@ -193,6 +193,12 @@ describe('diagnose', { timeout: 120_000 }, () => {
 
     expect(p.replay!.miss).toMatchObject({ status: 'uncertain', base: { passed: 1, valid: 3 }, head: { passed: 3, valid: 3 } });
     expect(p.replay!.status).toBe('inconclusive');
+
+    // With --extend the miss runs on to 10 a side: 1/10 against 10/10 shows the fix works.
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), counterFile: join(tempDir(), 'count') }));
+    const extended = await diagnose({ root: repo(), miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 3, maxRuns: 40, maxMinutes: 15, extendTo: 10 });
+    expect(extended.replay!.miss).toMatchObject({ status: 'improved', base: { passed: 1, valid: 10 }, head: { passed: 10, valid: 10 } });
+    expect(extended.replay!.status).toBe('validated');
   });
 
   it('a replay cut short by the run budget is inconclusive', async () => {

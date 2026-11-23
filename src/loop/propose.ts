@@ -41,6 +41,7 @@ export interface DiagnoseOptions {
   maxRuns: number;
   maxMinutes: number;
   ablate?: boolean;
+  extendTo?: number;
 }
 
 // D86: validated when the miss's probe goes from failing to passing with the fix, and nothing on the
@@ -85,9 +86,11 @@ export async function diagnose(opts: DiagnoseOptions): Promise<Proposal> {
       { probe: diagnosis.probe, source: 'head', changedInHead: false, selectedFor: 'the miss' },
       ...own.map((probe) => ({ probe, source: 'base' as const, changedInHead: false, selectedFor: 'changed' })),
     ];
+    // The ablation runs one side only, so it is never extended.
     const run = async (side: RepoReader, on: ProbeRun[], folder: string, maxRuns: number, arms?: ['head']) =>
       runProbes({ base: reader, head: side }, { base: scan, head: await scanRepo(side) }, on, {
         runs: opts.runs,
+        extendTo: opts.extendTo,
         maxRuns,
         arms,
         maxMinutes: opts.maxMinutes,

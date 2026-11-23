@@ -201,6 +201,82 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect(o).toMatchObject({ status: 'regressed', changedInHead: true, probe: { expect: { command: PNPM } } });
   });
 
+  // The arms take turns, base first, so run 2 is the head's first run: alone it uses pnpm. The base
+  // passes every run, so 3/3 against 1/3 is uncertain, and 10/10 against 1/10 regressed.
+  const closeCall = (runs = [2]) => {
+    scenario({
+      counterFile: join(tempDir(), 'count'),
+      behaviours: [
+        { when: { runs }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+        { when: { file: 'AGENTS.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+        { calls: [{ tool: 'Bash', input: { command: 'npm install zod' } }] },
+      ],
+    });
+  };
+
+  it('--extend runs an uncertain probe on to n a side and tests again on every run', async () => {
+    closeCall();
+    const root = await repo(
+      { 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }, { id: 'yarn', pattern: '\\byarn\\b' }) },
+      { 'AGENTS.md': 'Use npm.\n' },
+    );
+
+    const r = await runEval(options(root, { extendTo: 10, maxRuns: 26 }));
+
+    expect(r.outcomes.map((o) => [o.probe.id, o.status, o.base?.valid, o.head?.valid])).toEqual([
+      ['deps', 'regressed', 10, 10],
+      ['yarn', 'unchanged', 3, 3],
+    ]);
+    expect(r.outcomes[0]).toMatchObject({ base: { passed: 10 }, head: { passed: 1 } });
+    expect(r.outcomes[0]!.reason).toBeUndefined();
+    expect(r.gateFailures).toEqual(['deps']);
+    expect(r.totals.runs).toBe(26);
+    expect(claudeRuns()).toBe(26);
+  });
+
+  it('an extension that does not fit the run budget keeps the first verdict, and says so', async () => {
+    closeCall();
+    const root = await repo({ 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use npm.\n' });
+
+    const [o] = (await runEval(options(root, { extendTo: 10, maxRuns: 8 }))).outcomes;
+
+    expect(o).toMatchObject({ status: 'uncertain', reason: 'not extended: run budget (8 runs)', base: { valid: 3 }, head: { passed: 1, valid: 3 } });
+    expect(claudeRuns()).toBe(6);
+
+    // Two close calls: the first's extension takes the budget the second would need. The second
+    // probe's base starts at run 21, so its head's first run is 22.
+    closeCall([2, 22]);
+    const two = await repo(
+      { 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'one' }, { id: 'two' }) },
+      { 'AGENTS.md': 'Use npm.\n' },
+    );
+    const r = await runEval(options(two, { extendTo: 10, maxRuns: 30 }));
+    expect(r.outcomes.map((x) => [x.probe.id, x.status, x.head?.valid, x.reason])).toEqual([
+      ['one', 'regressed', 10, undefined],
+      ['two', 'uncertain', 3, 'not extended: run budget (30 runs)'],
+    ]);
+  });
+
+  it('cached runs count once in an extended probe', async () => {
+    const cacheDir = join(tempDir(), 'cache');
+    const root = await repo(
+      { 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }, { id: 'yarn', pattern: '\\byarn\\b' }) },
+      { 'AGENTS.md': 'Use npm.\n' },
+    );
+    closeCall();
+    await runEval(options(root, { extendTo: 10, cacheDir, maxRuns: 40 }));
+    const before = claudeRuns();
+
+    // A fresh count: the head passes on its second run again, so the base's 10 cached runs meet 1/3.
+    // Each probe then costs its 3 head runs, and 10 cached base runs free no budget: 5 runs fit deps alone.
+    closeCall();
+    const [o, yarn] = (await runEval(options(root, { extendTo: 10, cacheDir, maxRuns: 5 }))).outcomes;
+
+    expect(o).toMatchObject({ status: 'regressed', base: { valid: 10, passed: 10, cached: 10 }, head: { valid: 3, cached: 0 } });
+    expect(yarn).toMatchObject({ status: 'not-run', reason: 'run budget (5 runs)' });
+    expect(claudeRuns() - before).toBe(3);
+  });
+
   it('probes past the run budget are not run, and say why', async () => {
     const root = await repo({ 'AGENTS.md': 'Use npm.\n', 'evals/probes/p.yaml': probeFile({ id: 'a' }, { id: 'b' }) }, { 'AGENTS.md': 'Use pnpm.\n' });
 

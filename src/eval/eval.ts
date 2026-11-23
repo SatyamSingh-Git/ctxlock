@@ -29,6 +29,8 @@ export interface EvalOptions {
   all: boolean;
   keepRuns: boolean;
   now?: () => number;
+  // D121: an uncertain probe runs on to this many runs a side, if the run budget allows.
+  extendTo?: number;
 }
 
 export interface ArmResult {
@@ -252,7 +254,7 @@ export interface ProbeRun {
   selectedFor: string;
 }
 
-type RunOptions = Pick<EvalOptions, 'runs' | 'maxRuns' | 'maxMinutes' | 'model' | 'claude' | 'workdir' | 'cacheDir' | 'ctxlockVersion' | 'keepRuns' | 'now'> & {
+type RunOptions = Pick<EvalOptions, 'runs' | 'maxRuns' | 'maxMinutes' | 'model' | 'claude' | 'workdir' | 'cacheDir' | 'ctxlockVersion' | 'keepRuns' | 'now' | 'extendTo'> & {
   // A git tree to cache an arm's runs by, or null for a working tree or an overlay, which are never cached.
   trees: Record<ArmName, string | null>;
   // When the time budget began; by default, now.
@@ -315,26 +317,26 @@ export async function runProbes(
       // A torn or foreign file is a miss: the arm runs again and its runs replace the file.
       if (!Array.isArray(records)) return [];
       // A run that failed (logged out, rate-limited) says nothing about the context, so it is never reused.
-      return (records as RunRecord[]).filter((r) => r.error === null).slice(0, opts.runs);
+      return (records as RunRecord[]).filter((r) => r.error === null).slice(0, Math.max(opts.runs, opts.extendTo ?? opts.runs));
     };
 
+    // Cached runs count toward either round (D121).
+    const toRun = (records: Record<ArmName, RunRecord[]>, target: number) => arms.reduce((n, arm) => n + Math.max(0, target - records[arm].length), 0);
     let planned = 0;
     let overBudget = false;
     const plans = probes.map((c) => {
       const keys = { base: cacheKey('base', c.probe), head: cacheKey('head', c.probe) };
       const records = { base: readCache(keys.base), head: readCache(keys.head) };
-      const cost = arms.reduce((n, arm) => n + opts.runs - records[arm].length, 0);
+      const cost = toRun(records, opts.runs);
       if (!overBudget && planned + cost <= opts.maxRuns) planned += cost;
       else overBudget = true;
-      return { ...c, keys, records, cached: { base: records.base.length, head: records.head.length }, runnable: !overBudget, started: false, complete: false };
+      return { ...c, keys, records, cached: { base: records.base.length, head: records.head.length }, runnable: !overBudget, started: false, complete: false, unextended: false };
     });
 
     let n = 0;
     const elapsed = () => now() - started > opts.maxMinutes * 60_000;
-    // Once the time is up no run starts, but later probes the cache already holds still count.
-    for (const plan of plans) {
-      if (!plan.runnable) break;
-      for (let i = 0; i < opts.runs; i++) {
+    const runUpTo = async (plan: (typeof plans)[number], target: number) => {
+      for (let i = 0; i < target; i++) {
         for (const arm of arms) {
           if (plan.records[arm].length > i) continue;
           if (elapsed()) break;
@@ -363,8 +365,21 @@ export async function runProbes(
           }
         }
       }
-      plan.complete = arms.every((arm) => plan.records[arm].length === opts.runs);
+    };
+    // Once the time is up no run starts, but later probes the cache already holds still count.
+    for (const plan of plans) {
+      if (!plan.runnable) break;
+      await runUpTo(plan, opts.runs);
+      plan.complete = arms.every((arm) => plan.records[arm].length >= opts.runs);
       if (!plan.complete) continue;
+      const first = (arm: ArmName) => summarise(plan.probe, plan.records[arm], plan.cached[arm]);
+      if (opts.extendTo !== undefined && status(first('base'), first('head')) === 'uncertain') {
+        const extra = toRun(plan.records, opts.extendTo);
+        if (planned + extra <= opts.maxRuns) {
+          planned += extra;
+          await runUpTo(plan, opts.extendTo);
+        } else plan.unextended = true;
+      }
       for (const arm of arms) {
         const key = plan.keys[arm];
         const keep = plan.records[arm].filter((r) => r.error === null);
@@ -388,6 +403,7 @@ export async function runProbes(
         result.totals.cachedRuns += arms.reduce((n, arm) => n + plan.cached[arm], 0);
         const ran = { probe, source, changedInHead, selectedFor, ...sides, difference: difference(sides.base, sides.head) };
         outcome = plan.complete ? { ...ran, status: status(sides.base, sides.head) } : { ...ran, status: 'inconclusive', reason: `time budget (${opts.maxMinutes} min)` };
+        if (plan.unextended) outcome.reason = `not extended: run budget (${opts.maxRuns} runs)`;
         const note = source === 'base' && sides.base ? baseNote(sides.base) : undefined;
         if (note) outcome.baseNote = note;
       }

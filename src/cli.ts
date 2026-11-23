@@ -181,6 +181,10 @@ function diagnoseRuns(value: string): number {
   return n;
 }
 
+function extendable(command: string, extend: number | undefined, runs: number) {
+  if (extend !== undefined && extend <= runs) throw new UsageError(`ctxlock ${command}: --extend (${extend}) must be more than --runs (${runs})`);
+}
+
 const workdirOf = (flag: string | undefined) => resolve(flag ?? process.env.RUNNER_TEMP ?? tmpdir());
 // The user's own cache folder: in a temp folder that other users share, they could plant results.
 const cacheOf = (flag: string | undefined) =>
@@ -194,6 +198,7 @@ interface DiagnoseFlags {
   format: 'text' | 'json';
   since?: string;
   runs: number;
+  extend?: number;
   maxRuns: number;
   maxMinutes: number;
   model?: string;
@@ -228,6 +233,7 @@ interface EvalFlags {
   head?: string;
   format: 'text' | 'json' | 'markdown';
   runs?: number;
+  extend?: number;
   maxRuns?: number;
   maxMinutes?: number;
   model?: string;
@@ -458,6 +464,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
     .option('--since <date>', 'only sessions begun on or after this date, as YYYY-MM-DD', day)
     .option('--runs <n>', 'runs a side in the replay, at least 3', diagnoseRuns, 3)
+    .option('--extend <n>', 'run a miss that looks better, but not by enough runs to show it, on to n runs a side, within --max-runs', count)
     .option('--max-runs <n>', 'the most runs the replay and --ablate may start', count, 24)
     .option('--max-minutes <n>', 'start no replay run after this many minutes; --ablate then gets as many again', count, 15)
     .option('--model <model>', 'the model Claude Code runs (default: eval.model, or sonnet)')
@@ -470,6 +477,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .action(async (ref: string, dir: string | undefined, opts: DiagnoseFlags) => {
       const root = resolve(dir ?? '.');
       if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
+      extendable('diagnose', opts.extend, opts.runs);
       const scan = await scanRepo(fsReader(root));
       const unit = resolveRef(ref, scan.units);
       if (!unit) throw new UsageError(`ctxlock diagnose: no unit ${ref}; ctxlock scan lists the units`);
@@ -489,6 +497,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
         maxRuns: opts.maxRuns,
         maxMinutes: opts.maxMinutes,
         ablate: opts.ablate ?? false,
+        extendTo: opts.extend,
       });
       io.stdout(renderDiagnosis(p, opts.format));
       const text = renderProposal(p, shareable(repo));
@@ -619,6 +628,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .option('--head <ref>', 'the ref to check (default: the working tree)')
     .addOption(new Option('--format <format>', 'output format').choices(['text', 'json', 'markdown']).default('text'))
     .option('--runs <n>', 'runs per arm (default: eval.runs in ctxlock.yaml, or 3)', count)
+    .option('--extend <n>', 'run a probe that looks different, but not by enough runs to show it, on to n runs per arm, within --max-runs', count)
     .option('--max-runs <n>', 'the most runs this check may start (default: eval.max-runs, or 24)', count)
     .option('--max-minutes <n>', 'start no run after this many minutes (default: eval.max-minutes, or 20)', count)
     .option('--model <model>', 'the model Claude Code runs (default: eval.model, or sonnet)')
@@ -627,7 +637,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .option('--cache <dir>', 'where results from git refs are cached (default: ctxlock under $XDG_CACHE_HOME, else ~/.cache, or ~/AppData/Local on Windows)')
     .option('--all', 'run every probe, not only those on changed units')
     .option('--keep-runs', 'keep the run folders, with what the agent tried, for debugging')
-    .option('--fail-on-regression', 'exit 1 when a probe from the base passes every base run and no head run')
+    .option('--fail-on-regression', 'exit 1 when a probe from the base that passes at least 0.9 of its base runs regresses')
     .action(async (dir: string | undefined, opts: EvalFlags) => {
       markdown = opts.format === 'markdown';
       const root = resolve(dir ?? '.');
@@ -641,13 +651,16 @@ export async function main(argv: string[], io: Io): Promise<number> {
         if (err instanceof RefNotFound) throw new UsageError(`base ref ${opts.base} not found — in GitHub Actions use actions/checkout with fetch-depth: 0`);
         throw err;
       }
+      const runs = opts.runs ?? settings.runs;
+      extendable('eval', opts.extend, runs);
       const workdir = workdirOf(opts.workdir);
       const claude = claudeOf(opts.claude);
       const result = await runEval({
         root,
         base: opts.base,
         head: opts.head,
-        runs: opts.runs ?? settings.runs,
+        runs,
+        extendTo: opts.extend,
         maxRuns: opts.maxRuns ?? settings.maxRuns,
         maxMinutes: opts.maxMinutes ?? settings.maxMinutes,
         model: opts.model ?? settings.model,

@@ -172,6 +172,27 @@ describe('ctxlock eval', { timeout: 120_000 }, () => {
     expect(stdout).toMatch(/deps\s+instructions\/AGENTS\.md\s+base 0\/3\s+head 3\/3\s+improved/);
   });
 
+  it('--extend runs a probe that looks different on to n a side, and must be more than --runs', async () => {
+    // The head passes on run 2 alone: 3/3 against 1/3 is uncertain, 10/10 against 1/10 is not.
+    const file = join(tempDir(), 'scenario.json');
+    const behaviours = [
+      { when: { runs: [2] }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+      { when: { file: 'AGENTS.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+      { calls: [{ tool: 'Bash', input: { command: 'npm install zod' } }] },
+    ];
+    writeFileSync(file, JSON.stringify({ counterFile: join(tempDir(), 'count'), behaviours }));
+    process.env.FAKE_CLAUDE_SCENARIO = file;
+    const dir = await repo('Use pnpm.\n', 'Use npm.\n');
+
+    const same = await cli('eval', dir, '--base', 'HEAD', '--claude', 'ctxlock-no-such-claude', '--workdir', join(tempDir(), 'w'), '--runs', '3', '--extend', '3');
+    expect(same.code).toBe(2);
+    expect(same.stderr).toContain('--extend (3) must be more than --runs (3)');
+
+    const { code, stdout } = await evalCli(dir, '--extend', '10', '--max-runs', '20', '--cache', tempDir());
+    expect(code).toBe(0);
+    expect(stdout).toMatch(/deps\s+instructions\/AGENTS\.md\s+base 10\/10\s+head 1\/10\s+regressed/);
+  });
+
   it('exits 1 only with --fail-on-regression and a gated regression', async () => {
     const dir = await repo('Use pnpm.\n', 'Use npm.\n');
     expect((await evalCli(dir)).code).toBe(0);
@@ -875,6 +896,11 @@ describe('ctxlock misses', () => {
       expect(two.stderr).toContain("option '--runs <n>' argument '2' is invalid. expected at least 3: below 3 runs a side, no replay can show a difference at p ≤ 0.05");
       expect(existsSync(argv)).toBe(false);
       expect((await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--runs', '3')).code).toBe(0);
+      const ran = readFileSync(argv, 'utf8');
+      const extend = await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--extend', '3');
+      expect(extend.code).toBe(2);
+      expect(extend.stderr).toContain('--extend (3) must be more than --runs (3)');
+      expect(readFileSync(argv, 'utf8')).toBe(ran);
     });
 
     it('diagnoses a unit in context, writes its proposal with --drafts, and leaves one edited since', async () => {
@@ -914,6 +940,26 @@ describe('ctxlock misses', () => {
       expect(stdout).toContain('\nTaking it out changes nothing: the unit does not drive the miss.\n');
       expect(stdout).not.toContain('no probe to replay');
       expect((await run()).stdout).not.toContain('Without the unit');
+    });
+
+    it('diagnose --extend runs a miss that only looks better on to n a side', async () => {
+      // The diagnosis is run 1 and the arms take turns, so run 2 is the miss's first base run: 1/3 against 3/3.
+      const file = join(tempDir(), 'scenario.json');
+      const DEFECT = { verdict: 'defect', reason: 'It names no version.', quotes: ['API rule.'], fix: { find: 'API rule.', replace: 'API rule: call the v2 endpoint.' }, probe: { prompt: 'Add the endpoint.', expect: { command: 'v2' } } };
+      const behaviours = [
+        { when: { promptContains: 'You are diagnosing a miss' }, text: `\`\`\`json\n${JSON.stringify(DEFECT)}\n\`\`\``, calls: [] },
+        { when: { runs: [2] }, calls: [{ tool: 'Bash', input: { command: 'curl /v2/items' } }] },
+        { when: { file: '.claude/rules/api.md', contains: 'v2' }, calls: [{ tool: 'Bash', input: { command: 'curl /v2/items' } }] },
+        { calls: [{ tool: 'Bash', input: { command: 'curl /v1/items' } }] },
+      ];
+      writeFileSync(file, JSON.stringify({ counterFile: join(tempDir(), 'count'), behaviours }));
+      vi.stubEnv('FAKE_CLAUDE_SCENARIO', file);
+      const dir = recorded((real) => real);
+
+      const { code, stdout } = await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--format', 'json', '--extend', '10');
+
+      expect(code).toBe(0);
+      expect(JSON.parse(stdout).replay).toMatchObject({ status: 'validated', miss: { base: { passed: 1, valid: 10 }, head: { passed: 10, valid: 10 } } });
     });
 
     it('--max-runs defaults to 24, so the miss and two existing probes all replay at 3 a side', async () => {
