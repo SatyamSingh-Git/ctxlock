@@ -51,6 +51,25 @@ Changed units:
   Both tests were corrected to pin today's behaviour, which was the point. Lesson: check the current output before writing "as today" into a test.
 - **The design was wrong about `.mdc` frontmatter** (D111). It came from reading formats as if every agent parsed YAML strictly. Only a real repository showed otherwise.
 
+## The final review
+
+A fresh reviewer read the whole range, built it, and attacked it with real git repositories. It found two ways for a pull request to change another agent's execution config while `ctxlock diff` still exited 0. Both came from my own code:
+
+- **A symlink.** `.claude/rules/x.md -> .cursor/hooks.json` made the "modelled path wins" rule (D108) drop the Cursor config unit, so a hook added to it passed. Config now always keeps its own unit (D113).
+- **A binary.** L2 read config through the text reader, which skips a file that is not UTF-8. A compiled hook, a `.wasm` plugin, or one Latin-1 byte in a plugin hid every edit. Opaque config is now fingerprinted from its digest, with no text needed (D114).
+
+It also found four Importants. Two were mine:
+- case variants of rule folders skipped L1 (D115);
+- confirmed paths were neither covered nor listed as gaps.
+
+Two were inherited from 0.1.0, and are now fixed for every agent (D116):
+- a config path swapped for a symlink into `node_modules`;
+- one invalid byte hiding a hidden character.
+
+Every fix was test-first and mutation-checked. The suite went from 854 to 877 tests.
+
+The lesson repeats the one from D106: in a gate, every rule that decides what is checked is an attack surface, and so is every assumption about what a file looks like. The tests I wrote checked what I had built. The reviewer checked what an attacker would try.
+
 ## What is next
 
 - **Predicted loading for Copilot, then Cursor, OpenCode and Gemini.** The research notes already hold their loading rules.
