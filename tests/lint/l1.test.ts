@@ -14,6 +14,15 @@ async function hidden(files: Record<string, string | Buffer>) {
 }
 
 describe('L1-hidden-unicode', () => {
+  it('a text file that is not valid UTF-8 is still read for hidden characters, and a binary one is not', async () => {
+    const latin1 = Buffer.concat([Buffer.from('caf'), Buffer.from([0xe9]), Buffer.from(` au lait${ZWSP}\n`)]);
+    const zwspBytes = Buffer.from(ZWSP);
+    const binary = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff]), zwspBytes, Buffer.from([0x00])]);
+
+    expect(await hidden({ 'AGENTS.md': latin1 })).toEqual([['must', 'AGENTS.md', 1, 13, 'hidden character U+200B ZERO WIDTH SPACE at 1:13']]);
+    expect(await hidden({ '.claude/skills/s/SKILL.md': '---\nname: s\ndescription: d\n---\nbody\n', '.claude/skills/s/logo.png': binary })).toEqual([]);
+  });
+
   it('U+200B in a rule is must at the right line and column', async () => {
     expect(await hidden({ '.claude/rules/r.md': `line one\nab${ZWSP}c\n` })).toEqual([
       ['must', '.claude/rules/r.md', 2, 3, 'hidden character U+200B ZERO WIDTH SPACE at 2:3'],

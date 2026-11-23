@@ -195,6 +195,12 @@ A UTF-8 byte-order mark at the start of a settings file, which Windows PowerShel
 
 **Fix:** correct the syntax at the position in the message.
 
+### `L2-exec-config-unread` (must)
+
+`<path> is a symlink to <target>, which ctxlock cannot read, and the agent follows it`. This appears for a config path, such as `.claude/settings.json` or `.cursor/hooks.json`, that links to a file git ignores (for example, one under `node_modules`) or to one outside the repository. The agent reads whatever the link leads to, but ctxlock cannot, so the hooks or MCP servers there would never reach the check.
+
+**Fix:** commit the config itself, or link to a file that is committed in the repository.
+
 ### `L2-risky-instruction` (should)
 
 Lines in instructions, rules, skills and the scripts inside skills that tell an agent to:

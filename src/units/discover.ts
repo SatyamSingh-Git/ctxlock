@@ -14,7 +14,7 @@ interface Pattern {
 
 const glob = (...globs: string[]) => picomatch(globs, { dot: true });
 // Windows and macOS read .Cursor/mcp.json as .cursor/mcp.json, so a pull request must not dodge the
-// check by a folder's case.
+// check by a folder's case. Root names such as GEMINI.md keep theirs: docs/agent.md is not an agent file.
 const anyCase = (...globs: string[]) => picomatch(globs, { dot: true, nocase: true });
 
 // Order matters: the first matching row decides the kind.
@@ -28,55 +28,55 @@ const PATTERNS: Pattern[] = [
   { match: glob('**/.codex/config.toml', '**/.codex/hooks.json'), kind: 'config', family: 'codex' },
   { match: glob('.vscode/settings.json'), kind: 'config', family: 'vscode' },
   // Other agents' files, for the safety checks only (the-guide/other-agents.md has each source).
-  { match: glob('.github/copilot-instructions.md'), kind: 'instructions', family: 'copilot' },
-  { match: glob('.github/instructions/**/*.instructions.md'), kind: 'rule', family: 'copilot' },
-  { match: glob('**/.github/skills/*/SKILL.md'), kind: 'skill', family: 'copilot' },
+  { match: anyCase('.github/copilot-instructions.md'), kind: 'instructions', family: 'copilot' },
+  { match: anyCase('.github/instructions/**/*.instructions.md'), kind: 'rule', family: 'copilot' },
+  { match: anyCase('**/.github/skills/*/SKILL.md'), kind: 'skill', family: 'copilot' },
   {
-    match: anyCase('.github/workflows/copilot-setup-steps.yml', '.github/hooks/*.json', '.github/mcp.json', '.github/copilot/settings.json', '.vscode/mcp.json'),
+    match: anyCase('.github/workflows/copilot-setup-steps.yml', '.github/hooks/*.json', '**/.github/mcp.json', '.github/copilot/settings{,.local}.json', '.vscode/mcp.json'),
     kind: 'config',
     family: 'copilot',
   },
-  { match: glob('**/.cursor/rules/**/*.mdc'), kind: 'rule', family: 'cursor' },
-  { match: glob('.cursorrules'), kind: 'instructions', family: 'cursor' },
-  { match: glob('**/.cursor/skills/*/SKILL.md'), kind: 'skill', family: 'cursor' },
+  { match: anyCase('**/.cursor/rules/**/*.mdc'), kind: 'rule', family: 'cursor' },
+  { match: anyCase('.cursorrules'), kind: 'instructions', family: 'cursor' },
+  { match: anyCase('**/.cursor/skills/*/SKILL.md'), kind: 'skill', family: 'cursor' },
   { match: anyCase('.cursor/mcp.json', '.cursor/hooks.json'), kind: 'config', family: 'cursor' },
   { match: glob('**/GEMINI.md'), kind: 'instructions', family: 'gemini' },
-  { match: glob('**/.gemini/skills/*/SKILL.md'), kind: 'skill', family: 'gemini' },
+  { match: anyCase('**/.gemini/skills/*/SKILL.md'), kind: 'skill', family: 'gemini' },
   { match: anyCase('**/.gemini/settings.json'), kind: 'config', family: 'gemini' },
-  { match: glob('**/{.agents,.agent,_agents,_agent}/rules/*.md'), kind: 'rule', family: 'antigravity' },
+  { match: anyCase('**/{.agents,.agent,_agents,_agent}/rules/*.md'), kind: 'rule', family: 'antigravity' },
   {
-    match: anyCase('**/{.agents,.agent,_agents,_agent}/{hooks.json,mcp_config.json}', '**/{.agents,.agent,_agents,_agent}/plugins/*/{plugin.json,hooks.json,mcp_config.json}'),
+    match: anyCase('**/{.agents,.agent,_agents,_agent}/{hooks.json,mcp_config.json}', '**/{.agents,.agent,_agents,_agent}/plugins/*/{plugin.json,hooks.json,mcp_config.json}', '**/{.agents,.agent,_agents,_agent}/plugins/*/{.antigravity-plugin,.gemini-plugin}/plugin.json'),
     kind: 'config',
     family: 'antigravity',
   },
-  { match: glob('.devin/global_rules.md', '.windsurf/global_rules.md', '.windsurfrules'), kind: 'instructions', family: 'devin' },
-  { match: glob('**/.devin/rules/*.md', '**/.windsurf/rules/*.md'), kind: 'rule', family: 'devin' },
-  { match: glob('**/.devin/skills/*/SKILL.md', '**/.windsurf/skills/*/SKILL.md'), kind: 'skill', family: 'devin' },
-  { match: anyCase('.devin/hooks.v1.json', '.devin/mcp_config.json', '.devin/config.json'), kind: 'config', family: 'devin' },
-  { match: glob('**/.kiro/steering/**/*.md'), kind: 'rule', family: 'kiro' },
-  { match: glob('**/.kiro/skills/*/SKILL.md'), kind: 'skill', family: 'kiro' },
+  { match: anyCase('.devin/global_rules.md', '.windsurf/global_rules.md', '.windsurfrules'), kind: 'instructions', family: 'devin' },
+  { match: anyCase('**/.devin/rules/*.md', '**/.windsurf/rules/*.md'), kind: 'rule', family: 'devin' },
+  { match: anyCase('**/.devin/skills/*/SKILL.md', '**/.windsurf/skills/*/SKILL.md'), kind: 'skill', family: 'devin' },
+  { match: anyCase('.devin/hooks.v1.json', '.devin/mcp_config.json', '**/.devin/config{,.local}.json'), kind: 'config', family: 'devin' },
+  { match: anyCase('**/.kiro/steering/**/*.md'), kind: 'rule', family: 'kiro' },
+  { match: anyCase('**/.kiro/skills/*/SKILL.md'), kind: 'skill', family: 'kiro' },
   { match: anyCase('.kiro/hooks/*.json', '.kiro/settings/mcp.json', '.kiro/agents/*.{json,md}'), kind: 'config', family: 'kiro' },
-  { match: glob('.clinerules'), kind: 'instructions', family: 'cline' },
-  { match: glob('.clinerules/skills/*/SKILL.md', '.cline/skills/*/SKILL.md'), kind: 'skill', family: 'cline' },
+  { match: anyCase('.clinerules'), kind: 'instructions', family: 'cline' },
+  { match: anyCase('.clinerules/skills/*/SKILL.md', '.cline/skills/*/SKILL.md'), kind: 'skill', family: 'cline' },
   // Cline runs each file in a hooks folder, named for its event, whatever its extension.
   { match: anyCase('.clinerules/hooks/*', '.cline/hooks/*', '.cline/plugins/**'), kind: 'config', family: 'cline' },
   // A skill's other files sit under .clinerules too, and are not rules.
   {
-    match: picomatch(['.clinerules/**/*.{md,markdown,txt}', '.cline/rules/**/*.{md,markdown,txt}'], { dot: true, ignore: ['.clinerules/skills/**'] }),
+    match: picomatch(['.clinerules/**/*.{md,markdown,txt}', '.cline/rules/**/*.{md,markdown,txt}'], { dot: true, nocase: true, ignore: ['.clinerules/skills/**'] }),
     kind: 'rule',
     family: 'cline',
   },
-  { match: glob('**/{.opencode,.kilo}/{skill,skills}/*/SKILL.md'), kind: 'skill', family: 'opencode' },
-  { match: glob('{.kilocode,.kilo}/rules/**/*.md'), kind: 'rule', family: 'opencode' },
-  { match: glob('.kilocoderules'), kind: 'instructions', family: 'opencode' },
+  { match: anyCase('**/{.opencode,.kilo}/{skill,skills}/*/SKILL.md'), kind: 'skill', family: 'opencode' },
+  { match: anyCase('{.kilocode,.kilo}/{rules,rules-*}/**/*.md', '**/.opencode/{agent,agents,command,commands,mode,modes}/**/*.md'), kind: 'rule', family: 'opencode' },
+  { match: anyCase('.kilocoderules', '.kilocoderules-*'), kind: 'instructions', family: 'opencode' },
   {
-    match: anyCase('**/{opencode,kilo}.{json,jsonc}', '{.kilo,.kilocode}/mcp.json', '**/{.opencode,.kilo,.kilocode}/{plugin,plugins,tool,tools}/**'),
+    match: anyCase('**/{opencode,kilo}.{json,jsonc}', '{.kilo,.kilocode}/mcp.json', '**/.opencode/package.json', '**/{.opencode,.kilo,.kilocode}/{plugin,plugins,tool,tools}/**'),
     kind: 'config',
     family: 'opencode',
   },
-  { match: glob('.junie/guidelines.md', '.junie/playbook.md'), kind: 'instructions', family: 'junie' },
-  { match: glob('.junie/guidelines/**/*.md', '.junie/rules/**/*.md'), kind: 'rule', family: 'junie' },
-  { match: glob('.junie/skills/*/SKILL.md'), kind: 'skill', family: 'junie' },
+  { match: anyCase('.junie/guidelines.md', '.junie/playbook.md'), kind: 'instructions', family: 'junie' },
+  { match: anyCase('.junie/guidelines/**/*.md', '.junie/rules/**/*.md'), kind: 'rule', family: 'junie' },
+  { match: anyCase('.junie/skills/*/SKILL.md'), kind: 'skill', family: 'junie' },
   { match: anyCase('.junie/mcp/mcp.json', '.junie/config.json'), kind: 'config', family: 'junie' },
   { match: glob('**/AGENT.md', '**/AGENTS.local.md'), kind: 'instructions', family: 'other' },
 ];
@@ -238,6 +238,16 @@ export async function discoverUnits(reader: RepoReader, declared: Declared = { k
   }
 
   for (const [link, target] of links) {
+    // The agent follows a link at a config path wherever it leads, such as into node_modules, so a
+    // target ctxlock cannot read would take that config out of the gate.
+    if (patternOf(link)?.kind === 'config' && !reachable.has(link)) {
+      problems.push({
+        rule: 'L2-exec-config-unread',
+        severity: 'must',
+        message: `${link} is a symlink to ${target ?? 'a file outside the repository'}, which ctxlock cannot read, and the agent follows it`,
+        path: link,
+      });
+    }
     if (target === null) {
       problems.push({
         rule: 'L0-symlink-outside',

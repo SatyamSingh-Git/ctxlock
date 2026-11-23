@@ -96,7 +96,7 @@ export const hiddenUnicode: Rule = {
   id: 'L1-hidden-unicode',
   async check(ctx) {
     const findings: Finding[] = [];
-    for await (const { unit, path, text } of textFiles(ctx)) {
+    for await (const { unit, path, text } of textFiles(ctx, undefined, true)) {
       const cps = Array.from(text, (c) => c.codePointAt(0)!);
       const flagTags = flagTagIndexes(cps);
       let line = 1;
@@ -141,7 +141,7 @@ export const htmlComment: Rule = {
   id: 'L1-html-comment',
   async check(ctx) {
     const findings: Finding[] = [];
-    for await (const { unit, path, text } of textFiles(ctx)) {
+    for await (const { unit, path, text } of textFiles(ctx, undefined, true)) {
       if (!path.endsWith('.md')) continue;
       // An unclosed comment hides everything after it, so it runs to the end of the file.
       for (const match of maskCode(text).matchAll(/<!--[\s\S]*?(?:-->|$)/g)) {

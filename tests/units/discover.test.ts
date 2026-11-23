@@ -374,13 +374,34 @@ describe('discoverUnits', () => {
       ['.kilo/plugins/audit.ts', 'config/.kilo/plugins/audit.ts', 'opencode'],
       ['.junie/mcp/mcp.json', 'config/.junie/mcp/mcp.json', 'junie'],
       ['.junie/config.json', 'config/.junie/config.json', 'junie'],
+      // Added after the final review: confirmed in the path research, missed in the first pass.
+      ['.github/copilot/settings.local.json', 'config/.github/copilot/settings.local.json', 'copilot'],
+      ['pkg/.github/mcp.json', 'config/pkg/.github/mcp.json', 'copilot'],
+      ['.devin/config.local.json', 'config/.devin/config.local.json', 'devin'],
+      ['pkg/.devin/config.json', 'config/pkg/.devin/config.json', 'devin'],
+      ['.agents/plugins/p/.antigravity-plugin/plugin.json', 'config/.agents/plugins/p/.antigravity-plugin/plugin.json', 'antigravity'],
+      ['.agents/plugins/p/.gemini-plugin/plugin.json', 'config/.agents/plugins/p/.gemini-plugin/plugin.json', 'antigravity'],
+      ['.opencode/package.json', 'config/.opencode/package.json', 'opencode'],
+      ['.opencode/agent/review.md', 'rule/.opencode/agent/review.md', 'opencode'],
+      ['.opencode/commands/ship/deploy.md', 'rule/.opencode/commands/ship/deploy.md', 'opencode'],
+      ['.opencode/modes/plan.md', 'rule/.opencode/modes/plan.md', 'opencode'],
+      ['.kilo/rules-code/style.md', 'rule/.kilo/rules-code/style.md', 'opencode'],
+      ['.kilocode/rules-architect/style.md', 'rule/.kilocode/rules-architect/style.md', 'opencode'],
+      ['.kilocoderules-code', 'instructions/.kilocoderules-code', 'opencode'],
     ])('%s is %s, of family %s', async (path, id, family) => {
       expect(await one(path, path.endsWith('SKILL.md') ? skill('x') : 'Use pnpm.\n')).toEqual([[id, family]]);
     });
 
-    it("matches other agents' config in any case, as Windows and macOS read it", async () => {
+    it("matches other agents' folders in any case, as Windows and macOS read them, but not a root file name in another case", async () => {
       expect(await one('.Cursor/mcp.json', '{}')).toEqual([['config/.Cursor/mcp.json', 'cursor']]);
       expect(await one('.GITHUB/hooks/guard.json', '{}')).toEqual([['config/.GITHUB/hooks/guard.json', 'copilot']]);
+      expect(await one('.CURSOR/rules/x.mdc')).toEqual([['rule/.CURSOR/rules/x.mdc', 'cursor']]);
+      expect(await one('.GITHUB/copilot-instructions.md')).toEqual([['instructions/.GITHUB/copilot-instructions.md', 'copilot']]);
+      expect(await one('.Kiro/Steering/style.md')).toEqual([['rule/.Kiro/Steering/style.md', 'kiro']]);
+      expect(await one('.Github/Skills/x/SKILL.md', skill('x'))).toEqual([['skill/.Github/Skills/x', 'copilot']]);
+      // A docs file named agent.md or gemini.md is not one of these agents' files.
+      expect(await one('docs/agent.md')).toEqual([]);
+      expect(await one('gemini.md')).toEqual([]);
     });
 
     it.each([
@@ -430,6 +451,20 @@ describe('discoverUnits', () => {
       expect(units.map((u) => [u.id, u.family])).toEqual([
         ['rule/.claude/rules/x.md', 'claude'],
         ['config/.cursor/hooks.json', 'cursor'],
+      ]);
+    });
+
+    it('a config path that is a symlink to a file ctxlock cannot read is a must, since the agent follows it', async () => {
+      const { problems } = await discoverUnits(
+        memReader(
+          { '.cursor/real.json': '{}' },
+          { '.cursor/hooks.json': 'node_modules/x/hooks.json', '.claude/settings.json': null, '.github/hooks/ok.json': '.cursor/real.json' },
+        ),
+      );
+
+      expect(problems.filter((p) => p.rule === 'L2-exec-config-unread').map((p) => [p.severity, p.path])).toEqual([
+        ['must', '.cursor/hooks.json'],
+        ['must', '.claude/settings.json'],
       ]);
     });
 

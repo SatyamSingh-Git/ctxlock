@@ -4,6 +4,7 @@ import type { LintContext } from './types.js';
 
 // ignoreBOM keeps a leading BOM in the text, so L1 can allow it at offset 0 and flag it anywhere else.
 const utf8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+const lenient = new TextDecoder('utf-8', { ignoreBOM: true });
 
 // Several rules read the same files, and a git-ref reader spawns git for each read, so each file is
 // read once per reader.
@@ -18,10 +19,12 @@ export function readOnce(reader: RepoReader, path: string): Promise<Buffer> {
 }
 
 // Each text file of each unit that `include` accepts, once. Files that are not UTF-8, such as
-// images in a skill, are skipped.
+// images in a skill, are skipped. With `anyText`, a file with no NUL byte, which git would call text,
+// is read with each invalid byte replaced, so one Latin-1 byte cannot hide the rest of the file.
 export async function* textFiles(
   { reader, units }: LintContext,
   include: (unit: Unit) => boolean = () => true,
+  anyText = false,
 ): AsyncGenerator<{ unit: Unit; path: string; text: string }> {
   const seen = new Set<string>();
   for (const unit of units) {
@@ -34,7 +37,8 @@ export async function* textFiles(
       try {
         text = utf8.decode(buf);
       } catch {
-        continue;
+        if (!anyText || buf.includes(0)) continue;
+        text = lenient.decode(buf);
       }
       yield { unit, path, text };
     }
