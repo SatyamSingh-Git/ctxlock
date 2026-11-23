@@ -1,6 +1,6 @@
 # Safety checks for every agent's files: design
 
-Status: draft for Satyam's approval, 2026-11-23. Revised after a builder check.
+Status: approved by Satyam, 2026-11-23, after a builder check.
 
 ## Why
 
