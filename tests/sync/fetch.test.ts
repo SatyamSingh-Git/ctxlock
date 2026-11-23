@@ -107,21 +107,26 @@ describe('fetchUpstream', { timeout: 60_000 }, () => {
     expect(repo.message).toContain('upstream platform');
   });
 
-  it('a server that asks for credentials gets none: no askpass, no credential helper, no prompt', async () => {
+  it('with credentials off, a server that asks gets none: no askpass or credential helper; sync keeps its own', async () => {
     const work = tempDir();
-    const marker = join(work, 'asked').replaceAll('\\', '/');
-    writeTree(work, { 'askpass.sh': `#!/bin/sh\ntouch "${marker}"\necho secret\n` });
+    const askpassRan = join(work, 'askpass-ran').replaceAll('\\', '/');
+    const helperRan = join(work, 'helper-ran').replaceAll('\\', '/');
+    writeTree(work, { 'askpass.sh': `#!/bin/sh\ntouch "${askpassRan}"\necho secret\n` });
     chmodSync(join(work, 'askpass.sh'), 0o755);
     const config = join(work, 'gitconfig');
-    writeFileSync(config, `[credential]\n\thelper = "!f() { touch '${marker}'; echo password=secret; }; f"\n`);
+    writeFileSync(config, `[credential]\n\thelper = "!f() { touch '${helperRan}'; echo password=secret; }; f"\n`);
     const server = createServer((_req, res) => res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="x"' }).end());
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
     vi.stubEnv('GIT_ASKPASS', join(work, 'askpass.sh').replaceAll('\\', '/'));
     vi.stubEnv('GIT_CONFIG_GLOBAL', config);
     try {
       const { port } = server.address() as { port: number };
-      expect(await failure(fetchUpstream(up(`http://127.0.0.1:${port}/private.git`), tempDir()))).toBeInstanceOf(UpstreamError);
-      expect(existsSync(marker)).toBe(false);
+      const url = `http://127.0.0.1:${port}/private.git`;
+      expect(await failure(fetchUpstream(up(url), tempDir(), { credentials: false }))).toBeInstanceOf(UpstreamError);
+      expect([existsSync(askpassRan), existsSync(helperRan)]).toEqual([false, false]);
+      // Sync's upstreams are the repository owner's own, often private, so its credential helper still answers.
+      await failure(fetchUpstream(up(url), tempDir()));
+      expect(existsSync(helperRan)).toBe(true);
     } finally {
       vi.unstubAllEnvs();
       server.close();

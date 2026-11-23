@@ -15,19 +15,18 @@ const said = (err: unknown) => String((err as { stderr?: string }).stderr ?? '')
 
 // Clones once into ctxlock's cache and fetches after that, then reads the upstream at the commit its
 // ref resolves to. The clone has no checkout, and is read only through gitReader.
-export async function fetchUpstream(u: Upstream, cache: string): Promise<{ commit: string; reader: RepoReader }> {
+export async function fetchUpstream(u: Upstream, cache: string, { credentials = true } = {}): Promise<{ commit: string; reader: RepoReader }> {
   const root = join(cache, 'upstream');
   const noHooks = join(root, 'no-hooks');
   mkdirSync(noHooks, { recursive: true });
   const dir = join(root, createHash('sha256').update(u.repo).digest('hex').slice(0, 16));
   // Upstream content is data: no hook runs, the upstream's or one set in global config, and no ext:: transport.
-  // Nor does git ask anyone for a password: no terminal prompt, askpass program or credential helper,
-  // which on Windows opens a window, so a private or mistyped URL fails at once instead of waiting.
-  const git = (args: string[]) =>
-    run('git', ['-c', `core.hooksPath=${noHooks}`, '-c', 'protocol.ext.allow=never', '-c', 'credential.helper=', '-c', 'core.askPass=', ...args], {
-      windowsHide: true,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', SSH_ASKPASS: '' },
-    });
+  // Without credentials, for a stranger's URL, git asks no one for a password either: no terminal prompt,
+  // askpass program or credential helper (a window, on Windows), so it fails at once instead of waiting.
+  // Sync's upstreams are the repository owner's own, often private, so they keep the user's credentials.
+  const locked = credentials ? [] : ['-c', 'credential.helper=', '-c', 'core.askPass='];
+  const env = credentials ? process.env : { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', SSH_ASKPASS: '' };
+  const git = (args: string[]) => run('git', ['-c', `core.hooksPath=${noHooks}`, '-c', 'protocol.ext.allow=never', ...locked, ...args], { windowsHide: true, env });
 
   try {
     if (existsSync(dir)) await git(['-C', dir, 'fetch', '--quiet', '--prune', '--prune-tags', '--tags', '--force', 'origin']);

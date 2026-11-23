@@ -1,7 +1,8 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import { CheckError, checkTarget } from '../src/check.js';
 import { UpstreamError } from '../src/sync/fetch.js';
 import { cleanup, git, gitRepo, tempDir, writeTree } from './helpers/repo.js';
@@ -97,6 +98,24 @@ describe('checkTarget on a git URL', { timeout: 60_000 }, () => {
     writeTree(dir, { '.claude/settings.json': hook('./three.sh') });
     git(dir, 'commit', '-qam', 'three');
     expect((await checkTarget(url, { cache })).runs[0]?.message).toBe('SessionStart hook runs "./three.sh"');
+  });
+
+  it("a stranger's URL that asks for credentials gets none, not even from the user's credential helper", async () => {
+    const work = tempDir();
+    const marker = join(work, 'asked').replaceAll('\\', '/');
+    const config = join(work, 'gitconfig');
+    writeFileSync(config, `[credential]\n\thelper = "!f() { touch '${marker}'; echo password=secret; }; f"\n`);
+    const server = createServer((_req, res) => res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="x"' }).end());
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    vi.stubEnv('GIT_CONFIG_GLOBAL', config);
+    try {
+      const { port } = server.address() as { port: number };
+      await expect(checkTarget(`http://127.0.0.1:${port}/private.git`, { cache: tempDir() })).rejects.toThrow(UpstreamError);
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+      server.close();
+    }
   });
 
   it('a URL that cannot be fetched is an UpstreamError', async () => {

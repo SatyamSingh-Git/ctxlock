@@ -48,7 +48,7 @@ const URL_LIKE = /^[a-z][a-z0-9+.-]*:\/\/|^[^/\\\s]+@[^/\\\s]+:/i;
 async function readerOf(target: string, opts: { ref?: string; cache: string }): Promise<{ base: RepoReader; read: string; name: string }> {
   if (URL_LIKE.test(target)) {
     const ref = opts.ref ?? 'HEAD';
-    const { commit, reader } = await fetchUpstream({ name: target, repo: target, ref, units: [], allowExec: [] }, opts.cache);
+    const { commit, reader } = await fetchUpstream({ name: target, repo: target, ref, units: [], allowExec: [] }, opts.cache, { credentials: false });
     return { base: reader, read: `${ref} @ ${commit.slice(0, 7)}`, name: basename(target.replace(/\.git\/?$/, '')) };
   }
   if (!existsSync(target)) throw new CheckError(`no such folder: ${target}`);
