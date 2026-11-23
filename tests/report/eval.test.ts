@@ -42,7 +42,7 @@ describe('renderEval markdown', () => {
   });
 
   it('gives the 95% intervals, whether the agent saw the change, tokens, and what was not run', () => {
-    expect(md).toContain('95% intervals (Wilson): `deps` base 0.00–0.56, head 0.44–1.00');
+    expect(md).toContain('95% intervals: `deps` base 0.00–0.56, head 0.44–1.00\n');
     expect(md).toContain('`deps`: `instructions/AGENTS.md` loaded in 3/3 head runs, predicted');
     expect(md).toContain('`deps` 1,000 → 1,010 (+1.0%)');
     expect(md).toContain('`b`: run budget (6 runs)');
@@ -51,7 +51,30 @@ describe('renderEval markdown', () => {
 
   it('ends with the cost line and the footer', () => {
     expect(md).toContain('Cost: 6 runs (0 cached) · 1m 12s · $0.26 notional on a subscription · 7-day usage window 57% → 57%');
-    expect(md.endsWith('_Advisory. Probes ran on Claude Code only; Codex is predicted statically._\n')).toBe(true);
+    expect(
+      md.endsWith(
+        '_Advisory. Probes ran on Claude Code only; Codex is predicted statically. `improved` and `regressed` need a one-sided Fisher p ≤ 0.05; `uncertain` means the pass rates differ by half or more without it. At 3 runs a side only a full flip, 3/3 against 0/3, can show._\n',
+      ),
+    ).toBe(true);
+  });
+
+  it('the report marks flaky and failing base probes, gives the difference with its interval, and says what uncertain means', () => {
+    const base = { probe: probe('deps'), source: 'base' as const, changedInHead: false, selectedFor: 'changed' };
+    const outcomes = [
+      { ...base, base: arm(3, 3, [0.4385, 1]), head: arm(0, 3, [0, 0.5615]), status: 'regressed' as const, difference: { value: -1, interval: [-1, -0.2059] as [number, number] } },
+      { ...base, probe: probe('shaky'), base: arm(2, 3, [0.2077, 0.9385]), head: arm(0, 3, [0, 0.5615]), status: 'uncertain' as const, baseNote: 'flaky' as const },
+      { ...base, probe: probe('broken'), base: arm(0, 3, [0, 0.5615]), head: arm(0, 3, [0, 0.5615]), status: 'unchanged' as const, baseNote: 'fails' as const },
+    ];
+    const md = renderEval(result({ outcomes }), 'markdown');
+    const text = renderEval(result({ outcomes }), 'text');
+
+    expect(md).toContain('| `deps` | `instructions/AGENTS.md` | 3/3 | 0/3 | **regressed** |');
+    expect(md).toContain('| `shaky` | `instructions/AGENTS.md` | 2/3 | 0/3 | uncertain · flaky on the base (2/3): it never gates |');
+    expect(md).toContain('| `broken` | `instructions/AGENTS.md` | 0/3 | 0/3 | unchanged · fails on the base: the probe or the base context is broken, so it can only improve |');
+    expect(md).toContain('95% intervals: `deps` base 0.44–1.00, head 0.00–0.56, difference −1.00 (−1.00 to −0.21); `shaky` base 0.21–0.94, head 0.00–0.56;');
+    expect(md).not.toContain('(Wilson)');
+    expect(text).toMatch(/shaky\s+instructions\/AGENTS\.md\s+base 2\/3\s+head 0\/3\s+uncertain\n {4}flaky on the base \(2\/3\): it never gates\n/);
+    expect(text).toContain('\n    fails on the base: the probe or the base context is broken, so it can only improve\n');
   });
 
   it('names both models when the arms ran on different ones', () => {

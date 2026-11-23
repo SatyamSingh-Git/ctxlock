@@ -27,8 +27,14 @@ function notes(o: ProbeOutcome, shown: (text: string) => string): string[] {
   if (o.selectedFor !== 'changed' && o.selectedFor !== 'all') out.push(`selected: ${shown(o.selectedFor)}`);
   if (o.source === 'head') out.push('new in this pull request, so it never gates');
   if (o.changedInHead) out.push('this pull request edits the probe; the base version ran');
+  if (o.baseNote === 'flaky') out.push(`flaky on the base (${ratio(o.base)}): it never gates`);
+  if (o.baseNote === 'fails') out.push('fails on the base: the probe or the base context is broken, so it can only improve');
   return out;
 }
+
+const signed = (x: number) => x.toFixed(2).replace('-', '−');
+const differenceText = (o: ProbeOutcome) =>
+  o.difference ? `, difference ${signed(o.difference.value)} (${signed(o.difference.interval[0])} to ${signed(o.difference.interval[1])})` : '';
 
 const tokens = (n: number) => n.toLocaleString('en-US');
 
@@ -85,7 +91,7 @@ export function renderEval(r: EvalResult, format: 'text' | 'json' | 'markdown'):
     if (items.length > 0) lines.push('', `**${title}**`, '', ...items.map((i) => `- ${i}`));
   };
   if (ran.length > 0) {
-    lines.push('', `95% intervals (Wilson): ${ran.map((o) => `${code(o.probe.id)} base ${fixed(o.base?.interval ?? null)}, head ${fixed(o.head?.interval ?? null)}`).join('; ')}`);
+    lines.push('', `95% intervals: ${ran.map((o) => `${code(o.probe.id)} base ${fixed(o.base?.interval ?? null)}, head ${fixed(o.head?.interval ?? null)}${differenceText(o)}`).join('; ')}`);
   }
   block('Did the agent see the change?', ran.flatMap((o) => (seen(o) ? [`${code(o.probe.id)}: ${code(o.probe.unit)} ${seen(o)}`] : [])));
   block('Input tokens per run (median, base → head)', ran.flatMap((o) => (tokenChange(o) ? [`${code(o.probe.id)} ${tokenChange(o)}`] : [])));
@@ -95,6 +101,7 @@ export function renderEval(r: EvalResult, format: 'text' | 'json' | 'markdown'):
   block("This pull request's probe files could not be used; the base's probes ran", r.headProbeErrors.map(code));
   if (r.stripped.length > 0) lines.push('', `Removed from the copies before running, so no hook or server from the repository ran: ${r.stripped.map(code).join(', ')}`);
 
-  lines.push('', costLine(r), '', '---', '', '_Advisory. Probes ran on Claude Code only; Codex is predicted statically._');
+  lines.push('', costLine(r), '', '---', '', '_Advisory. Probes ran on Claude Code only; Codex is predicted statically. `improved` and `regressed` need a one-sided Fisher p ≤ 0.05; `uncertain` means the pass rates differ by half or more without it. At 3 runs a side only a full flip, 3/3 against 0/3, can show._',
+  );
   return `${lines.join('\n')}\n`;
 }

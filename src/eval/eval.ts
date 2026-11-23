@@ -59,6 +59,10 @@ export interface ProbeOutcome {
   head: ArmResult | null;
   status: ProbeStatus;
   reason?: string;
+  // Head rate minus base rate, for an outcome that ran; null without a valid run on both sides.
+  difference?: { value: number; interval: [number, number] } | null;
+  // D119, for base probes only: a base that passes some runs and not others, or none at all.
+  baseNote?: 'flaky' | 'fails';
 }
 
 export interface EvalResult {
@@ -152,6 +156,23 @@ export function status(base: ArmResult | null, head: ArmResult | null): ProbeSta
   const d = head.passed / head.valid - base.passed / base.valid;
   if (fisherOneSided(base, head, d < 0 ? 'down' : 'up') <= 0.05) return d < 0 ? 'regressed' : 'improved';
   return Math.abs(d) >= 0.5 ? 'uncertain' : 'unchanged';
+}
+
+// Newcombe's hybrid score interval (method 10), from each arm's Wilson interval.
+export function difference(base: ArmResult | null, head: ArmResult | null): { value: number; interval: [number, number] } | null {
+  if (!base?.valid || !head?.valid) return null;
+  const [b, h] = [base.passed / base.valid, head.passed / head.valid];
+  const [bLow, bHigh] = wilson(base.passed, base.valid)!;
+  const [hLow, hHigh] = wilson(head.passed, head.valid)!;
+  const value = h - b;
+  return { value, interval: [value - Math.hypot(h - hLow, bHigh - b), value + Math.hypot(hHigh - h, b - bLow)] };
+}
+
+export function baseNote(base: ArmResult): 'flaky' | 'fails' | undefined {
+  const rate = base.passed / base.valid;
+  if (rate > 0.2 && rate < 0.8) return 'flaky';
+  if (base.passed === 0 && base.valid >= 2) return 'fails';
+  return undefined;
 }
 
 // Head-only probes never gate: the pull request wrote them. A probe the time budget cut short is
@@ -365,9 +386,10 @@ export async function runProbes(
           head: arms.includes('head') ? summarise(probe, plan.records.head, plan.cached.head) : null,
         };
         result.totals.cachedRuns += arms.reduce((n, arm) => n + plan.cached[arm], 0);
-        outcome = plan.complete
-          ? { probe, source, changedInHead, selectedFor, ...sides, status: status(sides.base, sides.head) }
-          : { probe, source, changedInHead, selectedFor, ...sides, status: 'inconclusive', reason: `time budget (${opts.maxMinutes} min)` };
+        const ran = { probe, source, changedInHead, selectedFor, ...sides, difference: difference(sides.base, sides.head) };
+        outcome = plan.complete ? { ...ran, status: status(sides.base, sides.head) } : { ...ran, status: 'inconclusive', reason: `time budget (${opts.maxMinutes} min)` };
+        const note = source === 'base' && sides.base ? baseNote(sides.base) : undefined;
+        if (note) outcome.baseNote = note;
       }
       result.outcomes.push(outcome);
     }

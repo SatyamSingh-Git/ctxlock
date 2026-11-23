@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { type ArmResult, EvalError, type EvalOptions, fisherOneSided, gated, type ProbeOutcome, runEval, runProbes, status } from '../../src/eval/eval.js';
+import { type ArmResult, baseNote, difference, EvalError, type EvalOptions, fisherOneSided, gated, type ProbeOutcome, runEval, runProbes, status } from '../../src/eval/eval.js';
 import { parseProbeFile } from '../../src/eval/probes.js';
 import { overlayReader } from '../../src/repo/overlay.js';
 import { fsReader } from '../../src/repo/reader.js';
@@ -69,9 +69,36 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect(o!.base!.models).toEqual(['claude-sonnet-5-5']);
     expect(round(o!.base!.interval)).toEqual([0, 0.5615]);
     expect(round(o!.head!.interval)).toEqual([0.4385, 1]);
+    expect(o!.difference).toEqual({ value: 1, interval: [expect.closeTo(0.2059, 4), 1] });
+    // The base failed every run: the probe could only improve.
+    expect(o!.baseNote).toBe('fails');
     expect(r.totals.runs).toBe(6);
     expect(claudeRuns()).toBe(6);
     expect(r.claudeVersion).toBe('2.1.292');
+  });
+
+  it('marks a base probe that passes some base runs and not others as flaky, and only a base probe', async () => {
+    // The arms take turns, base first: run 1 is the base's first run, and it alone uses npm.
+    const flaky = (probes: Record<string, string>) => {
+      scenario({
+        counterFile: join(tempDir(), 'count'),
+        behaviours: [
+          { when: { runs: [1] }, calls: [{ tool: 'Bash', input: { command: 'npm install zod' } }] },
+          { when: { file: 'AGENTS.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add zod' } }] },
+          { calls: [{ tool: 'Bash', input: { command: 'npm install zod' } }] },
+        ],
+      });
+      return repo({ 'AGENTS.md': 'Use pnpm.\n', ...probes }, { 'AGENTS.md': 'Use npm.\n' });
+    };
+
+    const [o] = (await runEval(options(await flaky({ 'evals/probes/p.yaml': probeFile({ id: 'deps' }) })))).outcomes;
+    expect(o).toMatchObject({ status: 'uncertain', base: { passed: 2, valid: 3 }, head: { passed: 0, valid: 3 }, baseNote: 'flaky' });
+
+    // A probe the pull request adds gets no note, though its base failed every run.
+    const root = await repo({ 'AGENTS.md': 'Use npm.\n' }, { 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) });
+    const [head] = (await runEval(options(root))).outcomes;
+    expect(head).toMatchObject({ source: 'head', base: { passed: 0, valid: 3 } });
+    expect(head!.baseNote).toBeUndefined();
   });
 
   it('eval runs an answer probe on a knowledge unit, base against head', async () => {
@@ -435,6 +462,35 @@ describe('status', () => {
     expect(status(arm(3, 3), arm(3, 3))).toBe('unchanged');
     expect(status(arm(0, 1), arm(3, 3))).toBe('inconclusive');
     expect(status(null, arm(3, 3))).toBe('inconclusive');
+  });
+});
+
+describe('difference', () => {
+  const arm = (passed: number, valid: number) => ({ passed, valid }) as ArmResult;
+  const at4 = (d: ReturnType<typeof difference>) => d && { value: Math.round(d.value * 1e4) / 1e4, interval: round(d.interval) };
+
+  it('the difference in pass rates has a Newcombe interval', () => {
+    expect(at4(difference(arm(3, 3), arm(0, 3)))).toEqual({ value: -1, interval: [-1, -0.2059] });
+    expect(at4(difference(arm(0, 3), arm(3, 3)))).toEqual({ value: 1, interval: [0.2059, 1] });
+    expect(at4(difference(arm(3, 3), arm(1, 3)))).toEqual({ value: -0.6667, interval: [-0.9385, 0.0586] });
+    expect(at4(difference(arm(9, 10), arm(3, 10)))).toEqual({ value: -0.6, interval: [-0.809, -0.1705] });
+    expect(difference(arm(0, 0), arm(3, 3))).toBeNull();
+    expect(difference(arm(3, 3), arm(0, 0))).toBeNull();
+    expect(difference(null, arm(3, 3))).toBeNull();
+  });
+});
+
+describe('baseNote', () => {
+  const arm = (passed: number, valid: number) => ({ passed, valid }) as ArmResult;
+
+  it('flaky is strictly between 0.2 and 0.8 of the base runs, and fails is none of at least 2', () => {
+    expect(baseNote(arm(2, 3))).toBe('flaky');
+    expect(baseNote(arm(1, 5))).toBeUndefined();
+    expect(baseNote(arm(4, 5))).toBeUndefined();
+    expect(baseNote(arm(3, 3))).toBeUndefined();
+    expect(baseNote(arm(0, 2))).toBe('fails');
+    expect(baseNote(arm(0, 1))).toBeUndefined();
+    expect(baseNote(arm(0, 0))).toBeUndefined();
   });
 });
 
