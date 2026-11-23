@@ -20,6 +20,14 @@ lint:
 
 > **Status:** the rules on this page are implemented and tested: L0–L11 and L13–L17. L12, a model-based contradiction check, is planned for later. `ctxlock lint` runs them ([commands](commands.md)).
 
+> **Other agents' files.** On the files of Copilot, Cursor, Gemini, Antigravity, Devin, Kiro, Cline, OpenCode and Junie, only some rules run:
+> - L0, for encoding and symlinks everywhere, and for frontmatter in skills only;
+> - L1 and L2;
+> - L10, for owners;
+> - L15, so `units:` can name them.
+>
+> The rest are tuned to Claude Code and Codex. [Other agents' files](other-agents.md) lists the paths and their sources.
+
 ## What the findings look like
 
 This is real output from a small repository that has a smuggled instruction, a hidden comment, a misnamed skill and a direction mark in Arabic text:

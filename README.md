@@ -293,11 +293,11 @@ flowchart LR
 
 ## Agent support
 
-| Agent | Predicted loading | Observed at runtime | Behavioral evals | `build --fill-missing` |
-|---|---|---|---|---|
-| Claude Code | Done | Collected inside each probe run, and checked by hand against real sessions ([spike S4](docs/spikes/S4-telemetry.md)) | `ctxlock eval` and `ctxlock probe draft` ([evals](the-guide/evals.md)), checked live ([report](docs/dogfood/2026-11-06-behavioral.md)) | Skill copies and `CLAUDE.md` imports ([build](the-guide/build.md)) |
-| Codex | Done, checked by Codex's own loader tests | Not yet: contributors with Codex access welcome | Not yet | Skill copies and `AGENTS.md` files |
-| Copilot CLI, Cursor, Gemini/Antigravity, others | Later | Later | Later | Later, through rulesync |
+| Agent | Safety checks | Predicted loading | Observed at runtime | Behavioral evals | `build --fill-missing` |
+|---|---|---|---|---|---|
+| Claude Code | Done | Done | Collected inside each probe run, and checked by hand against real sessions ([spike S4](docs/spikes/S4-telemetry.md)) | `ctxlock eval` and `ctxlock probe draft` ([evals](the-guide/evals.md)), checked live ([report](docs/dogfood/2026-11-06-behavioral.md)) | Skill copies and `CLAUDE.md` imports ([build](the-guide/build.md)) |
+| Codex | Done | Done, checked by Codex's own loader tests | Not yet: contributors with Codex access welcome | Not yet | Skill copies and `AGENTS.md` files |
+| Copilot, Cursor, Gemini CLI, Antigravity, Devin and Windsurf, Kiro, Cline, OpenCode and Kilo, Junie | Done: hidden text, risky instructions, and new hooks, MCP servers and setup steps fail a pull request ([their files](the-guide/other-agents.md)) | Next, starting with Copilot | Later | Later | Later, through rulesync |
 
 ## Roadmap
 
@@ -315,6 +315,10 @@ flowchart LR
   - [x] **Diagnosis and fixes:** `ctxlock diagnose` asks Claude for a verdict on a unit's misses, checked against the unit's text; proposes the smallest fix, one exact replacement, with a probe made from the correction; replays both sides through `eval`; and with `--open` files or updates one issue in the repository that owns the unit. Checked live on a planted miss with real Claude Code ([plan](docs/superpowers/plans/2026-11-12-ctxlock-diagnose.md), [guide](the-guide/misses.md#diagnosing-a-unit), [report](docs/dogfood/2026-11-12-diagnose.md)). `--ablate` replays it with the unit taken out, to see whether the unit itself causes the miss.
   - [x] **Durability:** `ctxlock outcomes` finds a fix shipped when its `miss-` probe is committed, judges it at 7 and 30 days from the sessions that loaded it, counts helpful and harmful sessions per unit version, and gives time to fix, regression rate, durability, fixes × consumers and units never loaded; `ctxlock verify` re-checks a unit when `stale-after` passes. Shown end to end on a planted miss, with each step timed ([plan](docs/superpowers/plans/2026-11-13-ctxlock-outcomes.md), [guide](the-guide/outcomes.md), [report](docs/dogfood/2026-11-13-outcomes.md)).
   - [x] **More signals:** an abandoned session is a signal, and a search that found nothing is evidence in a signal's turn. Clustering corrections by their text waits for enough real ones to check it against ([plan](docs/superpowers/plans/2026-11-21-ctxlock-loop-signals.md), [report](docs/dogfood/2026-11-21-signals.md)).
+- [x] **0.1.0 on npm and the GitHub Marketplace** (2026-11-23).
+- [ ] **Every agent's files:** the agents teams actually run, not just Claude Code and Codex.
+  - [x] **Safety checks:** the files of nine more agents are found and checked for hidden text and new hooks, MCP servers and setup steps, with each path's source ([plan](docs/superpowers/plans/2026-11-23-ctxlock-other-agents-safety.md), [guide](the-guide/other-agents.md)).
+  - [ ] **Predicted loading** for Copilot, then Cursor, OpenCode and Gemini.
 - [ ] **Business context:** metrics, knowledge docs and procedures, served over MCP.
   - [x] **Units:** OKF concepts and Apache Ossie models are units: found, checked against their own formats by `L17`, trusted by OKF's `verified` and `stale_after`, linked in the graph, synced, and probed by the answer an agent gives. A procedure is a skill. Live, all 53 of Google's sample concepts and all 22 of Ossie's own models passed, and an NRR-by-segment change went from its owner to a consumer ([plan](docs/superpowers/plans/2026-11-21-ctxlock-business-units.md), [guide](the-guide/business-context.md), [report](docs/dogfood/2026-11-21-business-units.md)).
   - [ ] **Serving:** an MCP server with a `report_context_gap` tool, and eval through it.

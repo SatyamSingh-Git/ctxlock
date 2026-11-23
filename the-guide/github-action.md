@@ -75,6 +75,8 @@ With a credential, the Action installs Claude Code at `claude-code-version` and 
 
 - **A new `must` finding:** hidden Unicode, a hidden HTML comment, a skill whose frontmatter agents cannot load. See [rules.md](rules.md).
 - **An execution-affecting change:** a hook, MCP server, command setting, environment variable, auto-approval or plugin in agent config, or a hook or `allowed-tools` entry in a skill's frontmatter, that is new or changed. Reordering or reformatting a settings file is not a change. Subagent and command files (`.claude/agents/`, `.claude/commands/`) are not read yet.
+  - This covers the other agents ctxlock finds: Copilot's hooks and `copilot-setup-steps.yml`, Cursor's and Kiro's MCP servers, OpenCode plugins, and so on ([other agents' files](other-agents.md)).
+  - In those, any edit to a file ctxlock does not read field by field is a change, reformatting included.
 - **ctxlock could not run:** a missing base ref, an invalid `ctxlock.yaml`, or a crash. Any exit code other than 0 and 1 fails the check. The job summary says which.
 
 A `must` finding that was already on the base branch is counted in the comment but does not fail the check.

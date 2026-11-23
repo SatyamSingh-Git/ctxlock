@@ -4,7 +4,7 @@ Status: approved by Satyam, 2026-11-23, after a builder check.
 
 ## Why
 
-ctxlock is pitched at teams that run several coding agents, but today it only sees the files Claude Code and Codex read. A pull request can add a hidden-Unicode instruction to `.cursor/rules/`, or an MCP server to `.cursor/mcp.json`, and `ctxlock diff` says nothing. The strategy review of 2026-11-22 ([report](../../../reports/ctxlock%20direction%20and%20roadmap.md)) put this first among the "next" items. Making the safety checks see every agent's files is the cheapest real step toward the multi-agent pitch, and attacks through committed agent config are the best-evidenced demand. The Miasma worm spread through config-only commits, and Cursor ran hooks from `.claude/settings.local.json` (CVE-2026-48124).
+ctxlock is pitched at teams that run several coding agents, but today it only sees the files Claude Code and Codex read. A pull request can add a hidden-Unicode instruction to `.cursor/rules/`, or an MCP server to `.cursor/mcp.json`, and `ctxlock diff` says nothing. The strategy review of 2026-11-22 (kept locally as `reports/ctxlock direction and roadmap.md`, not committed) put this first among the "next" items. Making the safety checks see every agent's files is the cheapest real step toward the multi-agent pitch, and attacks through committed agent config are the best-evidenced demand. The Miasma worm spread through config-only commits, and Cursor ran hooks from `.claude/settings.local.json` (CVE-2026-48124).
 
 ## Goals
 

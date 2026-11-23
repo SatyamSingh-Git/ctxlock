@@ -2,12 +2,17 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [18 — business context as units](18-business-units.md).
+**Latest:** [19 — every agent's files, for safety](19-other-agents.md).
+- After a strategy review, 0.1.0 shipped on npm and the Marketplace, and the files of nine more agents now get ctxlock's safety checks. Claude Code and Codex predictions are unchanged.
+- Every path was confirmed from its source first. That found two planned paths that do not exist, hook formats unlike Claude's, and plugin folders that run code.
+- A live scan found a false frontmatter finding on a Cursor rule, and that `scan` did not show a unit's agent.
+
+**Earlier:** [18 — business context as units](18-business-units.md).
 - Plan 11 opens Phase 4: OKF concepts and Ossie models are units, checked against their own formats, trusted by OKF's dates, linked in the graph, synced, and probed by the answer an agent gives.
 - Live, all 53 of Google's sample concepts and all 22 of Ossie's own models passed, and NRR by segment went from the owner's change to a consumer.
 - Found: Google's bundles don't declare themselves, and an answer probe can pass on a reply that names the right field in order to say it is missing.
 
-**Earlier:** [17 — the rest of the signals, and taking a unit out](17-signals.md).
+[17 — the rest of the signals, and taking a unit out](17-signals.md).
 - Plan 10: an abandoned session is a signal; a search that found nothing is evidence in a signal's turn; and `diagnose --ablate` replays the miss with the unit taken out. Clustering waits for real signals to check it against.
 - Live, the one abandoned session the collector recorded matched an independent scan, and ablation showed the planted rule wasn't what caused its miss.
 - Found: a test written against the real clock broke CI a week later.
