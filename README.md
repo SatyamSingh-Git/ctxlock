@@ -266,6 +266,7 @@ npx ctxlock lint /path/to/your/repo
 npx ctxlock diff --base origin/main /path/to/your/repo
 npx ctxlock build /path/to/your/repo                  # add --fill-missing to write the gaps
 npx ctxlock impact --base origin/main /path/to/your/repo   # what a change reaches, from ctxlock.yaml
+npx ctxlock check <folder-or-git-url>                 # before opening someone else's repo or skill: what runs, what is hidden (after 0.1.0)
 
 # The behavioral check needs Claude Code, logged in
 npx ctxlock eval --base origin/main /path/to/your/repo

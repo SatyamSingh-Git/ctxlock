@@ -2,7 +2,7 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [19 — every agent's files, for safety](19-other-agents.md).
+**Latest:** [21 — is this safe to open?](21-check.md).
 - After a strategy review, 0.1.0 shipped on npm and the Marketplace, and the files of nine more agents now get ctxlock's safety checks. Claude Code and Codex predictions are unchanged.
 - Every path was confirmed from its source first. That found two planned paths that do not exist, hook formats unlike Claude's, and plugin folders that run code.
 - A live scan found a false frontmatter finding on a Cursor rule, and that `scan` did not show a unit's agent.

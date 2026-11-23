@@ -2,7 +2,7 @@
 
 Everything you need to install ctxlock, run it, understand what it tells you, and get unstuck.
 
-> **Pre-alpha.** ctxlock 0.1.0 is on npm (`npx ctxlock`). `scan`, `lint`, `budget`, `diff`, `eval`, `probe draft`, `build`, `who-uses`, `impact`, `loads`, `report`, `sync`, `misses`, `diagnose`, `outcomes` and `verify` work ([commands.md](commands.md)). Each page below is written when its feature ships, so this guide only ever describes things that exist; [the design](../docs/superpowers/specs/2026-11-05-ctxlock-design.md) describes what is planned.
+> **Pre-alpha.** ctxlock 0.1.0 is on npm (`npx ctxlock`). `scan`, `lint`, `budget`, `diff`, `check`, `eval`, `probe draft`, `build`, `who-uses`, `impact`, `loads`, `report`, `sync`, `misses`, `diagnose`, `outcomes` and `verify` work ([commands.md](commands.md)). Each page below is written when its feature ships, so this guide only ever describes things that exist; [the design](../docs/superpowers/specs/2026-11-05-ctxlock-design.md) describes what is planned.
 
 If something here is wrong, out of date, or simply does not work, open an issue on [the repository](https://github.com/SatyamSingh-Git/ctxlock/issues). A report that says "I ran X, expected Y, got Z" is worth more than a polite one.
 
@@ -14,6 +14,7 @@ If something here is wrong, out of date, or simply does not work, open an issue 
 |---|---|---|
 | installation.md | Requirements, install, and how to check it works | Arrives with the first CLI release |
 | [commands.md](commands.md) | `ctxlock scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`, `loads`, `misses`, `report`, `sync`: every flag, and what the output means | Written |
+| [check.md](check.md) | `ctxlock check`: before you open someone else's repository or install a shared skill, what in it would run code and what text you cannot see, with no setup | Written; checked live on two public repositories and a demo folder |
 | [propagation.md](propagation.md) | Shared skills and rules across repositories: `upstream:`, `ctxlock sync`, `ctxlock.lock`, what never syncs, and the workflow that keeps one pull request open | Written; checked live on local repositories |
 | [business-context.md](business-context.md) | Knowledge (OKF) and metric (Ossie) units: which files are units, what L17 checks, trust from OKF's dates, links as graph edges, answer probes, and sync | Written; checked live on Google's and Ossie's own examples |
 | [graph.md](graph.md) | What relies on what: `depends-on` and consumers in `ctxlock.yaml`, `who-uses`, a change's impact, and the probes it runs | Written |

@@ -1,4 +1,4 @@
-# Commands: `scan`, `lint`, `budget`, `diff`, `eval`, `build`, `who-uses`, `impact`, `loads`, `report`, `sync`
+# Commands: `scan`, `lint`, `budget`, `diff`, `check`, `eval`, `build`, `who-uses`, `impact`, `loads`, `report`, `sync`
 
 ctxlock reads your repository's agent context and reports on it. The checks never change a file in the repository. Three commands write files when you ask them to: `ctxlock build --fill-missing`, `ctxlock probe draft` and `ctxlock sync`. Nothing leaves your machine except through `eval` and `probe draft`, which run Claude Code; `sync` only fetches.
 
@@ -148,6 +148,18 @@ In CI, the base ref must be in the clone. With `actions/checkout`, set `fetch-de
 ```
 base ref <sha> not found — in GitHub Actions use actions/checkout with fetch-depth: 0
 ```
+
+---
+
+## `ctxlock check`
+
+Says whether a folder or git repository someone else wrote is safe to open in an agent: what would run code when it is opened, and the `must` findings of the safety rules. It needs no `ctxlock.yaml`, and ignores the target's own.
+
+```
+ctxlock check <folder-or-git-url> [--ref <ref>] [--cache <dir>] [--format text|json]
+```
+
+A git URL is fetched without a checkout, hooks or credentials, at the default branch or `--ref`. Every `SKILL.md` that is not an installed skill, such as those of a skills collection, is checked as if installed. The output, what is read and the exit codes are in [check.md](check.md).
 
 ---
 
@@ -446,7 +458,7 @@ With `--dry-run` it shows what would change, and writes nothing. In markdown, th
 | Code | Meaning |
 |---|---|
 | 0 | Done, including every `build`, `who-uses`, `impact`, `loads` and `report`. For `lint`, no `must` finding remained after your `lint.severity` settings. For `diff`, the change adds no `must` finding and no execution-affecting change |
-| 1 | `lint`: at least one `must` finding. `sync`: a file it refused, so it wrote nothing. `diff`: a new `must` finding or an execution-affecting change. `eval`: only with `--fail-on-regression`, a gated regression. `verify`: a unit whose probe failed |
-| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`, `eval`, `impact` and `sync`), a `who-uses` unit that is no unit, a `loads` folder that does not exist, a ref that does not exist, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` or `sync` cannot read, an upstream that cannot be fetched or lacks a unit or ref, an invalid `ctxlock.lock`, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
+| 1 | `lint`: at least one `must` finding. `sync`: a file it refused, so it wrote nothing. `diff`: a new `must` finding or an execution-affecting change. `check`: anything that runs code when opened, or a `must` finding. `eval`: only with `--fail-on-regression`, a gated regression. `verify`: a unit whose probe failed |
+| 2 | Could not run: a bad argument, a directory that does not exist or is not in a git repository (for `diff`, `eval`, `impact` and `sync`), a `who-uses` unit that is no unit, a `loads` folder that does not exist, a ref that does not exist, a `check` target that is neither a folder nor a git URL that can be fetched, an invalid `ctxlock.yaml` or probe file, Claude Code not found, a run folder below context ctxlock cannot exclude, a `.ctxlock/generated.json` that `build --fill-missing` or `sync` cannot read, an upstream that cannot be fetched or lacks a unit or ref, an invalid `ctxlock.lock`, a `--suggest-index` folder with no markdown or outside the repository, or an error ctxlock did not expect, such as a settings file nested too deeply to read. The reason is printed on stderr, as one line, and with `--format markdown` also on stdout. A crash never exits 1, so it cannot be mistaken for a `must` finding |
 
 `scan` and `budget` exit 0 whatever they find, so you can run them anywhere without failing a build.
