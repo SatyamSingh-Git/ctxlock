@@ -24,6 +24,13 @@ describe('linkedPaths', () => {
     expect(linkedPaths(unit)).toEqual(['models/nrr.ossie.yaml']);
   });
 
+  it('a link written with backslashes, as on Windows, is the same path; an escape like \\_ is not a separator', async () => {
+    // In CommonMark, as GitHub renders it, \. is an escaped dot: ..\..\x.md reads as ....\x.md, so only a
+    // backslash before a name is a separator.
+    const unit = await unitAt('kb/c/x.md', '[a](..\\m\\nrr.ossie.yaml) [b](seg\\_old.md) [c](..\\..\\x.md)\n');
+    expect(linkedPaths(unit)).toEqual(['kb/m/nrr.ossie.yaml', 'kb/c/seg_old.md', 'kb/c/..../x.md']);
+  });
+
   it('an angle-bracketed path with a space, and one written with %20, are the same path', async () => {
     const unit = await unitAt('kb/x.md', '[a](<net revenue.md>) [b](net%20revenue.md)\n');
     expect(linkedPaths(unit)).toEqual(['kb/net revenue.md']);

@@ -22,6 +22,8 @@ export function linkedPaths(unit: Unit): string[] {
     } catch {
       path = target;
     }
+    // markdown-it has already resolved escapes such as \_, so a backslash left is a Windows separator.
+    path = path.replaceAll('\\', '/');
     // GitHub reads a link that starts with / from the repository's root.
     const resolved = posix.normalize(path.startsWith('/') ? path.slice(1) : posix.join(posix.dirname(unit.path), path));
     if (resolved !== '.' && resolved !== '..' && !resolved.startsWith('../')) paths.add(resolved);
