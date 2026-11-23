@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import type { HarnessId, Unit } from '../model.js';
+import { type HarnessId, modelled, type Unit } from '../model.js';
 import { resolveClaudeCode } from './claude-code.js';
 import { resolveCodex } from './codex.js';
 import type { EffectiveContext, ResolveInput } from './types.js';
@@ -25,10 +25,11 @@ export function contextSites(units: Unit[]): string[] {
 }
 
 export async function resolveAll(input: ResolveInput, harnesses: HarnessId[]): Promise<EffectiveContext[]> {
-  const sites = contextSites(input.units);
+  const known = { ...input, units: input.units.filter(modelled) };
+  const sites = contextSites(known.units);
   const contexts: EffectiveContext[] = [];
   for (const harness of harnesses) {
-    for (const site of sites) contexts.push(await RESOLVERS[harness](input, site));
+    for (const site of sites) contexts.push(await RESOLVERS[harness](known, site));
   }
   return contexts;
 }

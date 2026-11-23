@@ -1,5 +1,5 @@
 import picomatch from 'picomatch';
-import type { Finding } from '../model.js';
+import { type Finding, modelled } from '../model.js';
 import { skillSpec } from './rules/l0-skill-spec.js';
 import { hiddenUnicode, htmlComment } from './rules/l1-hidden.js';
 import { execConfig, riskyInstruction } from './rules/l2-exec.js';
@@ -44,9 +44,14 @@ export const RULES: Rule[] = [
 const RANK = { must: 0, should: 1, info: 2 };
 const byCodeUnit = (a = '', b = '') => (a < b ? -1 : a > b ? 1 : 0);
 
+// Rules that hold for every agent's files: the safety checks, owners, and L15, which judges ctxlock.yaml
+// itself. The rest are tuned to the agents ctxlock models and see only their units.
+const ALL_UNITS: ReadonlySet<Rule> = new Set([hiddenUnicode, htmlComment, riskyInstruction, execConfig, owners, graphRefs]);
+
 export async function runLint(ctx: LintContext, extra: Finding[] = []): Promise<Finding[]> {
   const found = [...extra];
-  for (const rule of RULES) found.push(...(await rule.check(ctx)));
+  const known = { ...ctx, units: ctx.units.filter(modelled) };
+  for (const rule of RULES) found.push(...(await rule.check(ALL_UNITS.has(rule) ? ctx : known)));
 
   const { severity, ignore } = ctx.registry.lint;
   const ignored = picomatch(ignore, { dot: true });

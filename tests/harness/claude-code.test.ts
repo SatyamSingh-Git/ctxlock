@@ -17,6 +17,17 @@ const skill = (fields: Record<string, string>) =>
   `---\n${Object.entries(fields).map(([k, v]) => `${k}: ${v}`).join('\n')}\n---\nbody\n`;
 
 describe('resolveClaudeCode', () => {
+  it('a rule or skill of another family is never loaded or noted', async () => {
+    const reader = memReader({ '.claude/rules/r.md': 'r', '.agents/skills/s/SKILL.md': skill({ name: 's', description: 'd' }) });
+    const { units } = await discoverUnits(reader);
+    const foreign = units.map((u) => ({ ...u, family: 'cursor' as const }));
+
+    const ctx = await resolveClaudeCode({ reader, units: foreign, limits: { ...LIMITS } }, '');
+
+    expect(ctx.entries).toEqual([]);
+    expect(ctx.notes.filter((n) => n.includes('skill s '))).toEqual([]);
+  });
+
   it('ancestor CLAUDE.md files load always, shallowest first', async () => {
     const ctx = await resolve(
       {

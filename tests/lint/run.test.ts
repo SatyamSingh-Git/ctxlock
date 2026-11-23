@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { resolveAll } from '../../src/harness/resolve.js';
 import { runLint } from '../../src/lint/run.js';
-import type { Finding, Severity } from '../../src/model.js';
+import type { Finding, Severity, Unit } from '../../src/model.js';
 import { lintContext } from '../helpers/lint.js';
 import type { MemReader } from '../helpers/mem-reader.js';
 
@@ -15,6 +16,23 @@ const finding = (rule: string, severity: Severity, path?: string, line?: number)
 const yaml = (lint: string) => ({ 'ctxlock.yaml': `version: 1\nlint:\n${lint}` });
 
 describe('runLint', () => {
+  it('only the safety rules and L15 see units of other families', async () => {
+    const run = async (yamlText: string) => {
+      const ctx = await lintContext({ '.claude/rules/r.md': `Use pnpm.${String.fromCodePoint(0x200b)}\n`, 'ctxlock.yaml': yamlText });
+      ctx.units = ctx.units.map((u): Unit => ({ ...u, family: 'cursor' }));
+      ctx.contexts = await resolveAll({ reader: ctx.reader, units: ctx.units, limits: ctx.limits }, ctx.registry.harnesses);
+      return runLint(ctx);
+    };
+
+    const owned = await run('version: 1\nunits:\n  .claude/rules/r.md:\n    owner: "@sam"\n');
+    expect(owned.map((f) => f.rule)).toContain('L1-hidden-unicode');
+    expect(owned.filter((f) => f.unitId === 'rule/.claude/rules/r.md' && !f.rule.startsWith('L1-'))).toEqual([]);
+    expect(owned.filter((f) => f.rule === 'L15-graph')).toEqual([]);
+
+    const unowned = await run('version: 1\n');
+    expect(unowned).toContainEqual(expect.objectContaining({ rule: 'L10-owner', unitId: 'rule/.claude/rules/r.md' }));
+  });
+
   it('a lint.severity override downgrades a rule, and off drops it', async () => {
     const ctx = await lintContext(yaml('  severity:\n    X-a: info\n    X-b: "off"\n'));
 

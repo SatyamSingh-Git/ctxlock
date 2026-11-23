@@ -14,6 +14,17 @@ async function resolve(files: Record<string, string>, site = '', symlinks: Recor
 const skill = (name: string, description: string) => `---\nname: ${name}\ndescription: ${description}\n---\nbody\n`;
 
 describe('resolveCodex', () => {
+  it('a skill of another family is never listed or noted', async () => {
+    const reader = memReader({ '.agents/skills/a/SKILL.md': skill('a', 'd'), '.claude/skills/b/SKILL.md': skill('b', 'd') });
+    const { units } = await discoverUnits(reader);
+    const foreign = units.map((u) => ({ ...u, family: 'copilot' as const }));
+
+    const ctx = await resolveCodex({ reader, units: foreign, limits: { ...LIMITS } }, '');
+
+    expect(ctx.entries).toEqual([]);
+    expect(ctx.notes.filter((n) => /skill [ab] /.test(n))).toEqual([]);
+  });
+
   it('one file per directory from root to site, and AGENTS.override.md beats AGENTS.md', async () => {
     const ctx = await resolve(
       { 'AGENTS.md': 'root', 'pkg/AGENTS.md': 'pkg', 'pkg/AGENTS.override.md': 'override', 'pkg/sub/AGENTS.md': 'below' },

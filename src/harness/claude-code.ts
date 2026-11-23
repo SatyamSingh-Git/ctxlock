@@ -1,9 +1,11 @@
 import { posix } from 'node:path';
-import type { Unit } from '../model.js';
+import type { Family, Unit } from '../model.js';
 import { findImports } from './imports.js';
 import type { EffectiveContext, LoadEntry, ResolveInput } from './types.js';
 
 export const CLAUDE_FILES = ['CLAUDE.md', '.claude/CLAUDE.md', 'CLAUDE.local.md'];
+// The skill folders the two modelled agents read; skills of other agents are theirs alone.
+export const SKILL_FAMILIES: ReadonlySet<Family> = new Set(['claude', 'agents']);
 const FALLBACK_FILES = ['AGENTS.md', '.claude/AGENTS.md'];
 
 export const at = (dir: string, name: string) => (dir ? `${dir}/${name}` : name);
@@ -82,7 +84,7 @@ export async function resolveClaudeCode({ reader, units, limits }: ResolveInput,
   for (const path of claudeFiles) await loadAlways(path, 'ancestor', 0);
   if (fallback) for (const path of agentsFiles) await loadAlways(path, 'agents-md-fallback', 0);
 
-  const rules = units.filter((u) => u.kind === 'rule');
+  const rules = units.filter((u) => u.kind === 'rule' && u.family === 'claude');
   for (const rule of rules) {
     if (dirs.includes(ownerDir(rule.path, '.claude/rules')!) && rule.frontmatter?.paths === undefined) {
       await loadAlways(rule.path, 'rule', 0);
@@ -133,7 +135,7 @@ export async function resolveClaudeCode({ reader, units, limits }: ResolveInput,
   }
 
   for (const unit of units) {
-    if (unit.kind !== 'skill') continue;
+    if (unit.kind !== 'skill' || !SKILL_FAMILIES.has(unit.family)) continue;
     const claudePaths = [unit.path, ...unit.aliases].filter((p) => ownerDir(p, '.claude/skills') !== null);
     if (claudePaths.length === 0) {
       notes.push(`skill ${unit.name} not visible to Claude Code: .agents/skills is not scanned (anthropics/claude-code#31005)`);

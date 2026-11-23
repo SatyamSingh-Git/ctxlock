@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import type { Unit } from '../model.js';
-import { CLAUDE_FILES, ancestry, at } from './claude-code.js';
+import { CLAUDE_FILES, SKILL_FAMILIES, ancestry, at } from './claude-code.js';
 import type { EffectiveContext, LoadEntry, ResolveInput } from './types.js';
 
 const CHAIN_FILES = ['AGENTS.override.md', 'AGENTS.md'];
@@ -44,7 +44,7 @@ export async function resolveCodex({ units, limits }: ResolveInput, site: string
 
   const skillRoots = new Set(dirs.map((d) => at(d, '.agents/skills')));
   for (const unit of units) {
-    if (unit.kind !== 'skill') continue;
+    if (unit.kind !== 'skill' || !SKILL_FAMILIES.has(unit.family)) continue;
     const paths = [unit.path, ...unit.aliases];
     const codexPath = paths.find((p) => skillRoots.has(posix.dirname(p)));
     if (!codexPath) {
