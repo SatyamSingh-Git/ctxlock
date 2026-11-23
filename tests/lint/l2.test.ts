@@ -415,3 +415,66 @@ describe('L2-parse', () => {
     ]);
   });
 });
+
+describe("L2-exec-config on other agents' files", () => {
+  async function items(files: Record<string, string>) {
+    return (await execConfig.check(await lintContext(files))).map((f) => ({ rule: f.rule, kind: f.data?.kind, key: f.data?.key, message: f.message, fingerprint: f.data?.fingerprint }));
+  }
+
+  it('a config file ctxlock cannot read is one item, fingerprinted on its LF content', async () => {
+    const [item, ...rest] = await items({ '.github/hooks/guard.json': '{"version": 1,\n "hooks": {}}\n' });
+
+    expect(rest).toEqual([]);
+    expect(item).toMatchObject({
+      rule: 'L2-exec-config',
+      kind: 'file',
+      key: 'file',
+      message: ".github/hooks/guard.json can change what Copilot runs; ctxlock does not read its format, so any change counts",
+    });
+    expect((await items({ '.github/hooks/guard.json': '{"version": 1,\r\n "hooks": {}}\r\n' }))[0]?.fingerprint).toBe(item?.fingerprint);
+    expect((await items({ '.github/hooks/guard.json': '{"version": 1,\n "hooks": {"x": []}}\n' }))[0]?.fingerprint).not.toBe(item?.fingerprint);
+  });
+
+  it.each([
+    ['.cursor/mcp.json', 'mcpServers'],
+    ['.kiro/settings/mcp.json', 'mcpServers'],
+    ['.junie/mcp/mcp.json', 'mcpServers'],
+    ['.vscode/mcp.json', 'servers'],
+  ])('reads the MCP servers in %s, and the rest of it as one item', async (path, key) => {
+    const servers = { x: { command: 'node', args: ['s.js'] } };
+
+    expect((await items({ [path]: JSON.stringify({ [key]: servers }) })).map((i) => [i.kind, i.message])).toEqual([['mcp', 'MCP server x runs "node s.js"']]);
+    expect((await items({ [path]: JSON.stringify({ [key]: servers, other: 1 }) })).map((i) => [i.kind, i.key, i.message])).toEqual([
+      ['mcp', `${key}.x`, 'MCP server x runs "node s.js"'],
+      ['file', 'rest', `${path} has settings besides MCP servers; any change to them counts`],
+    ]);
+  });
+
+  it('a parsed MCP file of another agent that does not parse gives L2-parse and an opaque item', async () => {
+    const found = await items({ '.cursor/mcp.json': '{ "mcpServers": ' });
+
+    expect(found.map((i) => [i.rule, i.kind])).toEqual([
+      ['L2-parse', undefined],
+      ['L2-exec-config', 'file'],
+    ]);
+  });
+
+  it('an MCP file of another agent in a shape ctxlock does not expect is opaque, not empty', async () => {
+    expect((await items({ '.cursor/mcp.json': '[]' })).map((i) => i.kind)).toEqual(['file']);
+    expect((await items({ '.cursor/mcp.json': '{"mcpServers": [{"command": "node"}]}' })).map((i) => i.kind)).toEqual(['file']);
+    expect((await items({ '.cursor/mcp.json': '{}' })).map((i) => i.kind)).toEqual([]);
+  });
+
+  it('settings of another agent are never read as Claude Code or VS Code settings', async () => {
+    const hooks = { hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'sh x' }] }] } };
+
+    expect((await items({ '.gemini/settings.json': JSON.stringify(hooks) })).map((i) => i.kind)).toEqual(['file']);
+    expect((await items({ '.vscode/mcp.json': JSON.stringify({ 'chat.tools.global.autoApprove': true }) })).map((i) => i.key)).toEqual(['rest']);
+  });
+
+  it("a skill of another agent has its allowed-tools inventoried", async () => {
+    const found = await items({ '.github/skills/s/SKILL.md': '---\nname: s\ndescription: d\nallowed-tools: Bash\n---\nbody\n' });
+
+    expect(found.map((i) => [i.kind, i.message])).toEqual([['auto-approve', 'allowed-tools approves "Bash"']]);
+  });
+});

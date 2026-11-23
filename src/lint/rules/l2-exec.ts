@@ -1,6 +1,6 @@
 import { type ParseError, parse as parseJsonc, printParseErrorCode } from 'jsonc-parser';
 import { parse as parseToml } from 'smol-toml';
-import type { Finding, Unit } from '../../model.js';
+import { FAMILY_NAMES, type Finding, modelled, type Unit } from '../../model.js';
 import { sha256Hex } from '../../units/digest.js';
 import { lineAndColumn, quote, textFiles } from '../files.js';
 import type { Rule } from '../types.js';
@@ -57,7 +57,7 @@ function parseConfig(unit: Unit, raw: string): { value?: unknown; error?: string
   const text = raw.startsWith(BOM) ? raw.slice(1) : raw;
   // VS Code reads its settings as JSONC with trailing commas, and still applies whatever it could read
   // around a syntax error (ConfigurationModelParser in microsoft/vscode), so the partial value is kept.
-  if (unit.family === 'vscode') {
+  if (unit.family === 'vscode' || !modelled(unit)) {
     const errors: ParseError[] = [];
     const value: unknown = parseJsonc(text, errors, { allowTrailingComma: true });
     if (errors.length === 0) return { value };
@@ -71,7 +71,7 @@ function parseConfig(unit: Unit, raw: string): { value?: unknown; error?: string
   }
 }
 
-type Kind = 'hook' | 'env' | 'mcp' | 'auto-approve' | 'command' | 'plugin';
+type Kind = 'hook' | 'env' | 'mcp' | 'auto-approve' | 'command' | 'plugin' | 'file';
 
 interface Item {
   kind: Kind;
@@ -219,6 +219,35 @@ function inventory(unit: Unit, config: unknown): Item[] {
   return unit.path.endsWith('.mcp.json') ? mcpServers('mcpServers', config.mcpServers) : claudeSettings(config);
 }
 
+// Other agents' files that hold only MCP servers, in a format their vendor documents, and the key that
+// holds the servers. Every other file of theirs is opaque (the-guide/other-agents.md).
+const MCP_ONLY: Record<string, string> = {
+  '.cursor/mcp.json': 'mcpServers',
+  '.kiro/settings/mcp.json': 'mcpServers',
+  '.junie/mcp/mcp.json': 'mcpServers',
+  '.vscode/mcp.json': 'servers',
+};
+
+// The whole file as one item. Any edit is a change, a reformat included; a CRLF checkout is not, since
+// the digest is taken with LF line endings.
+const opaque = (unit: Unit, path: string): Item => ({
+  kind: 'file',
+  key: 'file',
+  message: `${path} can change what ${FAMILY_NAMES[unit.family]} runs; ctxlock does not read its format, so any change counts`,
+  value: { digest: unit.files.find((f) => f.path === path)?.sha256 },
+});
+
+function mcpOnly(unit: Unit, path: string, key: string, config: unknown): Item[] {
+  // A shape the vendor does not document could still mean something to the agent, so it counts whole.
+  if (!isObject(config) || (config[key] !== undefined && !isObject(config[key]))) return [opaque(unit, path)];
+  const { [key]: servers, ...rest } = config;
+  const items = mcpServers(key, servers);
+  if (Object.keys(rest).length > 0) {
+    items.push({ kind: 'file', key: 'rest', message: `${path} has settings besides MCP servers; any change to them counts`, value: { rest } });
+  }
+  return items;
+}
+
 // Sorted keys, so reformatting or reordering a file does not register as a change.
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -240,11 +269,18 @@ export const execConfig: Rule = {
       }
     };
     for await (const { unit, path, text } of textFiles(ctx, (u) => u.kind === 'config')) {
+      const serversKey = modelled(unit) ? undefined : MCP_ONLY[path.toLowerCase()];
+      if (!modelled(unit) && serversKey === undefined) {
+        record(unit, path, [opaque(unit, path)]);
+        continue;
+      }
       const parsed = parseConfig(unit, text);
       if (parsed.error !== undefined) {
         findings.push({ rule: 'L2-parse', severity: 'should', message: `could not parse ${path}: ${parsed.error}`, path, unitId: unit.id });
       }
-      record(unit, path, inventory(unit, parsed.value));
+      if (serversKey === undefined) record(unit, path, inventory(unit, parsed.value));
+      // ctxlock cannot tell what the agent makes of a file it cannot parse, so the change is not hidden.
+      else record(unit, path, parsed.error === undefined ? mcpOnly(unit, path, serversKey, parsed.value) : [opaque(unit, path)]);
     }
     for (const unit of ctx.units) {
       if (unit.kind === 'skill' && unit.frontmatter) record(unit, `${unit.path}/SKILL.md`, skillFrontmatter(unit.frontmatter));

