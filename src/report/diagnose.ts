@@ -19,6 +19,7 @@ const ABLATION: Partial<Record<ProbeOutcome['status'], string>> = {
   improved: 'Taking it out does what was wanted: the unit itself causes the miss.',
   unchanged: 'Taking it out changes nothing: the unit does not drive the miss.',
   regressed: 'Taking it out makes it worse: the unit helps.',
+  uncertain: 'Not known: taking it out looks different, but not by enough runs to show it. Run again with more --runs.',
 };
 function ablated(a: ProbeOutcome): string {
   // A miss that didn't happen with the unit in place can't be blamed on it or cleared by its removal.
@@ -40,6 +41,10 @@ const PROBE_SAYS: Record<Replay['status'], string> = {
   'not-validated': 'The replay did not validate the fix, so neither it nor the probe is ready to commit as it is.',
   inconclusive: 'The replay was cut short, so whether the fix works is not known. Run it again with more --max-runs or --max-minutes.',
 };
+const probeSays = (replay: Replay | null) =>
+  replay?.miss.status === 'uncertain'
+    ? 'The replay looks better with the fix, but not by enough runs to show it, so whether the fix works is not known. Run again with more --runs or --extend.'
+    : PROBE_SAYS[replay?.status ?? 'inconclusive'];
 const untrusted = (p: Proposal) => p.unit.signals.filter((s) => s.untrusted).length;
 const steered = (p: Proposal) =>
   untrusted(p) ? [`${untrusted(p)} of the ${plural(p.unit.signals.length, 'signal')} came after the agent read a web page or an MCP tool's output, which may have steered it.`] : [];
@@ -89,7 +94,7 @@ export function renderProposal(p: Proposal, repo: string): string {
   else {
     const diff = [...lines('- ', d.fix.find), ...lines('+ ', d.fix.replace)].join('\n');
     const probe = stringify({ version: 1, probes: [{ id: d.probe.id, unit: d.probe.unit, prompt: printable(d.probe.prompt), expect: d.probe.not ? { ...d.probe.expect, not: true } : d.probe.expect }] }).trimEnd();
-    out.push('', '## The fix', '', fenced(diff, 'diff'), '', '## The probe', '', PROBE_SAYS[p.replay?.status ?? 'inconclusive'], '', fenced(probe, 'yaml'));
+    out.push('', '## The fix', '', fenced(diff, 'diff'), '', '## The probe', '', probeSays(p.replay), '', fenced(probe, 'yaml'));
   }
   if (p.replay) {
     const said = (o: ProbeOutcome) => `${code(o.probe.id)}: ${passes('base', o.base)}, ${passes('head', o.head)}, ${o.status}`;

@@ -57,7 +57,7 @@ function repo(existing = 'dayjs') {
   return root;
 }
 
-const run = (root: string) => diagnose({ root, miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 2, maxRuns: 16, maxMinutes: 15 });
+const run = (root: string) => diagnose({ root, miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 3, maxRuns: 16, maxMinutes: 15 });
 
 describe('diagnose', { timeout: 120_000 }, () => {
   it("replays a defect's fix: the miss probe fails as the unit is and passes fixed, so the proposal is validated", async () => {
@@ -68,9 +68,10 @@ describe('diagnose', { timeout: 120_000 }, () => {
 
     expect(p.diagnosis).toMatchObject({ verdict: 'defect', fix: DEFECT.fix });
     expect(p.replay!.status).toBe('validated');
-    expect(p.replay!.miss).toMatchObject({ status: 'improved', base: { passed: 0, valid: 2 }, head: { passed: 2, valid: 2 } });
+    expect(p.replay!.miss).toMatchObject({ status: 'improved', base: { passed: 0, valid: 3 }, head: { passed: 3, valid: 3 } });
     expect(p.replay!.others.map((o) => [o.probe.id, o.status])).toEqual([['deps-dayjs', 'unchanged']]);
-    expect(p.runs).toBe(9);
+    // 1 diagnosis and 12 replay runs: two probes, two arms, 3 runs each (D120).
+    expect(p.runs).toBe(13);
     expect(p.tier).toBe('reviewed');
     // Nothing in the repository changes, the probe files included.
     expect(readFileSync(join(root, '.claude/rules/deps.md'), 'utf8')).toBe(RULE);
@@ -86,7 +87,7 @@ describe('diagnose', { timeout: 120_000 }, () => {
 
     const p = await run(root);
 
-    expect(p.replay!.miss).toMatchObject({ status: 'improved', head: { passed: 2, valid: 2 } });
+    expect(p.replay!.miss).toMatchObject({ status: 'improved', head: { passed: 3, valid: 3 } });
     expect(p.replay!.status).toBe('validated');
     expect(readFileSync(join(root, 'shared/rules/deps.md'), 'utf8')).toBe(RULE);
   });
@@ -119,22 +120,22 @@ describe('diagnose', { timeout: 120_000 }, () => {
     process.env.FAKE_CLAUDE_SCENARIO = file;
     const root = repo();
 
-    const p = await diagnose({ root, miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 2, maxRuns: 16, maxMinutes: 15, ablate: true });
+    const p = await diagnose({ root, miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 3, maxRuns: 16, maxMinutes: 15, ablate: true });
 
     expect(p.replay!.status).toBe('validated');
-    expect(p.replay!.ablation).toMatchObject({ status: 'improved', base: { passed: 0, valid: 2 }, head: { passed: 2, valid: 2 } });
-    // 1 diagnosis, 8 replay runs, 2 ablation runs: the base side is the replay's, not run again.
-    expect(p.runs).toBe(11);
+    expect(p.replay!.ablation).toMatchObject({ status: 'improved', base: { passed: 0, valid: 3 }, head: { passed: 3, valid: 3 } });
+    // 1 diagnosis, 12 replay runs, 3 ablation runs: the base side is the replay's, not run again.
+    expect(p.runs).toBe(16);
     expect(p.replay!.ablation).toMatchObject({ base: p.replay!.miss.base });
     expect(readFileSync(join(root, '.claude/rules/deps.md'), 'utf8')).toBe(RULE);
     // Without --ablate, nothing extra runs.
     expect((await run(repo())).replay!.ablation).toBeUndefined();
 
-    // --max-runs covers the ablation too: 9 leaves 1 after the replay's 8, too few for a side of 2.
-    const short = await diagnose({ root: repo(), miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 2, maxRuns: 9, maxMinutes: 15, ablate: true });
-    expect(short.replay!.ablation).toEqual({ skipped: 'the replay left too few of the 9 runs --max-runs allows' });
-    expect(short.runs).toBe(9);
-    const enough = await diagnose({ root: repo(), miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 2, maxRuns: 10, maxMinutes: 15, ablate: true });
+    // --max-runs covers the ablation too: 14 leaves 2 after the replay's 12, too few for a side of 3.
+    const short = await diagnose({ root: repo(), miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 3, maxRuns: 14, maxMinutes: 15, ablate: true });
+    expect(short.replay!.ablation).toEqual({ skipped: 'the replay left too few of the 14 runs --max-runs allows' });
+    expect(short.runs).toBe(13);
+    const enough = await diagnose({ root: repo(), miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 3, maxRuns: 15, maxMinutes: 15, ablate: true });
     expect(enough.replay!.ablation).toMatchObject({ status: 'improved' });
   });
 
@@ -145,7 +146,7 @@ describe('diagnose', { timeout: 120_000 }, () => {
     mkdirSync(join(root, '.claude'));
     symlinkSync(join(root, 'shared', 'rules'), join(root, '.claude', 'rules'), 'junction');
 
-    const p = await diagnose({ root, miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 2, maxRuns: 16, maxMinutes: 15, ablate: true });
+    const p = await diagnose({ root, miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 3, maxRuns: 16, maxMinutes: 15, ablate: true });
 
     expect(p.replay!.ablation).toEqual({ skipped: 'the unit is reached through a link, and taking out the link would take out what else it holds' });
   });
@@ -171,10 +172,33 @@ describe('diagnose', { timeout: 120_000 }, () => {
     expect(readFileSync(argvLog, 'utf8').split('\n').filter((l) => l.includes('"-p"'))).toHaveLength(1);
   });
 
+  it('a fix that only looks better, 1/3 against 3/3, leaves the replay inconclusive', async () => {
+    // Run 2 uses pnpm whatever the rule says. The diagnosis is run 1, and the arms take turns, so run 2 is the miss's first base run.
+    const file = join(tempDir(), 'scenario.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        counterFile: join(tempDir(), 'count'),
+        behaviours: [
+          { when: { promptContains: 'You are diagnosing a miss' }, text: `\`\`\`json\n${JSON.stringify(DEFECT)}\n\`\`\``, calls: [] },
+          { when: { file: '.claude/rules/deps.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add dayjs' } }] },
+          { when: { runs: [2] }, calls: [{ tool: 'Bash', input: { command: 'pnpm add dayjs' } }] },
+          { calls: [{ tool: 'Bash', input: { command: 'npm install dayjs' } }] },
+        ],
+      }),
+    );
+    process.env.FAKE_CLAUDE_SCENARIO = file;
+
+    const p = await run(repo());
+
+    expect(p.replay!.miss).toMatchObject({ status: 'uncertain', base: { passed: 1, valid: 3 }, head: { passed: 3, valid: 3 } });
+    expect(p.replay!.status).toBe('inconclusive');
+  });
+
   it('a replay cut short by the run budget is inconclusive', async () => {
     scenario(DEFECT);
 
-    const p = await diagnose({ root: repo(), miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 2, maxRuns: 4, maxMinutes: 15 });
+    const p = await diagnose({ root: repo(), miss: MISS, model: 'sonnet', claude: [FAKE], workdir: join(tempDir(), 'work'), runs: 3, maxRuns: 4, maxMinutes: 15 });
 
     expect(p.replay!.status).toBe('inconclusive');
   });

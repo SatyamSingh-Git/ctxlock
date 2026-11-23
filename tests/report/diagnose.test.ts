@@ -85,6 +85,10 @@ describe('renderProposal', () => {
     expect(replay('not-validated')).toContain('The replay did not validate the fix, so neither it nor the probe is ready to commit as it is.');
     expect(replay('inconclusive')).not.toContain('passes with it');
     expect(replay('inconclusive')).toContain('The replay was cut short, so whether the fix works is not known. Run it again with more --max-runs or --max-minutes.');
+    // An uncertain miss makes the replay inconclusive too, for want of runs rather than budget.
+    const uncertain = renderProposal({ ...PROPOSAL, replay: { ...PROPOSAL.replay!, status: 'inconclusive', miss: outcome(miss, 1, 3, 'uncertain') } }, 'acme/web');
+    expect(uncertain).toContain('The replay looks better with the fix, but not by enough runs to show it, so whether the fix works is not known. Run again with more --runs or --extend.');
+    expect(uncertain).not.toContain('cut short');
   });
 
   it('says how many signals came after web or MCP content, in the text, the json and the proposal', () => {
@@ -107,6 +111,7 @@ describe('renderProposal', () => {
     expect(text).toContain('\nWithout the unit, 2 runs a side: improved\n  miss-deps  base 0/2  without 2/2  improved\nTaking it out does what was wanted: the unit itself causes the miss.\n');
     expect(renderDiagnosis(ablated('unchanged'), 'text')).toContain('\nTaking it out changes nothing: the unit does not drive the miss.\n');
     expect(renderDiagnosis(ablated('regressed'), 'text')).toContain('\nTaking it out makes it worse: the unit helps.\n');
+    expect(renderDiagnosis(ablated('uncertain'), 'text')).toContain('\nNot known: taking it out looks different, but not by enough runs to show it. Run again with more --runs.\n');
     expect(renderProposal(ablated('improved'), 'acme/web')).toContain('\n- **Without the unit:** improved, base 0/2, without 2/2. Taking it out does what was wanted: the unit itself causes the miss.\n');
     const skipped = { ...PROPOSAL, replay: { ...PROPOSAL.replay!, ablation: { skipped: 'the unit is reached through a link' } } };
     expect(renderDiagnosis(skipped, 'text')).toContain('\nWithout the unit: not run, as the unit is reached through a link.\n');

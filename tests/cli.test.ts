@@ -865,16 +865,16 @@ describe('ctxlock misses', () => {
       expect((await cli('diagnose', 'nope.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'))).code).toBe(2);
     });
 
-    it('--runs 1 is exit 2 before Claude runs, since a replay needs 2 valid runs a side to say anything', async () => {
+    it('--runs 2 is exit 2 before Claude runs, since below 3 a side no replay can show a fix works', async () => {
       const dir = recorded((real) => real);
       const argv = join(tempDir(), 'argv.jsonl');
       vi.stubEnv('FAKE_CLAUDE_ARGV_LOG', argv);
 
-      const one = await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--runs', '1');
-      expect(one.code).toBe(2);
-      expect(one.stderr).toContain("option '--runs <n>' argument '1' is invalid. expected at least 2, since a replay needs 2 valid runs a side to validate a fix");
+      const two = await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--runs', '2');
+      expect(two.code).toBe(2);
+      expect(two.stderr).toContain("option '--runs <n>' argument '2' is invalid. expected at least 3: below 3 runs a side, no replay can show a difference at p ≤ 0.05");
       expect(existsSync(argv)).toBe(false);
-      expect((await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--runs', '2')).code).toBe(0);
+      expect((await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--runs', '3')).code).toBe(0);
     });
 
     it('diagnoses a unit in context, writes its proposal with --drafts, and leaves one edited since', async () => {
@@ -909,10 +909,34 @@ describe('ctxlock misses', () => {
       const run = (...extra: string[]) => cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), ...extra);
       const { code, stdout } = await run('--ablate');
       expect(code).toBe(0);
-      expect(stdout).toContain('\nWithout the unit, 2 runs a side: unchanged\n');
+      // No --runs: the replay and the ablation run 3 a side (D120).
+      expect(stdout).toContain('\nWithout the unit, 3 runs a side: unchanged\n');
       expect(stdout).toContain('\nTaking it out changes nothing: the unit does not drive the miss.\n');
       expect(stdout).not.toContain('no probe to replay');
       expect((await run()).stdout).not.toContain('Without the unit');
+    });
+
+    it('--max-runs defaults to 24, so the miss and two existing probes all replay at 3 a side', async () => {
+      const file = join(tempDir(), 'scenario.json');
+      const DEFECT = { verdict: 'defect', reason: 'It names no version.', quotes: ['API rule.'], fix: { find: 'API rule.', replace: 'API rule: call the v2 endpoint.' }, probe: { prompt: 'Add the endpoint.', expect: { command: 'v2' } } };
+      const behaviours = [
+        { when: { promptContains: 'You are diagnosing a miss' }, text: `\`\`\`json\n${JSON.stringify(DEFECT)}\n\`\`\``, calls: [] },
+        { when: { file: '.claude/rules/api.md', contains: 'v2' }, calls: [{ tool: 'Bash', input: { command: 'curl /v2/items' } }] },
+        { calls: [{ tool: 'Bash', input: { command: 'curl /v1/items' } }] },
+      ];
+      writeFileSync(file, JSON.stringify({ behaviours }));
+      vi.stubEnv('FAKE_CLAUDE_SCENARIO', file);
+      const dir = recorded((real) => real);
+      const probe = (id: string) => `  - id: ${id}\n    unit: rule/.claude/rules/api.md\n    prompt: List the items.\n    expect:\n      command: curl\n`;
+      writeTree(dir, { 'evals/probes/api.yaml': `version: 1\nprobes:\n${probe('api-one')}${probe('api-two')}` });
+
+      const { code, stdout } = await cli('diagnose', '.claude/rules/api.md', dir, '--claude', FAKE, '--workdir', join(tempDir(), 'w'), '--format', 'json');
+
+      expect(code).toBe(0);
+      const { replay } = JSON.parse(stdout);
+      // 18 replay runs: more than the old 16, within 24.
+      expect(replay.others.map((o: { status: string }) => o.status)).toEqual(['unchanged', 'unchanged']);
+      expect(replay.status).toBe('validated');
     });
 
     it('diagnose --ablate says so when there is no probe to replay without the unit', async () => {

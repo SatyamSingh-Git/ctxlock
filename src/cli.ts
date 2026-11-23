@@ -172,6 +172,13 @@ function replayRuns(value: string): number {
   return n;
 }
 
+// D120: at 2 runs a side the best one-sided Fisher p is 1/6, so no fix could ever be validated.
+function diagnoseRuns(value: string): number {
+  const n = count(value);
+  if (n < 3) throw new InvalidArgumentError('expected at least 3: below 3 runs a side, no replay can show a difference at p ≤ 0.05');
+  return n;
+}
+
 const workdirOf = (flag: string | undefined) => resolve(flag ?? process.env.RUNNER_TEMP ?? tmpdir());
 // The user's own cache folder: in a temp folder that other users share, they could plant results.
 const cacheOf = (flag: string | undefined) =>
@@ -436,8 +443,8 @@ export async function main(argv: string[], io: Io): Promise<number> {
     .description("ask Claude what went wrong when a unit was in context as you stopped or corrected Claude Code, and check its smallest fix by replay; sends the unit's text and the redacted moments, and writes nothing to the repository")
     .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
     .option('--since <date>', 'only sessions begun on or after this date, as YYYY-MM-DD', day)
-    .option('--runs <n>', 'runs a side in the replay, at least 2', replayRuns, 2)
-    .option('--max-runs <n>', 'the most runs the replay and --ablate may start', count, 16)
+    .option('--runs <n>', 'runs a side in the replay, at least 3', diagnoseRuns, 3)
+    .option('--max-runs <n>', 'the most runs the replay and --ablate may start', count, 24)
     .option('--max-minutes <n>', 'start no replay run after this many minutes; --ablate then gets as many again', count, 15)
     .option('--model <model>', 'the model Claude Code runs (default: eval.model, or sonnet)')
     .option('--claude <path>', "Claude Code's executable (default: claude on PATH)")

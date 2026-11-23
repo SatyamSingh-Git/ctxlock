@@ -22,7 +22,8 @@ if (argv[0] === '--version') {
   process.stdout.write(`${scenario.version ?? '2.1.292'} (Claude Code)\n`);
   process.exit(0);
 }
-// Counts this scenario's runs, so a behaviour can apply to odd runs only and results can vary.
+// Counts this scenario's runs, so a behaviour can apply to odd runs only, or to listed runs, and
+// results can vary.
 let run = 0;
 if (scenario.counterFile) {
   run = (existsSync(scenario.counterFile) ? Number(readFileSync(scenario.counterFile, 'utf8')) : 0) + 1;
@@ -32,9 +33,11 @@ const matches = (when) =>
   !when ||
   (when.oddRun !== undefined
     ? run % 2 === 1
-    : when.promptContains !== undefined
-      ? prompt.includes(when.promptContains)
-      : existsSync(join(cwd, when.file)) && readFileSync(join(cwd, when.file), 'utf8').includes(when.contains));
+    : when.runs !== undefined
+      ? when.runs.includes(run)
+      : when.promptContains !== undefined
+        ? prompt.includes(when.promptContains)
+        : existsSync(join(cwd, when.file)) && readFileSync(join(cwd, when.file), 'utf8').includes(when.contains));
 const behaviour = (scenario.behaviours ?? []).find((b) => matches(b.when)) ?? { calls: [] };
 
 // A behaviour can fail on its own, so one arm fails while the other runs.
