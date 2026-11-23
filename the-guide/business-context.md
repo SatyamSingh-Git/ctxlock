@@ -56,8 +56,10 @@ stale_after: 2027-02-01T00:00:00Z
 ```
 
 ctxlock reads them as the concept's `verified-at` and `stale-after`, so `lint`, `verify` and `outcomes` use them with nothing in `ctxlock.yaml`:
-- **`verified-at`:** the UTC date of the latest `verified` time. A bare `verified` mapping counts as a list of one.
-- **`stale-after`:** OKF's `stale_after` is the instant a concept turns stale, and ctxlock's `stale-after` is the last day it is still good. So `2027-02-01T00:00:00Z` becomes `2027-01-31`, and lint flags the concept from 1 February, as OKF does. A `stale_after` later in a day is flagged from the next day.
+- **`verified-at`:** the date of the latest `verified` time. A bare `verified` mapping counts as a list of one.
+- **`stale-after`:** OKF's `stale_after` is the instant a concept turns stale, and ctxlock's `stale-after` is the last day it is still good. So in UTC, `2027-02-01T00:00:00Z` becomes `2027-01-31`, and lint flags the concept from 1 February, as OKF does.
+
+Both are dates in your local time, since lint and `verify` compare them with today's local date. So a concept is never flagged before its `stale_after`, wherever you are. It can be flagged up to a day after: in Tokyo, `2027-02-01T00:00:00Z` is 09:00 on 1 February, so the concept is due by 1 February and flagged from the 2nd. CI runners use UTC.
 
 A time without an offset fills nothing, and `L17-format` reports it.
 
