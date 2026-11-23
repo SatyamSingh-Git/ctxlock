@@ -103,7 +103,8 @@ export function buildGraph({ units, registry, contexts, codeowners, generated, l
     if (unit.kind !== 'knowledge') continue;
     const edges = dependsOn.get(unit.id) ?? [];
     for (const path of linkedPaths(unit)) {
-      const target = units.find((u) => u.path === path || u.aliases.includes(path));
+      // A skill is its folder, so a link to its SKILL.md, or to any file in it, reaches it.
+      const target = units.find((u) => [u.path, ...u.aliases].some((p) => path === p || path.startsWith(`${p}/`)));
       if (target && target.id !== unit.id && !edges.some((e) => e.id === target.id)) edges.push({ id: target.id });
     }
     if (edges.length > 0) dependsOn.set(unit.id, edges);

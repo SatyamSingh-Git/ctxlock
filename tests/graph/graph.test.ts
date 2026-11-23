@@ -236,6 +236,23 @@ describe('pinnedBy', () => {
       expect(graph.dependsOn.get('knowledge/kb/c/z.md')).toEqual([{ id: 'knowledge/kb/c/seg.md' }]);
     });
 
+    it("a link to a skill's SKILL.md, or to a file in it, reaches the skill, through a link to its folder too", async () => {
+      const skill = '---\nname: deploy\ndescription: Deploys the service\n---\nRun scripts/run.sh.\n';
+      const files = {
+        ...BUNDLE,
+        '.claude/skills/deploy/SKILL.md': skill,
+        '.claude/skills/deploy/scripts/run.sh': 'echo deploy\n',
+        'kb/c/z.md': '---\ntype: Reference\n---\nSee [deploy](../../.claude/skills/deploy/SKILL.md) and [its script](../../.claude/skills/deploy/scripts/run.sh).\n',
+        'kb/c/w.md': '---\ntype: Reference\n---\nSee [deploy](../../.agents/skills/deploy/SKILL.md).\n',
+        'kb/c/v.md': '---\ntype: Reference\n---\nSee [not the skill](../../.claude/skills/deploy-old/SKILL.md).\n',
+      };
+      const graph = await graphOf(files, { '.agents/skills/deploy': '.claude/skills/deploy' });
+      expect(graph.dependsOn.get('knowledge/kb/c/z.md')).toEqual([{ id: 'skill/.claude/skills/deploy' }]);
+      expect(graph.dependsOn.get('knowledge/kb/c/w.md')).toEqual([{ id: 'skill/.claude/skills/deploy' }]);
+      // A name that only starts like the skill's folder is another folder.
+      expect(graph.dependsOn.has('knowledge/kb/c/v.md')).toBe(false);
+    });
+
     it('a declared depends-on and a link to the same unit make one edge, and only concepts link', async () => {
       const files = { ...BUNDLE, 'ctxlock.yaml': 'version: 1\nunits:\n  kb/c/y.md:\n    depends-on: [kb/c/x.md@certified, kb/c/seg.md]\n', 'AGENTS.md': 'Read [x](kb/c/x.md).\n' };
       const graph = await graphOf(files);

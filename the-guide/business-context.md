@@ -75,7 +75,7 @@ When `ctxlock verify` re-checks a concept dated this way and its probes hold, it
 
 ## In the graph
 
-A concept's links are its record of what it rests on. A link from a concept to another unit, such as `[the revenue model](../models/revenue.ossie.yaml)`, is a `depends-on` edge, beside any you declare. A link through a symlink reaches the unit behind it. So `impact` on a change to the model reaches the concepts that cite it, and `who-uses` names them:
+A concept's links are its record of what it rests on. A link from a concept to another unit, such as `[the revenue model](../models/revenue.ossie.yaml)`, is a `depends-on` edge, beside any you declare. A link through a symlink reaches the unit behind it, and a link to a skill's `SKILL.md`, or to any file in its folder, reaches the skill. So `impact` on a change to the model reaches the concepts that cite it, and `who-uses` names them:
 
 ```
 ctxlock who-uses · models/revenue.ossie.yaml
