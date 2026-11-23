@@ -114,11 +114,13 @@ describe('fetchUpstream', { timeout: 60_000 }, () => {
     writeTree(work, { 'askpass.sh': `#!/bin/sh\ntouch "${askpassRan}"\necho secret\n` });
     chmodSync(join(work, 'askpass.sh'), 0o755);
     const config = join(work, 'gitconfig');
-    writeFileSync(config, `[credential]\n\thelper = "!f() { touch '${helperRan}'; echo password=secret; }; f"\n`);
+    writeFileSync(config, `[credential]\n\thelper = "!f() { touch '${helperRan}'; echo username=u; echo password=secret; }; f"\n`);
     const server = createServer((_req, res) => res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="x"' }).end());
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
     vi.stubEnv('GIT_ASKPASS', join(work, 'askpass.sh').replaceAll('\\', '/'));
     vi.stubEnv('GIT_CONFIG_GLOBAL', config);
+    // So the sync direction cannot wait on a real terminal when the tests run in one; askpass and the helper still answer.
+    vi.stubEnv('GIT_TERMINAL_PROMPT', '0');
     try {
       const { port } = server.address() as { port: number };
       const url = `http://127.0.0.1:${port}/private.git`;
