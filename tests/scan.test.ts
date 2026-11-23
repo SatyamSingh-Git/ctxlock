@@ -2,7 +2,64 @@ import { describe, expect, it } from 'vitest';
 import { scanRepo } from '../src/scan.js';
 import { memReader } from './helpers/mem-reader.js';
 
+// One of every file type another agent reads, with an @import of one from CLAUDE.md. Extend it with each new path.
+export const OTHER_AGENTS: Record<string, string> = {
+  '.github/copilot-instructions.md': 'Use pnpm.\n',
+  '.github/instructions/api.instructions.md': '---\napplyTo: "src/**"\n---\nUse zod.\n',
+  '.cursor/rules/api.mdc': '---\nalwaysApply: true\n---\nUse zod.\n',
+  '.cursorrules': 'Use pnpm.\n',
+  '.cursor/skills/x/SKILL.md': '---\nname: x\ndescription: d\n---\nbody\n',
+  'GEMINI.md': 'Use pnpm.\n',
+  'pkg/GEMINI.md': 'Use pnpm here.\n',
+  '.agents/rules/style.md': 'Tabs.\n',
+  '.devin/rules/style.md': 'Tabs.\n',
+  '.windsurfrules': 'Tabs.\n',
+  '.kiro/steering/style.md': 'Tabs.\n',
+  '.clinerules/style.md': 'Tabs.\n',
+  '.cline/skills/y/SKILL.md': '---\nname: y\ndescription: d\n---\nbody\n',
+  '.opencode/skills/z/SKILL.md': '---\nname: z\ndescription: d\n---\nbody\n',
+  '.junie/guidelines.md': 'Tabs.\n',
+  'AGENT.md': 'Use pnpm.\n',
+  'sub/AGENTS.local.md': 'Local.\n',
+  '.github/skills/w/SKILL.md': '---\nname: w\ndescription: d\n---\nbody\n',
+  '.github/workflows/copilot-setup-steps.yml': 'jobs:\n  copilot-setup-steps:\n    runs-on: ubuntu-latest\n',
+  '.github/hooks/guard.json': '{"version": 1, "hooks": {}}',
+  '.vscode/mcp.json': '{"servers": {}}',
+  '.cursor/mcp.json': '{"mcpServers": {}}',
+  '.gemini/settings.json': '{}',
+  '.agents/mcp_config.json': '{"mcpServers": {}}',
+  '.devin/hooks.v1.json': '{}',
+  '.kiro/settings/mcp.json': '{"mcpServers": {}}',
+  '.clinerules/hooks/PreToolUse': '#!/bin/sh\n',
+  'opencode.json': '{}',
+  '.opencode/plugins/audit.ts': 'export {}\n',
+  '.junie/mcp/mcp.json': '{"mcpServers": {}}',
+};
+
 describe('scanRepo', () => {
+  it("other agents' files change nothing Claude Code or Codex are predicted to load", async () => {
+    const modelled = { 'AGENTS.md': 'Use pnpm.\n', 'CLAUDE.md': '@AGENTS.md\n', '.claude/skills/r/SKILL.md': '---\nname: r\ndescription: d\n---\nbody\n', '.agents/skills/s/SKILL.md': '---\nname: s\ndescription: d\n---\nbody\n' };
+    const scan = (files: Record<string, string>) => scanRepo(memReader(files), { today: '2026-11-23' });
+
+    const without = await scan(modelled);
+    const withOthers = await scan({ ...modelled, ...OTHER_AGENTS });
+
+    expect(withOthers.contexts).toEqual(without.contexts);
+    expect(withOthers.budget).toEqual(without.budget);
+    expect(withOthers.units.length).toBeGreaterThan(without.units.length + Object.keys(OTHER_AGENTS).length - 1);
+  });
+
+  it('a CLAUDE.md that imports GEMINI.md loads it as a plain file, as in 0.1.0, not as the Gemini unit', async () => {
+    const result = await scanRepo(memReader({ 'CLAUDE.md': '@GEMINI.md\n', 'GEMINI.md': 'Use pnpm.\n' }), { today: '2026-11-23' });
+
+    const claude = result.contexts.find((c) => c.harness === 'claude-code')!;
+    expect(claude.entries.map((e) => [e.unitId, e.reason])).toEqual([
+      ['instructions/CLAUDE.md', 'ancestor'],
+      ['file/GEMINI.md', 'import:CLAUDE.md'],
+    ]);
+    expect(result.units.map((u) => [u.id, u.family])).toContainEqual(['instructions/GEMINI.md', 'gemini']);
+  });
+
   it('discovers, resolves, budgets and lints, with discovery problems among the findings', async () => {
     const result = await scanRepo(memReader({ 'AGENTS.md': 'Use pnpm.\n', 'CLAUDE.md': Buffer.from([0xff, 0xfe]) }), { today: '2026-11-05' });
 

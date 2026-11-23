@@ -1,7 +1,7 @@
 import { posix } from 'node:path';
 import picomatch from 'picomatch';
 import { parse } from 'yaml';
-import type { Finding, Unit, UnitFile, UnitKind } from '../model.js';
+import { type Finding, MODELLED_FAMILIES, type Unit, type UnitFile, type UnitKind } from '../model.js';
 import type { RepoReader } from '../repo/reader.js';
 import { lfDigest, unitDigest } from './digest.js';
 import { splitFrontmatter } from './frontmatter.js';
@@ -13,6 +13,9 @@ interface Pattern {
 }
 
 const glob = (...globs: string[]) => picomatch(globs, { dot: true });
+// Windows and macOS read .Cursor/mcp.json as .cursor/mcp.json, so a pull request must not dodge the
+// check by a folder's case.
+const anyCase = (...globs: string[]) => picomatch(globs, { dot: true, nocase: true });
 
 // Order matters: the first matching row decides the kind.
 const PATTERNS: Pattern[] = [
@@ -24,6 +27,58 @@ const PATTERNS: Pattern[] = [
   { match: glob('.claude/settings.json', '.claude/settings.local.json', '.mcp.json'), kind: 'config', family: 'claude' },
   { match: glob('**/.codex/config.toml', '**/.codex/hooks.json'), kind: 'config', family: 'codex' },
   { match: glob('.vscode/settings.json'), kind: 'config', family: 'vscode' },
+  // Other agents' files, for the safety checks only (the-guide/other-agents.md has each source).
+  { match: glob('.github/copilot-instructions.md'), kind: 'instructions', family: 'copilot' },
+  { match: glob('.github/instructions/**/*.instructions.md'), kind: 'rule', family: 'copilot' },
+  { match: glob('**/.github/skills/*/SKILL.md'), kind: 'skill', family: 'copilot' },
+  {
+    match: anyCase('.github/workflows/copilot-setup-steps.yml', '.github/hooks/*.json', '.github/mcp.json', '.github/copilot/settings.json', '.vscode/mcp.json'),
+    kind: 'config',
+    family: 'copilot',
+  },
+  { match: glob('**/.cursor/rules/**/*.mdc'), kind: 'rule', family: 'cursor' },
+  { match: glob('.cursorrules'), kind: 'instructions', family: 'cursor' },
+  { match: glob('**/.cursor/skills/*/SKILL.md'), kind: 'skill', family: 'cursor' },
+  { match: anyCase('.cursor/mcp.json', '.cursor/hooks.json'), kind: 'config', family: 'cursor' },
+  { match: glob('**/GEMINI.md'), kind: 'instructions', family: 'gemini' },
+  { match: glob('**/.gemini/skills/*/SKILL.md'), kind: 'skill', family: 'gemini' },
+  { match: anyCase('**/.gemini/settings.json'), kind: 'config', family: 'gemini' },
+  { match: glob('**/{.agents,.agent,_agents,_agent}/rules/*.md'), kind: 'rule', family: 'antigravity' },
+  {
+    match: anyCase('**/{.agents,.agent,_agents,_agent}/{hooks.json,mcp_config.json}', '**/{.agents,.agent,_agents,_agent}/plugins/*/{plugin.json,hooks.json,mcp_config.json}'),
+    kind: 'config',
+    family: 'antigravity',
+  },
+  { match: glob('.devin/global_rules.md', '.windsurf/global_rules.md', '.windsurfrules'), kind: 'instructions', family: 'devin' },
+  { match: glob('**/.devin/rules/*.md', '**/.windsurf/rules/*.md'), kind: 'rule', family: 'devin' },
+  { match: glob('**/.devin/skills/*/SKILL.md', '**/.windsurf/skills/*/SKILL.md'), kind: 'skill', family: 'devin' },
+  { match: anyCase('.devin/hooks.v1.json', '.devin/mcp_config.json', '.devin/config.json'), kind: 'config', family: 'devin' },
+  { match: glob('**/.kiro/steering/**/*.md'), kind: 'rule', family: 'kiro' },
+  { match: glob('**/.kiro/skills/*/SKILL.md'), kind: 'skill', family: 'kiro' },
+  { match: anyCase('.kiro/hooks/*.json', '.kiro/settings/mcp.json', '.kiro/agents/*.{json,md}'), kind: 'config', family: 'kiro' },
+  { match: glob('.clinerules'), kind: 'instructions', family: 'cline' },
+  { match: glob('.clinerules/skills/*/SKILL.md', '.cline/skills/*/SKILL.md'), kind: 'skill', family: 'cline' },
+  // Cline runs each file in a hooks folder, named for its event, whatever its extension.
+  { match: anyCase('.clinerules/hooks/*', '.cline/hooks/*', '.cline/plugins/**'), kind: 'config', family: 'cline' },
+  // A skill's other files sit under .clinerules too, and are not rules.
+  {
+    match: picomatch(['.clinerules/**/*.{md,markdown,txt}', '.cline/rules/**/*.{md,markdown,txt}'], { dot: true, ignore: ['.clinerules/skills/**'] }),
+    kind: 'rule',
+    family: 'cline',
+  },
+  { match: glob('**/{.opencode,.kilo}/{skill,skills}/*/SKILL.md'), kind: 'skill', family: 'opencode' },
+  { match: glob('{.kilocode,.kilo}/rules/**/*.md'), kind: 'rule', family: 'opencode' },
+  { match: glob('.kilocoderules'), kind: 'instructions', family: 'opencode' },
+  {
+    match: anyCase('**/{opencode,kilo}.{json,jsonc}', '{.kilo,.kilocode}/mcp.json', '**/{.opencode,.kilo,.kilocode}/{plugin,plugins,tool,tools}/**'),
+    kind: 'config',
+    family: 'opencode',
+  },
+  { match: glob('.junie/guidelines.md', '.junie/playbook.md'), kind: 'instructions', family: 'junie' },
+  { match: glob('.junie/guidelines/**/*.md', '.junie/rules/**/*.md'), kind: 'rule', family: 'junie' },
+  { match: glob('.junie/skills/*/SKILL.md'), kind: 'skill', family: 'junie' },
+  { match: anyCase('.junie/mcp/mcp.json', '.junie/config.json'), kind: 'config', family: 'junie' },
+  { match: glob('**/AGENT.md', '**/AGENTS.local.md'), kind: 'instructions', family: 'other' },
 ];
 
 const utf8 = new TextDecoder('utf-8', { fatal: true });
@@ -97,10 +152,19 @@ export async function discoverUnits(reader: RepoReader, declared: Declared = { k
   const byPath = new Map<string, Unit>();
   const problems: Finding[] = [];
 
+  const patternOf = (path: string) => PATTERNS.find((p) => p.match(path)) ?? businessPattern(path, declared, bundles);
+  // A file an agent ctxlock models can reach is discovered exactly as it always was; another agent's
+  // path to the same file adds nothing, so it cannot change a prediction. Its bytes are still checked.
+  const modelledReal = new Set<string>();
+  for (const [path, real] of reachable) {
+    const pattern = patternOf(path);
+    if (pattern && MODELLED_FAMILIES.has(pattern.family)) modelledReal.add(real);
+  }
+
   // Listed files come first in `reachable`, so a link to an existing unit finds it and becomes its alias.
   for (const [path, real] of reachable) {
-    const pattern = PATTERNS.find((p) => p.match(path)) ?? businessPattern(path, declared, bundles);
-    if (!pattern) continue;
+    const pattern = patternOf(path);
+    if (!pattern || (!MODELLED_FAMILIES.has(pattern.family) && modelledReal.has(real))) continue;
 
     const unitPath = pattern.kind === 'skill' ? posix.dirname(path) : path;
     if (path !== real) {

@@ -295,4 +295,127 @@ describe('discoverUnits', () => {
       expect(problems).toMatchObject([{ rule: 'L0-frontmatter', severity: 'must', unitId: 'knowledge/kb/x.md' }]);
     });
   });
+
+  // Paths and their sources: the-guide/other-agents.md.
+  describe("other agents' files", () => {
+    const one = async (path: string, text = 'Use pnpm.\n') => (await discoverUnits(memReader({ [path]: text }))).units.map((u) => [u.id, u.family]);
+
+    it.each([
+      ['.github/copilot-instructions.md', 'instructions/.github/copilot-instructions.md', 'copilot'],
+      ['.github/instructions/api/routes.instructions.md', 'rule/.github/instructions/api/routes.instructions.md', 'copilot'],
+      ['.cursor/rules/api/routes.mdc', 'rule/.cursor/rules/api/routes.mdc', 'cursor'],
+      ['.cursorrules', 'instructions/.cursorrules', 'cursor'],
+      ['.cursor/skills/x/SKILL.md', 'skill/.cursor/skills/x', 'cursor'],
+      ['GEMINI.md', 'instructions/GEMINI.md', 'gemini'],
+      ['pkg/GEMINI.md', 'instructions/pkg/GEMINI.md', 'gemini'],
+      ['.agents/rules/style.md', 'rule/.agents/rules/style.md', 'antigravity'],
+      ['.devin/global_rules.md', 'instructions/.devin/global_rules.md', 'devin'],
+      ['.devin/rules/style.md', 'rule/.devin/rules/style.md', 'devin'],
+      ['.devin/skills/x/SKILL.md', 'skill/.devin/skills/x', 'devin'],
+      ['.windsurfrules', 'instructions/.windsurfrules', 'devin'],
+      ['.windsurf/global_rules.md', 'instructions/.windsurf/global_rules.md', 'devin'],
+      ['.windsurf/rules/style.md', 'rule/.windsurf/rules/style.md', 'devin'],
+      ['.windsurf/skills/x/SKILL.md', 'skill/.windsurf/skills/x', 'devin'],
+      ['.kiro/steering/style.md', 'rule/.kiro/steering/style.md', 'kiro'],
+      ['.clinerules', 'instructions/.clinerules', 'cline'],
+      ['.clinerules/style.md', 'rule/.clinerules/style.md', 'cline'],
+      ['.clinerules/skills/x/SKILL.md', 'skill/.clinerules/skills/x', 'cline'],
+      ['.cline/rules/style.md', 'rule/.cline/rules/style.md', 'cline'],
+      ['.cline/skills/x/SKILL.md', 'skill/.cline/skills/x', 'cline'],
+      ['.opencode/skills/x/SKILL.md', 'skill/.opencode/skills/x', 'opencode'],
+      ['.kilo/skills/x/SKILL.md', 'skill/.kilo/skills/x', 'opencode'],
+      ['.kilocode/rules/style.md', 'rule/.kilocode/rules/style.md', 'opencode'],
+      ['.junie/guidelines.md', 'instructions/.junie/guidelines.md', 'junie'],
+      ['.junie/guidelines/style.md', 'rule/.junie/guidelines/style.md', 'junie'],
+      ['.junie/rules/style.md', 'rule/.junie/rules/style.md', 'junie'],
+      ['.junie/playbook.md', 'instructions/.junie/playbook.md', 'junie'],
+      ['AGENT.md', 'instructions/AGENT.md', 'other'],
+      ['pkg/AGENTS.local.md', 'instructions/pkg/AGENTS.local.md', 'other'],
+      ['.github/skills/x/SKILL.md', 'skill/.github/skills/x', 'copilot'],
+      ['.gemini/skills/x/SKILL.md', 'skill/.gemini/skills/x', 'gemini'],
+      ['.kiro/skills/x/SKILL.md', 'skill/.kiro/skills/x', 'kiro'],
+      ['.junie/skills/x/SKILL.md', 'skill/.junie/skills/x', 'junie'],
+      ['.opencode/skill/x/SKILL.md', 'skill/.opencode/skill/x', 'opencode'],
+      ['.agent/rules/style.md', 'rule/.agent/rules/style.md', 'antigravity'],
+      ['_agents/rules/style.md', 'rule/_agents/rules/style.md', 'antigravity'],
+      ['.clinerules/notes.txt', 'rule/.clinerules/notes.txt', 'cline'],
+      ['.kilo/rules/style.md', 'rule/.kilo/rules/style.md', 'opencode'],
+      ['.kilocoderules', 'instructions/.kilocoderules', 'opencode'],
+      // Execution config, parsed or opaque (Task 3).
+      ['.github/workflows/copilot-setup-steps.yml', 'config/.github/workflows/copilot-setup-steps.yml', 'copilot'],
+      ['.github/hooks/guard.json', 'config/.github/hooks/guard.json', 'copilot'],
+      ['.github/mcp.json', 'config/.github/mcp.json', 'copilot'],
+      ['.github/copilot/settings.json', 'config/.github/copilot/settings.json', 'copilot'],
+      ['.vscode/mcp.json', 'config/.vscode/mcp.json', 'copilot'],
+      ['.cursor/mcp.json', 'config/.cursor/mcp.json', 'cursor'],
+      ['.cursor/hooks.json', 'config/.cursor/hooks.json', 'cursor'],
+      ['.gemini/settings.json', 'config/.gemini/settings.json', 'gemini'],
+      ['.agents/hooks.json', 'config/.agents/hooks.json', 'antigravity'],
+      ['.agents/mcp_config.json', 'config/.agents/mcp_config.json', 'antigravity'],
+      ['.agents/plugins/p/plugin.json', 'config/.agents/plugins/p/plugin.json', 'antigravity'],
+      ['.agents/plugins/p/hooks.json', 'config/.agents/plugins/p/hooks.json', 'antigravity'],
+      ['.devin/hooks.v1.json', 'config/.devin/hooks.v1.json', 'devin'],
+      ['.devin/mcp_config.json', 'config/.devin/mcp_config.json', 'devin'],
+      ['.devin/config.json', 'config/.devin/config.json', 'devin'],
+      ['.kiro/hooks/lint.json', 'config/.kiro/hooks/lint.json', 'kiro'],
+      ['.kiro/settings/mcp.json', 'config/.kiro/settings/mcp.json', 'kiro'],
+      ['.kiro/agents/reviewer.json', 'config/.kiro/agents/reviewer.json', 'kiro'],
+      ['.clinerules/hooks/PreToolUse', 'config/.clinerules/hooks/PreToolUse', 'cline'],
+      ['.cline/hooks/PreToolUse.sh', 'config/.cline/hooks/PreToolUse.sh', 'cline'],
+      ['.cline/plugins/audit.js', 'config/.cline/plugins/audit.js', 'cline'],
+      ['opencode.json', 'config/opencode.json', 'opencode'],
+      ['pkg/opencode.jsonc', 'config/pkg/opencode.jsonc', 'opencode'],
+      ['.opencode/opencode.json', 'config/.opencode/opencode.json', 'opencode'],
+      ['.opencode/plugins/audit.ts', 'config/.opencode/plugins/audit.ts', 'opencode'],
+      ['.opencode/tool/run.js', 'config/.opencode/tool/run.js', 'opencode'],
+      ['kilo.jsonc', 'config/kilo.jsonc', 'opencode'],
+      ['.kilo/mcp.json', 'config/.kilo/mcp.json', 'opencode'],
+      ['.kilocode/mcp.json', 'config/.kilocode/mcp.json', 'opencode'],
+      ['.kilo/plugins/audit.ts', 'config/.kilo/plugins/audit.ts', 'opencode'],
+      ['.junie/mcp/mcp.json', 'config/.junie/mcp/mcp.json', 'junie'],
+      ['.junie/config.json', 'config/.junie/config.json', 'junie'],
+    ])('%s is %s, of family %s', async (path, id, family) => {
+      expect(await one(path, path.endsWith('SKILL.md') ? skill('x') : 'Use pnpm.\n')).toEqual([[id, family]]);
+    });
+
+    it("matches other agents' config in any case, as Windows and macOS read it", async () => {
+      expect(await one('.Cursor/mcp.json', '{}')).toEqual([['config/.Cursor/mcp.json', 'cursor']]);
+      expect(await one('.GITHUB/hooks/guard.json', '{}')).toEqual([['config/.GITHUB/hooks/guard.json', 'copilot']]);
+    });
+
+    it.each([
+      '.cursor/rules/x.md',
+      '.github/skills/a/b/SKILL.md',
+      '.github/instructions/x.md',
+      '.github/workflows/ci.yml',
+      '.github/workflows/copilot-setup-steps.yaml',
+      '.agents/rules/sub/x.txt',
+      '.windsurf/mcp_config.json',
+      '.clinerules/skills/x/reference.md',
+    ])(
+      '%s is not a unit',
+      async (path) => {
+        expect(await one(path)).toEqual([]);
+      },
+    );
+
+    it("a modelled path wins: a .claude link to another agent's file keeps today's unit, and a link the other way stays an alias", async () => {
+      const today = async (files: Record<string, string>, links: Record<string, string>) =>
+        (await discoverUnits(memReader(files, links))).units.map((u) => [u.id, u.family, u.aliases]);
+
+      expect(await today({ '.github/skills/x/SKILL.md': skill('x') }, { '.claude/skills/x': '.github/skills/x' })).toEqual([['skill/.claude/skills/x', 'claude', []]]);
+      expect(await today({ '.cursor/rules/r.mdc': 'r' }, { '.claude/rules/r.md': '.cursor/rules/r.mdc' })).toEqual([['rule/.claude/rules/r.md', 'claude', []]]);
+      // As before this change, any link to a unit is an alias, so imports through it resolve.
+      expect(await today({ '.claude/skills/x/SKILL.md': skill('x') }, { '.github/skills/x': '.claude/skills/x' })).toEqual([['skill/.claude/skills/x', 'claude', ['.github/skills/x']]]);
+    });
+
+    it('a .mdc rule may be empty or have no frontmatter, and a rule that is not UTF-8 is an L0-encoding problem', async () => {
+      const { units, problems } = await discoverUnits(
+        memReader({ '.cursor/rules/empty.mdc': '', '.cursor/rules/plain.mdc': 'Use pnpm.\n', '.cursor/rules/latin1.mdc': Buffer.from([0x63, 0x61, 0x66, 0xe9]) }),
+      );
+
+      expect(units.map((u) => u.id)).toEqual(['rule/.cursor/rules/empty.mdc', 'rule/.cursor/rules/latin1.mdc', 'rule/.cursor/rules/plain.mdc']);
+      expect(problems.map((p) => [p.rule, p.path])).toEqual([['L0-encoding', '.cursor/rules/latin1.mdc']]);
+    });
+  });
 });
