@@ -13,7 +13,7 @@ const hrefs = (tokens: Token[]): string[] =>
 export function linkedPaths(unit: Unit): string[] {
   const paths = new Set<string>();
   for (const href of hrefs(parser.parse(unit.body, {}))) {
-    if (SCHEME.test(href) || href.startsWith('/')) continue;
+    if (SCHEME.test(href) || href.startsWith('//')) continue;
     const target = href.replace(/[#?].*$/, '');
     if (target === '') continue;
     let path: string;
@@ -22,8 +22,9 @@ export function linkedPaths(unit: Unit): string[] {
     } catch {
       path = target;
     }
-    const resolved = posix.normalize(posix.join(posix.dirname(unit.path), path));
-    if (resolved !== '..' && !resolved.startsWith('../')) paths.add(resolved);
+    // GitHub reads a link that starts with / from the repository's root.
+    const resolved = posix.normalize(path.startsWith('/') ? path.slice(1) : posix.join(posix.dirname(unit.path), path));
+    if (resolved !== '.' && resolved !== '..' && !resolved.startsWith('../')) paths.add(resolved);
   }
   return [...paths];
 }

@@ -86,7 +86,7 @@ Units that depend on it:
 No configured agent loads it.
 ```
 
-Links to URLs, to anchors, or to files that are no unit add nothing.
+A link that starts with `/`, such as `/models/revenue.ossie.yaml`, is read from the repository's root, as GitHub reads it. Links to URLs, to anchors, or to files that are no unit add nothing.
 
 ## Probes that check an answer
 
