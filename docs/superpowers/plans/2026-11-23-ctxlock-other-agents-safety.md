@@ -240,3 +240,18 @@ Families exist, `resolveAll` and the lint runner gate on them, and both agent mo
   - Run `npm run ci`. Expected: green.
   - Push. Then watch CI with `gh run watch`. Expected: green on Ubuntu and Windows.
   - Commit: `docs: other agents' files in the guide, README and journey`
+
+## Final review (2026-11-24)
+
+A fresh reviewer read 64e7c36..253e269 and returned "with fixes". There were two Criticals and four Importants, all fixed test-first and mutation-checked in a3dc602 and d2bf27c (D113 to D116). The suite now has 877 tests, and CI is green on Ubuntu and Windows.
+
+Deferred minors:
+- `copilot-setup-steps.yml` gets the generic opaque message, not the spec's "changes what Copilot's cloud agent runs before it starts" (src/lint/rules/l2-exec.ts).
+- A non-UTF-8 asset in a plugin or tool folder, such as a PNG, gives an `L0-encoding` should on every scan (src/units/discover.ts).
+- A `.mdc` rule's name keeps its extension, because `basename(path, '.md')` strips only `.md` (src/units/discover.ts).
+- One failure in a dated OKF test (tests/scan.test.ts) on a heavily loaded first run, not reproduced since.
+
+Known gaps the reviewer set aside:
+- **Hook scripts that a hooks file names** (`.cursor/hooks/x.sh`) are not gated themselves. The same is true for Claude Code in 0.1.0.
+- **Gemini's `.gemini/extensions/` and `.gemini/commands/`:** not covered, and not in the path research.
+- **A `.cursor/mcp.json` linked to `.mcp.json`** is read only as Claude Code's.
