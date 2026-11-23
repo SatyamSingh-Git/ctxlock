@@ -155,6 +155,7 @@ export async function discoverUnits(reader: RepoReader, declared: Declared = { k
   const patternOf = (path: string) => PATTERNS.find((p) => p.match(path)) ?? businessPattern(path, declared, bundles);
   // A file an agent ctxlock models can reach is discovered exactly as it always was; another agent's
   // path to the same file adds nothing, so it cannot change a prediction. Its bytes are still checked.
+  // Another agent's config is the exception: it stays a unit of its own, so the gate still fingerprints it.
   const modelledReal = new Set<string>();
   for (const [path, real] of reachable) {
     const pattern = patternOf(path);
@@ -164,7 +165,7 @@ export async function discoverUnits(reader: RepoReader, declared: Declared = { k
   // Listed files come first in `reachable`, so a link to an existing unit finds it and becomes its alias.
   for (const [path, real] of reachable) {
     const pattern = patternOf(path);
-    if (!pattern || (!MODELLED_FAMILIES.has(pattern.family) && modelledReal.has(real))) continue;
+    if (!pattern || (!MODELLED_FAMILIES.has(pattern.family) && pattern.kind !== 'config' && modelledReal.has(real))) continue;
 
     const unitPath = pattern.kind === 'skill' ? posix.dirname(path) : path;
     if (path !== real) {

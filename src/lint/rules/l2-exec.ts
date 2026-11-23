@@ -268,12 +268,13 @@ export const execConfig: Rule = {
         findings.push({ rule: 'L2-exec-config', severity: 'info', message, path, unitId: unit.id, data: { file: path, kind, key, fingerprint } });
       }
     };
+    // Another agent's config needs no text to be fingerprinted, so a binary or non-UTF-8 file, which
+    // textFiles skips, is still one item. Only its MCP-only files are read, below.
+    const read = new Set<string>();
     for await (const { unit, path, text } of textFiles(ctx, (u) => u.kind === 'config')) {
       const serversKey = modelled(unit) ? undefined : MCP_ONLY[path.toLowerCase()];
-      if (!modelled(unit) && serversKey === undefined) {
-        record(unit, path, [opaque(unit, path)]);
-        continue;
-      }
+      if (!modelled(unit) && serversKey === undefined) continue;
+      read.add(path);
       const parsed = parseConfig(unit, text);
       if (parsed.error !== undefined) {
         findings.push({ rule: 'L2-parse', severity: 'should', message: `could not parse ${path}: ${parsed.error}`, path, unitId: unit.id });
@@ -281,6 +282,10 @@ export const execConfig: Rule = {
       if (serversKey === undefined) record(unit, path, inventory(unit, parsed.value));
       // ctxlock cannot tell what the agent makes of a file it cannot parse, so the change is not hidden.
       else record(unit, path, parsed.error === undefined ? mcpOnly(unit, path, serversKey, parsed.value) : [opaque(unit, path)]);
+    }
+    for (const unit of ctx.units) {
+      if (unit.kind !== 'config' || modelled(unit)) continue;
+      for (const { path } of unit.files) if (!read.has(path)) record(unit, path, [opaque(unit, path)]);
     }
     for (const unit of ctx.units) {
       if (unit.kind === 'skill' && unit.frontmatter) record(unit, `${unit.path}/SKILL.md`, skillFrontmatter(unit.frontmatter));

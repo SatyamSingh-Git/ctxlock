@@ -417,7 +417,7 @@ describe('L2-parse', () => {
 });
 
 describe("L2-exec-config on other agents' files", () => {
-  async function items(files: Record<string, string>) {
+  async function items(files: Record<string, string | Buffer>) {
     return (await execConfig.check(await lintContext(files))).map((f) => ({ rule: f.rule, kind: f.data?.kind, key: f.data?.key, message: f.message, fingerprint: f.data?.fingerprint }));
   }
 
@@ -456,6 +456,19 @@ describe("L2-exec-config on other agents' files", () => {
     expect(found.map((i) => [i.rule, i.kind])).toEqual([
       ['L2-parse', undefined],
       ['L2-exec-config', 'file'],
+    ]);
+  });
+
+  it('a binary or non-UTF-8 config file of another agent is still one item, so its edits are not hidden', async () => {
+    const elf = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0xff, 0x00]);
+    const latin1 = Buffer.from('{"mcpServers": {}} // caf\xe9', 'latin1');
+
+    const found = await items({ '.clinerules/hooks/PreToolUse': elf, '.cursor/mcp.json': latin1, '.opencode/plugin/x.wasm': Buffer.from([0x00, 0x61, 0x73, 0x6d, 0xc3]) });
+
+    expect(found.map((i) => [i.kind, i.message.split(' ')[0]]).sort()).toEqual([
+      ['file', '.clinerules/hooks/PreToolUse'],
+      ['file', '.cursor/mcp.json'],
+      ['file', '.opencode/plugin/x.wasm'],
     ]);
   });
 

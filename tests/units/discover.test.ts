@@ -424,6 +424,15 @@ describe('discoverUnits', () => {
       ]);
     });
 
+    it("another agent's config is its own unit even when a modelled path links to it, so the gate still fingerprints it", async () => {
+      const { units } = await discoverUnits(memReader({ '.cursor/hooks.json': '{"hooks":{}}' }, { '.claude/rules/x.md': '.cursor/hooks.json' }));
+
+      expect(units.map((u) => [u.id, u.family])).toEqual([
+        ['rule/.claude/rules/x.md', 'claude'],
+        ['config/.cursor/hooks.json', 'cursor'],
+      ]);
+    });
+
     it('a .mdc rule may be empty or have no frontmatter, and a rule that is not UTF-8 is an L0-encoding problem', async () => {
       const { units, problems } = await discoverUnits(
         memReader({ '.cursor/rules/empty.mdc': '', '.cursor/rules/plain.mdc': 'Use pnpm.\n', '.cursor/rules/latin1.mdc': Buffer.from([0x63, 0x61, 0x66, 0xe9]) }),
