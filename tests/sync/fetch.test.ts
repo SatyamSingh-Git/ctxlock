@@ -1,3 +1,4 @@
+import { createServer } from 'node:http';
 import { chmodSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
@@ -104,6 +105,27 @@ describe('fetchUpstream', { timeout: 60_000 }, () => {
     const repo = await failure(fetchUpstream(up(join(tempDir(), 'missing')), tempDir()));
     expect(repo).toBeInstanceOf(UpstreamError);
     expect(repo.message).toContain('upstream platform');
+  });
+
+  it('a server that asks for credentials gets none: no askpass, no credential helper, no prompt', async () => {
+    const work = tempDir();
+    const marker = join(work, 'asked').replaceAll('\\', '/');
+    writeTree(work, { 'askpass.sh': `#!/bin/sh\ntouch "${marker}"\necho secret\n` });
+    chmodSync(join(work, 'askpass.sh'), 0o755);
+    const config = join(work, 'gitconfig');
+    writeFileSync(config, `[credential]\n\thelper = "!f() { touch '${marker}'; echo password=secret; }; f"\n`);
+    const server = createServer((_req, res) => res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="x"' }).end());
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
+    vi.stubEnv('GIT_ASKPASS', join(work, 'askpass.sh').replaceAll('\\', '/'));
+    vi.stubEnv('GIT_CONFIG_GLOBAL', config);
+    try {
+      const { port } = server.address() as { port: number };
+      expect(await failure(fetchUpstream(up(`http://127.0.0.1:${port}/private.git`), tempDir()))).toBeInstanceOf(UpstreamError);
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+      server.close();
+    }
   });
 
   it('a repository that starts with a dash is not read as an option', async () => {

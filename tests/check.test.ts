@@ -1,7 +1,10 @@
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it } from 'vitest';
 import { CheckError, checkTarget } from '../src/check.js';
-import { cleanup, gitRepo, tempDir, writeTree } from './helpers/repo.js';
+import { UpstreamError } from '../src/sync/fetch.js';
+import { cleanup, git, gitRepo, tempDir, writeTree } from './helpers/repo.js';
 
 afterAll(cleanup);
 
@@ -68,5 +71,35 @@ describe('checkTarget on a folder', () => {
 
   it('a folder that does not exist is a CheckError', async () => {
     await expect(check(join(tempDir(), 'missing'))).rejects.toThrow(CheckError);
+  });
+});
+
+describe('checkTarget on a git URL', { timeout: 60_000 }, () => {
+  it('reads the default branch, with nothing checked out', async () => {
+    const { dir, shas } = await gitRepo([{ '.claude/settings.json': hook('./setup.sh') }]);
+    const cache = tempDir();
+
+    const result = await checkTarget(pathToFileURL(dir).href, { cache });
+
+    expect(result.runs.map((r) => r.message)).toEqual(['SessionStart hook runs "./setup.sh"']);
+    expect(result.read).toBe(`HEAD @ ${shas[0]!.slice(0, 7)}`);
+    expect(readdirSync(cache, { recursive: true }).map(String).filter((p) => p.endsWith('settings.json'))).toEqual([]);
+  });
+
+  it('--ref reads that branch or tag, and a second check sees a commit made since', async () => {
+    const { dir, shas } = await gitRepo([{ '.claude/settings.json': hook('./one.sh') }, { '.claude/settings.json': hook('./two.sh') }]);
+    git(dir, 'tag', 'v1', shas[0]!);
+    const cache = tempDir();
+    const url = pathToFileURL(dir).href;
+
+    expect((await checkTarget(url, { ref: 'v1', cache })).runs[0]?.message).toBe('SessionStart hook runs "./one.sh"');
+    expect((await checkTarget(url, { cache })).runs[0]?.message).toBe('SessionStart hook runs "./two.sh"');
+    writeTree(dir, { '.claude/settings.json': hook('./three.sh') });
+    git(dir, 'commit', '-qam', 'three');
+    expect((await checkTarget(url, { cache })).runs[0]?.message).toBe('SessionStart hook runs "./three.sh"');
+  });
+
+  it('a URL that cannot be fetched is an UpstreamError', async () => {
+    await expect(checkTarget('https://127.0.0.1:9/none.git', { cache: tempDir() })).rejects.toThrow(UpstreamError);
   });
 });

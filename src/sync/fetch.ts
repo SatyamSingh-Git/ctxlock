@@ -21,7 +21,13 @@ export async function fetchUpstream(u: Upstream, cache: string): Promise<{ commi
   mkdirSync(noHooks, { recursive: true });
   const dir = join(root, createHash('sha256').update(u.repo).digest('hex').slice(0, 16));
   // Upstream content is data: no hook runs, the upstream's or one set in global config, and no ext:: transport.
-  const git = (args: string[]) => run('git', ['-c', `core.hooksPath=${noHooks}`, '-c', 'protocol.ext.allow=never', ...args], { windowsHide: true });
+  // Nor does git ask anyone for a password: no terminal prompt, askpass program or credential helper,
+  // which on Windows opens a window, so a private or mistyped URL fails at once instead of waiting.
+  const git = (args: string[]) =>
+    run('git', ['-c', `core.hooksPath=${noHooks}`, '-c', 'protocol.ext.allow=never', '-c', 'credential.helper=', '-c', 'core.askPass=', ...args], {
+      windowsHide: true,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', SSH_ASKPASS: '' },
+    });
 
   try {
     if (existsSync(dir)) await git(['-C', dir, 'fetch', '--quiet', '--prune', '--prune-tags', '--tags', '--force', 'origin']);
