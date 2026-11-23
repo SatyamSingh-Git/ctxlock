@@ -52,6 +52,26 @@ describe('checkTarget on a folder', () => {
     expect(JSON.stringify(result)).not.toContain('.agents/skills');
   });
 
+  it('every SKILL.md in a collection of skills is checked, at any depth, and a skill an agent already reads keeps its agent', async () => {
+    const dir = tempDir();
+    writeTree(dir, {
+      'skills/fmt/SKILL.md': '---\nname: fmt\ndescription: Formats code\nallowed-tools: Bash\n---\nbody\n',
+      'skills/fmt/strict/SKILL.md': `---\nname: strict\ndescription: Formats strictly\n---\nNo tabs.${zwsp}\n`,
+      'plugins/p/skills/notes/SKILL.md': `---\nname: notes\ndescription: Takes notes\n---\nWrite it down.${zwsp}\n`,
+      '.claude/skills/review/SKILL.md': '---\nname: review\ndescription: Reviews\nallowed-tools: Read\n---\nbody\n',
+    });
+
+    const result = await check(dir);
+
+    expect(result.runs).toEqual([
+      { agent: 'Claude Code', file: '.claude/skills/review/SKILL.md', message: 'allowed-tools approves "Read"' },
+      { agent: 'any agent that installs it', file: 'skills/fmt/SKILL.md', message: 'allowed-tools approves "Bash"' },
+    ]);
+    expect(result.must).toContainEqual(expect.objectContaining({ rule: 'L1-hidden-unicode', path: 'plugins/p/skills/notes/SKILL.md' }));
+    // A skill inside another skill's folder is read with it and on its own, and reported once.
+    expect(result.must.filter((f) => f.path === 'skills/fmt/strict/SKILL.md')).toHaveLength(1);
+  });
+
   it('a git working tree is checked as it is on disk, untracked files included', async () => {
     const { dir } = await gitRepo([{ 'AGENTS.md': 'a' }]);
     writeTree(dir, { '.github/hooks/guard.json': '{"version": 1, "hooks": {}}' });

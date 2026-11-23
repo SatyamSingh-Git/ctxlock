@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { basename, posix, resolve } from 'node:path';
 import { FAMILY_NAMES, type Finding, type HarnessId } from './model.js';
 import { fsReader, type RepoReader } from './repo/reader.js';
-import { scanRepo } from './scan.js';
+import { type ScanResult, scanRepo } from './scan.js';
 import { fetchUpstream } from './sync/fetch.js';
 
 export class CheckError extends Error {}
@@ -26,19 +26,21 @@ const SAFETY = /^L[012]-/;
 // The target is someone else's: its own ctxlock.yaml must not switch off or ignore what check reports.
 const DEFAULTS = { harnesses: ['claude-code', 'codex'] as HarnessId[], limits: {}, lint: { severity: {}, ignore: [] } };
 
-// A folder holding only SKILL.md and its files, as skills are shared, read as if it were installed.
-function mounted(base: RepoReader, prefix: string): RepoReader {
-  const inner = (path: string) => path.slice(prefix.length);
-  const reader: RepoReader = {
+// The folder `from` of the target, seen at `to` (an installed skill's place) and nothing else.
+function mounted(base: RepoReader, files: string[], links: Map<string, string | null>, from: string, to: string): RepoReader {
+  const inner = (path: string) => from + path.slice(to.length);
+  const outer = (path: string) => to + path.slice(from.length);
+  const listed = files.filter((p) => p.startsWith(from)).map(outer);
+  return {
     root: base.root,
     ref: base.ref,
-    listFiles: async () => (await base.listFiles()).map((p) => prefix + p),
+    listFiles: async () => listed,
     readFile: (path) => base.readFile(inner(path)),
-    exists: async (path) => (path.startsWith(prefix) ? base.exists(inner(path)) : prefix.startsWith(`${path}/`)),
-    listSymlinks: async () => new Map([...(await base.listSymlinks())].map(([link, target]) => [prefix + link, target === null ? null : prefix + target])),
-    readAll: (onFile, paths) => base.readAll((path, bytes) => onFile(prefix + path, bytes), paths?.map(inner)),
+    exists: async (path) => (path.startsWith(to) ? base.exists(inner(path)) : to.startsWith(`${path}/`)),
+    listSymlinks: async () =>
+      new Map([...links].filter(([link]) => link.startsWith(from)).map(([link, target]) => [outer(link), target?.startsWith(from) ? outer(target) : null])),
+    readAll: (onFile, paths) => base.readAll((path, bytes) => onFile(outer(path), bytes), (paths ?? listed).map(inner)),
   };
-  return reader;
 }
 
 // A URL by its scheme, or git's scp form (git@host:path). Anything else is a folder, so a mistyped
@@ -53,33 +55,47 @@ async function readerOf(target: string, opts: { ref?: string; cache: string }): 
   }
   if (!existsSync(target)) throw new CheckError(`no such folder: ${target}`);
   const folder = resolve(target);
-  return { base: fsReader(folder), read: target, name: basename(folder) };
+  return { base: fsReader(folder), read: folder, name: basename(folder) };
 }
 
 export async function checkTarget(target: string, opts: { ref?: string; cache: string }): Promise<CheckResult> {
   const { base, read, name } = await readerOf(target, opts);
-  let scan = await scanRepo(base, { settings: DEFAULTS });
-  let prefix = '';
-  if (scan.units.length === 0 && (await base.exists('SKILL.md'))) {
-    prefix = `.agents/skills/${name}/`;
-    scan = await scanRepo(mounted(base, prefix), { settings: DEFAULTS });
+  const runs: CheckItem[] = [];
+  const safety: Finding[] = [];
+  // A skill inside another skill's folder is read twice, with that skill and on its own.
+  const seen = new Set<string>();
+  const once = <T>(list: T[], item: T) => {
+    const key = JSON.stringify(item);
+    if (!seen.has(key)) list.push(item);
+    seen.add(key);
+  };
+  const collect = (scan: ScanResult, from = '', to = '') => {
+    const own = (text: string) => (to ? text.replaceAll(to, from) : text);
+    const unitOf = new Map(scan.units.map((u) => [u.id, u]));
+    for (const f of scan.inventory)
+      once(runs, { agent: to ? 'any agent that installs it' : FAMILY_NAMES[unitOf.get(f.unitId!)!.family], file: own(f.data!.file!), message: own(f.message) });
+    for (const { unitId, ...f } of scan.findings.filter((f) => SAFETY.test(f.rule)))
+      once(safety, {
+        ...f,
+        message: own(f.message),
+        ...(f.path === undefined ? {} : { path: own(f.path) }),
+        // A mounted skill's unit id names a place that is not in the target.
+        ...(to || unitId === undefined ? {} : { unitId }),
+      });
+  };
+
+  const scan = await scanRepo(base, { settings: DEFAULTS });
+  collect(scan);
+  // Skills are shared in folders no agent reads (skills/<name>/, or the folder itself), so each
+  // SKILL.md that is not already a unit is read as if it were installed.
+  const files = await base.listFiles();
+  const links = await base.listSymlinks();
+  const units = new Set(scan.units.flatMap((u) => u.files.map((f) => f.path)));
+  for (const path of files.filter((p) => posix.basename(p) === 'SKILL.md' && !units.has(p))) {
+    const from = path.slice(0, -'SKILL.md'.length);
+    const to = `.agents/skills/${from ? posix.basename(from) : name}/`;
+    collect(await scanRepo(mounted(base, files, links, from, to), { settings: DEFAULTS }), from, to);
   }
-  const own = (text: string) => (prefix ? text.replaceAll(prefix, '') : text);
-  const unitOf = new Map(scan.units.map((u) => [u.id, u]));
-  const runs = scan.inventory.map((f) => ({
-    agent: prefix ? 'any agent that installs it' : FAMILY_NAMES[unitOf.get(f.unitId!)!.family],
-    file: own(f.data!.file!),
-    message: own(f.message),
-  }));
-  const safety = scan.findings
-    .filter((f) => SAFETY.test(f.rule))
-    .map(({ unitId, ...f }) => ({
-      ...f,
-      message: own(f.message),
-      ...(f.path === undefined ? {} : { path: own(f.path) }),
-      // A bare skill's unit is the folder itself, so its id would name a mount that is not there.
-      ...(prefix || unitId === undefined ? {} : { unitId }),
-    }));
   return {
     target,
     read,

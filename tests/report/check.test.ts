@@ -44,6 +44,11 @@ describe('renderCheck', () => {
     );
   });
 
+  it('a folder named by its full path is not named twice', () => {
+    expect(renderCheck(result({ target: '/home/a/fmt', read: '/home/a/fmt' }), 'text').split('\n')[0]).toBe('ctxlock check /home/a/fmt');
+    expect(renderCheck(result({ target: '.', read: '/home/a/fmt' }), 'text').split('\n')[0]).toBe('ctxlock check . (/home/a/fmt)');
+  });
+
   it('a must finding alone, with nothing that runs, still asks for a review', () => {
     const must = [{ rule: 'L1-hidden-unicode', severity: 'must' as const, path: 'AGENTS.md', line: 1, message: 'hidden character U+200B ZERO WIDTH SPACE at 1:4' }];
 

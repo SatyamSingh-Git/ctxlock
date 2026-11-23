@@ -16,7 +16,7 @@ export function renderCheck(r: CheckResult, format: 'text' | 'json'): string {
       ? 'Nothing here runs code when opened, and nothing must be fixed.'
       : `Review before opening: ${r.runs.length} ${r.runs.length === 1 ? 'thing runs' : 'things run'} code, ${r.must.length} must-fix.`;
   return [
-    printable(`ctxlock check ${r.target} (${r.read})`),
+    printable(r.read === r.target ? `ctxlock check ${r.target}` : `ctxlock check ${r.target} (${r.read})`),
     '',
     ...section('Runs code when opened', r.runs.map((i) => [`  ${i.agent}`, i.file, i.message])),
     ...section('Must fix', findingRows(r.must)),
