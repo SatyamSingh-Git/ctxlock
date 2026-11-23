@@ -353,6 +353,21 @@ Rough effort guesses for one builder working with AI; they are guesses, not comm
 - **Propose them upstream:** agentskills #110 (dependencies), agentskills #255 (`.well-known` index), OTel GenAI, AAIF.
 - **Follow Apache Ossie's pattern:** spec + SDK + compliance grader + converters.
 
+### After 0.1.0: the order of work (D117, 2026-11-24)
+The phases above stand as the vision, but the order changed once 0.1.0 shipped. A review of ctxlock's risks found:
+- **What it can prove:** that a context change flips what an agent does. It cannot prove a lift in task success at any run count one developer can afford.
+- **Labels misfire:** the 3-against-3 gate is sound, but its improved/regressed label fires on unchanged probes.
+- **Predictions go stale:** the agents' loaders change weekly.
+
+So before more of Phases 4 and 5, the work is:
+1. **Honest verdicts** (Plan 14).
+2. **A drift watch** on each agent's loader.
+3. **A sharper Claude Code collector,** with the load record proposed to OTel GenAI (Phase 5's event schema, started early).
+4. **What an adopter needs to trust it:** suppressions, audited exceptions, SARIF, published precision, `npx ctxlock check` and `init --pr`.
+5. **A counter-default test** that finds the rules a model follows anyway.
+
+Phase 4's serving (Plans 12 and 13) waits for an outside adopter.
+
 ## 7. Security and trust (in proportion to each phase)
 | Phase | Controls |
 |---|---|

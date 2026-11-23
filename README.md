@@ -316,10 +316,16 @@ flowchart LR
   - [x] **Durability:** `ctxlock outcomes` finds a fix shipped when its `miss-` probe is committed, judges it at 7 and 30 days from the sessions that loaded it, counts helpful and harmful sessions per unit version, and gives time to fix, regression rate, durability, fixes × consumers and units never loaded; `ctxlock verify` re-checks a unit when `stale-after` passes. Shown end to end on a planted miss, with each step timed ([plan](docs/superpowers/plans/2026-11-13-ctxlock-outcomes.md), [guide](the-guide/outcomes.md), [report](docs/dogfood/2026-11-13-outcomes.md)).
   - [x] **More signals:** an abandoned session is a signal, and a search that found nothing is evidence in a signal's turn. Clustering corrections by their text waits for enough real ones to check it against ([plan](docs/superpowers/plans/2026-11-21-ctxlock-loop-signals.md), [report](docs/dogfood/2026-11-21-signals.md)).
 - [x] **0.1.0 on npm and the GitHub Marketplace** (2026-11-23).
+- [ ] **Results you can trust, before anyone else relies on them.** This is the order of work now ([D117](journey/decisions.md), from a review of ctxlock's risks on 2026-11-24). ctxlock can prove that a context change flips what an agent does. It can't prove a lift in task success, so it shouldn't claim one.
+  - [ ] **Honest verdicts:** `improved` and `regressed` only when a test supports them, flaky probes kept out of the gate, an interval for the difference, and an optional second round of runs when a result is close (Plan 14).
+  - [ ] **A drift watch:** each prediction says which agent version it was checked against, and a daily watch, a canary repository and a dated log catch a loader that changed.
+  - [ ] **A sharper Claude Code collector:** loads read from transcripts too, how each load was observed, and the load record proposed to OpenTelemetry.
+  - [ ] **What an adopter needs:** suppressions with a reason, exceptions with an owner and an expiry, SARIF, published precision per rule, `npx ctxlock check`, and `init --pr`.
+  - [ ] **Which rules matter:** a counter-default test that finds the rules a model follows anyway.
 - [ ] **Every agent's files:** the agents teams actually run, not just Claude Code and Codex.
   - [x] **Safety checks:** the files of nine more agents are found and checked for hidden text and new hooks, MCP servers and setup steps, with each path's source ([plan](docs/superpowers/plans/2026-11-23-ctxlock-other-agents-safety.md), [guide](the-guide/other-agents.md)).
-  - [ ] **Predicted loading** for Copilot, then Cursor, OpenCode and Gemini.
-- [ ] **Business context:** metrics, knowledge docs and procedures, served over MCP.
+  - [ ] **Predicted loading** for Copilot, then Cursor, OpenCode and Gemini, after the items above.
+- [ ] **Business context:** metrics, knowledge docs and procedures, served over MCP. Paused after the units until an outside adopter asks for it (D117).
   - [x] **Units:** OKF concepts and Apache Ossie models are units: found, checked against their own formats by `L17`, trusted by OKF's `verified` and `stale_after`, linked in the graph, synced, and probed by the answer an agent gives. A procedure is a skill. Live, all 53 of Google's sample concepts and all 22 of Ossie's own models passed, and an NRR-by-segment change went from its owner to a consumer ([plan](docs/superpowers/plans/2026-11-21-ctxlock-business-units.md), [guide](the-guide/business-context.md), [report](docs/dogfood/2026-11-21-business-units.md)).
   - [ ] **Serving:** an MCP server with a `report_context_gap` tool, and eval through it.
   - [ ] **Per-principal filesystem,** and the NRR-by-segment exit demo.
