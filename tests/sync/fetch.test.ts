@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { chmodSync, existsSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { RepoReader } from '../../src/repo/reader.js';
@@ -132,6 +132,25 @@ describe('fetchUpstream', { timeout: 60_000 }, () => {
     } finally {
       vi.unstubAllEnvs();
       server.close();
+    }
+  });
+
+  it('with credentials off, ssh runs in batch mode, so it cannot prompt for a host key or passphrase; sync does not', async () => {
+    const work = tempDir();
+    const args = join(work, 'args').replaceAll('\\', '/');
+    writeTree(work, { 'ssh.sh': `#!/bin/sh\necho "$@" >> "${args}"\nexit 1\n` });
+    chmodSync(join(work, 'ssh.sh'), 0o755);
+    vi.stubEnv('GIT_SSH_COMMAND', `'${join(work, 'ssh.sh').replaceAll('\\', '/')}' -o User=mine`);
+    try {
+      const url = 'ssh://git@host.example/acme/skills.git';
+      expect(await failure(fetchUpstream(up(url), tempDir(), { credentials: false }))).toBeInstanceOf(UpstreamError);
+      expect(readFileSync(args, 'utf8')).toMatch(/^-o User=mine -o BatchMode=yes /);
+      rmSync(args);
+      await failure(fetchUpstream(up(url), tempDir()));
+      expect(readFileSync(args, 'utf8')).toMatch(/^-o User=mine /);
+      expect(readFileSync(args, 'utf8')).not.toContain('BatchMode');
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 

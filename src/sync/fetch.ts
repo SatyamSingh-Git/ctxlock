@@ -23,9 +23,12 @@ export async function fetchUpstream(u: Upstream, cache: string, { credentials = 
   // Upstream content is data: no hook runs, the upstream's or one set in global config, and no ext:: transport.
   // Without credentials, for a stranger's URL, git asks no one for a password either: no terminal prompt,
   // askpass program or credential helper (a window, on Windows), so it fails at once instead of waiting.
+  // ssh reads a host-key or passphrase answer from the terminal itself, which only batch mode stops.
   // Sync's upstreams are the repository owner's own, often private, so they keep the user's credentials.
   const locked = credentials ? [] : ['-c', 'credential.helper=', '-c', 'core.askPass='];
-  const env = credentials ? process.env : { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', SSH_ASKPASS: '' };
+  const env = credentials
+    ? process.env
+    : { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', SSH_ASKPASS: '', GIT_SSH_COMMAND: `${process.env.GIT_SSH_COMMAND ?? 'ssh'} -o BatchMode=yes` };
   const git = (args: string[]) => run('git', ['-c', `core.hooksPath=${noHooks}`, '-c', 'protocol.ext.allow=never', ...locked, ...args], { windowsHide: true, env });
 
   try {

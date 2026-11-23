@@ -399,6 +399,18 @@ describe('L2-parse', () => {
     expect(finding?.[2]).toMatch(/^could not parse \.claude\/settings\.json: \S/);
   });
 
+  it('a Claude Code or Codex config that does not parse is one item on its digest, so an edit to it is not hidden', async () => {
+    const items = async (files: Record<string, string>) =>
+      (await execConfig.check(await lintContext(files))).filter((f) => f.rule === 'L2-exec-config').map((f) => [f.path, f.message, f.data?.fingerprint]);
+    const broken = await items({ '.claude/settings.json': '{ "hooks": ', '.codex/config.toml': '[mcp_servers.github\n' });
+
+    expect(broken.map(([path, message]) => [path, message])).toEqual([
+      ['.claude/settings.json', '.claude/settings.json could not be parsed, so ctxlock cannot list what it runs; any change counts'],
+      ['.codex/config.toml', '.codex/config.toml could not be parsed, so ctxlock cannot list what it runs; any change counts'],
+    ]);
+    expect((await items({ '.claude/settings.json': '{ "hooks": {' }))[0]![2]).not.toBe(broken[0]![2]);
+  });
+
   it('invalid TOML in .codex/config.toml yields L2-parse and no throw', async () => {
     const [finding, ...rest] = await parse({ '.codex/config.toml': '[mcp_servers.github\ncommand = "x"' });
 

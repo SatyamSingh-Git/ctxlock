@@ -237,6 +237,15 @@ const opaque = (unit: Unit, path: string): Item => ({
   value: { digest: unit.files.find((f) => f.path === path)?.sha256 },
 });
 
+// A Claude Code or Codex config that does not parse may still be read by the agent, for example once
+// git-lfs replaces a pointer with the real file, so it counts whole, as another agent's would.
+const unparsed = (unit: Unit, path: string): Item => ({
+  kind: 'file',
+  key: 'file',
+  message: `${path} could not be parsed, so ctxlock cannot list what it runs; any change counts`,
+  value: { digest: unit.files.find((f) => f.path === path)?.sha256 },
+});
+
 function mcpOnly(unit: Unit, path: string, key: string, config: unknown): Item[] {
   // A shape the vendor does not document could still mean something to the agent, so it counts whole.
   if (!isObject(config) || (config[key] !== undefined && !isObject(config[key]))) return [opaque(unit, path)];
@@ -279,7 +288,7 @@ export const execConfig: Rule = {
       if (parsed.error !== undefined) {
         findings.push({ rule: 'L2-parse', severity: 'should', message: `could not parse ${path}: ${parsed.error}`, path, unitId: unit.id });
       }
-      if (serversKey === undefined) record(unit, path, inventory(unit, parsed.value));
+      if (serversKey === undefined) record(unit, path, parsed.value === undefined ? [unparsed(unit, path)] : inventory(unit, parsed.value));
       // ctxlock cannot tell what the agent makes of a file it cannot parse, so the change is not hidden.
       else record(unit, path, parsed.error === undefined ? mcpOnly(unit, path, serversKey, parsed.value) : [opaque(unit, path)]);
     }

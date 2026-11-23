@@ -155,10 +155,11 @@ async function walk(root: string): Promise<Listing> {
 }
 
 // `local: false` leaves out the gitignored files only this machine has, for a working tree that
-// stands in for a commit.
-export function fsReader(root: string, { local = true } = {}): RepoReader {
+// stands in for a commit. `git: false` reads the folder as plain files and never runs git in it: a
+// stranger's .git/config can name commands git runs (core.fsmonitor) on a read as simple as ls-files.
+export function fsReader(root: string, { local = true, git: useGit = true } = {}): RepoReader {
   let cached: Promise<Listing> | undefined;
-  const list = () => (cached ??= gitTopLevel(root).then((top) => (top ? listGitWorkTree(top, local) : walk(root))));
+  const list = () => (cached ??= useGit ? gitTopLevel(root).then((top) => (top ? listGitWorkTree(top, local) : walk(root))) : walk(root));
 
   return {
     root,

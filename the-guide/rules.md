@@ -191,6 +191,8 @@ The fingerprint is a hash of the item's file, its identity (event and matcher, s
 
 `could not parse <file>: <reason>`, for a settings file that is not valid JSON, TOML or (for `.vscode/settings.json`) JSONC. Claude Code reports a Settings Error and continues without the file. Codex stops with an error in a trusted project and ignores the file in an untrusted one. Either way, nothing in the file runs. VS Code is different: it still applies the settings it could read around the error. For VS Code, ctxlock therefore reports the error and still lists those settings, so a planted syntax error cannot hide an auto-approve rule.
 
+A Claude Code or Codex file that does not parse is still one `L2-exec-config` item, fingerprinted on its digest. It may be a git-lfs pointer that becomes real settings once someone checks it out with LFS, so ctxlock cannot say it runs nothing, and any edit to it counts as an execution-affecting change.
+
 A UTF-8 byte-order mark at the start of a settings file, which Windows PowerShell 5.1 writes, is ignored rather than reported.
 
 **Fix:** correct the syntax at the position in the message.

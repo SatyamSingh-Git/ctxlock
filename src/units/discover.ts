@@ -133,7 +133,7 @@ function modelName(text: string): string | undefined {
 // Every path an agent can open, mapped to the listed file behind it. A link to a file adds the
 // link's own path; a link to a directory adds the link path of every listed file under it.
 // Links to links are not followed.
-function reachablePaths(paths: string[], links: Map<string, string | null>): Map<string, string> {
+export function reachablePaths(paths: string[], links: Map<string, string | null>): Map<string, string> {
   const listed = new Set(paths);
   const reachable = new Map(paths.map((p) => [p, p]));
   for (const [link, target] of links) {

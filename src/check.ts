@@ -1,9 +1,11 @@
 import { existsSync } from 'node:fs';
 import { basename, posix, resolve } from 'node:path';
 import { FAMILY_NAMES, type Finding, type HarnessId } from './model.js';
-import { fsReader, type RepoReader } from './repo/reader.js';
+import { FileNotFound, fsReader, type RepoReader } from './repo/reader.js';
 import { type ScanResult, scanRepo } from './scan.js';
 import { fetchUpstream } from './sync/fetch.js';
+import { reachablePaths } from './units/discover.js';
+import { splitFrontmatter } from './units/frontmatter.js';
 
 export class CheckError extends Error {}
 
@@ -26,22 +28,36 @@ const SAFETY = /^L[012]-/;
 // The target is someone else's: its own ctxlock.yaml must not switch off or ignore what check reports.
 const DEFAULTS = { harnesses: ['claude-code', 'codex'] as HarnessId[], limits: {}, lint: { severity: {}, ignore: [] } };
 
-// The folder `from` of the target, seen at `to` (an installed skill's place) and nothing else.
-function mounted(base: RepoReader, files: string[], links: Map<string, string | null>, from: string, to: string): RepoReader {
-  const inner = (path: string) => from + path.slice(to.length);
-  const outer = (path: string) => to + path.slice(from.length);
-  const listed = files.filter((p) => p.startsWith(from)).map(outer);
+// The folder `from` of the target, seen at `to` (an installed skill's place) and nothing else. A link
+// in it reads as the file it reaches, wherever that is, as the agent would read it through the link.
+function mounted(base: RepoReader, reachable: Map<string, string>, links: Map<string, string | null>, from: string, to: string): RepoReader {
+  const source = new Map([...reachable].filter(([path]) => path.startsWith(from)).map(([path, real]) => [to + path.slice(from.length), real]));
+  const listed = [...source.keys()];
+  const real = (path: string) => {
+    const found = source.get(path);
+    if (found === undefined) throw new FileNotFound(path);
+    return found;
+  };
   return {
     root: base.root,
     ref: base.ref,
     listFiles: async () => listed,
-    readFile: (path) => base.readFile(inner(path)),
-    exists: async (path) => (path.startsWith(to) ? base.exists(inner(path)) : to.startsWith(`${path}/`)),
-    listSymlinks: async () =>
-      new Map([...links].filter(([link]) => link.startsWith(from)).map(([link, target]) => [outer(link), target?.startsWith(from) ? outer(target) : null])),
-    readAll: (onFile, paths) => base.readAll((path, bytes) => onFile(outer(path), bytes), (paths ?? listed).map(inner)),
+    readFile: async (path) => base.readFile(real(path)),
+    exists: async (path) => source.has(path) || listed.some((p) => p.startsWith(`${path}/`)),
+    // Only links that lead outside the target are left as links, so a config one is still unread (D116).
+    listSymlinks: async () => new Map([...links].filter(([link, target]) => target === null && link.startsWith(from)).map(([link]) => [to + link.slice(from.length), null])),
+    readAll: async (onFile, paths) => {
+      const askedAs = new Map<string, string[]>();
+      for (const path of paths ?? listed) askedAs.set(real(path), [...(askedAs.get(real(path)) ?? []), path]);
+      await base.readAll(async (path, bytes) => {
+        for (const as of askedAs.get(path)!) await onFile(as, bytes);
+      }, [...askedAs.keys()]);
+    },
   };
 }
+
+// The Agent Skills spec's name: lowercase letters, digits and single hyphens, at most 64 characters.
+const SKILL_NAME = /^(?=.{1,64}$)[a-z0-9]+(-[a-z0-9]+)*$/;
 
 // A URL by its scheme, or git's scp form (git@host:path). Anything else is a folder, so a mistyped
 // path is an error, never a fetch.
@@ -55,7 +71,7 @@ async function readerOf(target: string, opts: { ref?: string; cache: string }): 
   }
   if (!existsSync(target)) throw new CheckError(`no such folder: ${target}`);
   const folder = resolve(target);
-  return { base: fsReader(folder), read: folder, name: basename(folder) };
+  return { base: fsReader(folder, { git: false }), read: folder, name: basename(folder) };
 }
 
 export async function checkTarget(target: string, opts: { ref?: string; cache: string }): Promise<CheckResult> {
@@ -87,14 +103,19 @@ export async function checkTarget(target: string, opts: { ref?: string; cache: s
   const scan = await scanRepo(base, { settings: DEFAULTS });
   collect(scan);
   // Skills are shared in folders no agent reads (skills/<name>/, or the folder itself), so each
-  // SKILL.md that is not already a unit is read as if it were installed.
-  const files = await base.listFiles();
+  // SKILL.md that is not an installed skill's own is read as if it were installed. Being part of some
+  // other unit, such as knowledge the target declares, does not count: only a skill's hooks are inventoried.
   const links = await base.listSymlinks();
-  const units = new Set(scan.units.flatMap((u) => u.files.map((f) => f.path)));
-  for (const path of files.filter((p) => posix.basename(p) === 'SKILL.md' && !units.has(p))) {
+  const reachable = reachablePaths(await base.listFiles(), links);
+  const installed = new Set(scan.units.filter((u) => u.kind === 'skill').flatMap((u) => [u.path, ...u.aliases].map((p) => `${p}/SKILL.md`)));
+  for (const path of [...installed]) installed.add(reachable.get(path) ?? path);
+  for (const [path, real] of reachable) {
+    if (posix.basename(path) !== 'SKILL.md' || installed.has(path)) continue;
     const from = path.slice(0, -'SKILL.md'.length);
-    const to = `.agents/skills/${from ? posix.basename(from) : name}/`;
-    collect(await scanRepo(mounted(base, files, links, from, to), { settings: DEFAULTS }), from, to);
+    // A skill shared as the target itself is installed under its own name; its folder's is whatever it was cloned as.
+    const own = from ? undefined : splitFrontmatter((await base.readFile(real)).toString('utf8')).frontmatter?.name;
+    const to = `.agents/skills/${from ? posix.basename(from) : typeof own === 'string' && SKILL_NAME.test(own) ? own : name}/`;
+    collect(await scanRepo(mounted(base, reachable, links, from, to), { settings: DEFAULTS }), from, to);
   }
   return {
     target,

@@ -1,17 +1,18 @@
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { CheckError, checkTarget } from '../src/check.js';
 import { UpstreamError } from '../src/sync/fetch.js';
-import { cleanup, git, gitRepo, tempDir, writeTree } from './helpers/repo.js';
+import { canSymlink, cleanup, git, gitRepo, tempDir, writeTree } from './helpers/repo.js';
 
 afterAll(cleanup);
 
 const zwsp = String.fromCodePoint(0x200b);
 const hook = (command: string) => JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command }] }] } });
 const check = (dir: string) => checkTarget(dir, { cache: tempDir() });
+const skill = (name: string, extra = '') => `---\nname: ${name}\ndescription: Does ${name}\n${extra ? `${extra}\n` : ''}---\nbody\n`;
 
 describe('checkTarget on a folder', () => {
   it('lists what would run, per agent, and the must findings of the safety rules only', async () => {
@@ -70,6 +71,73 @@ describe('checkTarget on a folder', () => {
     expect(result.must).toContainEqual(expect.objectContaining({ rule: 'L1-hidden-unicode', path: 'plugins/p/skills/notes/SKILL.md' }));
     // A skill inside another skill's folder is read with it and on its own, and reported once.
     expect(result.must.filter((f) => f.path === 'skills/fmt/strict/SKILL.md')).toHaveLength(1);
+  });
+
+  it('a skill filed under knowledge the target declares, or nested in an installed skill, is still checked', async () => {
+    const dir = tempDir();
+    writeTree(dir, {
+      'ctxlock.yaml': 'version: 1\nknowledge: [plugins]\n',
+      'plugins/x/SKILL.md': skill('x', 'allowed-tools: Bash'),
+      'skills/index.md': '---\nokf_version: 1\n---\n# Skills\n',
+      'skills/fmt/SKILL.md': skill('fmt', 'allowed-tools: Bash'),
+      '.claude/skills/review/SKILL.md': skill('review'),
+      '.claude/skills/review/strict/SKILL.md': skill('strict', 'allowed-tools: Bash'),
+    });
+
+    expect((await check(dir)).runs.map((r) => r.file).sort()).toEqual(['.claude/skills/review/strict/SKILL.md', 'plugins/x/SKILL.md', 'skills/fmt/SKILL.md']);
+  });
+
+  it.skipIf(!canSymlink)('a SKILL.md that is a link is checked through the file it links to', async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'docs/fmt.md': skill('fmt', 'allowed-tools: Bash') });
+    mkdirSync(join(dir, 'skills/fmt'), { recursive: true });
+    symlinkSync('../../docs/fmt.md', join(dir, 'skills/fmt/SKILL.md'));
+
+    expect((await check(dir)).runs).toEqual([{ agent: 'any agent that installs it', file: 'skills/fmt/SKILL.md', message: 'allowed-tools approves "Bash"' }]);
+  });
+
+  it('a bare skill is installed under its own name, whatever its folder is called', async () => {
+    const dir = join(tempDir(), 'pdf-skill');
+    writeTree(dir, { 'SKILL.md': skill('pdf') });
+
+    const result = await check(dir);
+
+    expect([...result.must, ...result.worthALook]).toEqual([]);
+  });
+
+  it('a bare skill whose name is no skill name is still installed where agents look, so its tools are listed', async () => {
+    const dir = join(tempDir(), 'fmt');
+    writeTree(dir, { 'SKILL.md': skill('x/y', 'allowed-tools: Bash') });
+
+    expect((await check(dir)).runs).toEqual([{ agent: 'any agent that installs it', file: 'SKILL.md', message: 'allowed-tools approves "Bash"' }]);
+  });
+
+  it('a config ctxlock cannot parse counts as running code, since the agent may still read it', async () => {
+    const dir = tempDir();
+    writeTree(dir, { '.claude/settings.json': '{ "hooks": ' });
+
+    expect((await check(dir)).runs).toEqual([
+      { agent: 'Claude Code', file: '.claude/settings.json', message: '.claude/settings.json could not be parsed, so ctxlock cannot list what it runs; any change counts' },
+    ]);
+  });
+
+  it("a folder that is a git repository is read as files: its own .git/config runs nothing, and gitignored files count", async () => {
+    const { dir } = await gitRepo([{ 'AGENTS.md': 'a', '.gitignore': '.claude/\n' }]);
+    const marker = join(tempDir(), 'ran').replaceAll('\\', '/');
+    git(dir, 'config', 'core.fsmonitor', `touch '${marker}'; false`);
+    writeTree(dir, { '.claude/settings.json': hook('./setup.sh') });
+
+    const result = await check(dir);
+
+    expect(existsSync(marker)).toBe(false);
+    expect(result.runs.map((r) => r.file)).toEqual(['.claude/settings.json']);
+  });
+
+  it('a folder inside another repository is read on its own, not as that repository', async () => {
+    const { dir } = await gitRepo([{ '.claude/settings.json': hook('./setup.sh'), '.gitignore': 'downloads/\n' }]);
+    writeTree(dir, { 'downloads/fmt/SKILL.md': skill('fmt', 'allowed-tools: Bash') });
+
+    expect((await check(join(dir, 'downloads', 'fmt'))).runs).toEqual([{ agent: 'any agent that installs it', file: 'SKILL.md', message: 'allowed-tools approves "Bash"' }]);
   });
 
   it('a git working tree is checked as it is on disk, untracked files included', async () => {

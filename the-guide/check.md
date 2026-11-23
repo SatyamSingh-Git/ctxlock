@@ -17,16 +17,17 @@ It needs no `ctxlock.yaml`, no setup and no account.
   - no `.gitattributes` filters or LFS smudge;
   - no submodules;
   - no `ext::` transport;
-  - no password prompt, and none of your saved credentials. A private repository fails with exit 2 rather than asking.
+  - over https, no password prompt and none of your saved credentials. A private repository fails with exit 2 rather than asking.
+  - over ssh, no prompt either: ssh runs in batch mode, so an unknown host key or a key with a passphrase fails at once. ssh still offers your keys to the host, as it always does, so for a stranger's host use an https URL.
 
   It reads the remote's default branch, or `--ref`. A second `check` of the same URL fetches again, so it sees commits made since.
-- **A folder** is only read, as it is on disk. In a git working tree that includes files not yet committed.
+- **A folder** is only read, as plain files: every file under it except `.git` and `node_modules`, including files `.gitignore` leaves out, since an agent reads those too. ctxlock never runs git in the folder, because a stranger's `.git/config` can name commands git runs on a read. A folder inside another repository is read on its own.
 
 Anything that is not a URL and not a folder that exists is an error. A mistyped path is never fetched.
 
 ## What it reports
 
-1. **Runs code when opened:** every hook, MCP server, setup step, plugin, auto-approval, and skill `allowed-tools` or `hooks` that ctxlock finds, for every agent [it knows the files of](other-agents.md), with the agent named. A config file whose format ctxlock does not read is listed as one item that says so.
+1. **Runs code when opened:** every hook, MCP server, setup step, plugin, auto-approval, and skill `allowed-tools` or `hooks` that ctxlock finds, for every agent [it knows the files of](other-agents.md), with the agent named. A config file whose format ctxlock does not read, or one it cannot parse (a git-lfs pointer, say), is listed as one item that says so.
 2. **Must fix:** the `must` findings of the safety rules, L0, L1 and L2 ([rules](rules.md)): hidden Unicode, hidden HTML comments, a skill that breaks the Agent Skills spec, or a config symlink ctxlock cannot follow.
 3. **Worth a look:** the `should` findings of the same rules, such as `curl … | sh` in an instruction.
 
@@ -52,11 +53,11 @@ Review before opening: 3 things run code, 1 must-fix.
 
 ctxlock does not judge whether a hook is malicious. It lists what would run, and you decide. Every character printed comes from the target, so control characters are shown as `?`: a file cannot drive your terminal.
 
-The target's own `ctxlock.yaml` is ignored. A repository cannot switch off or ignore the checks it is being judged by.
+The target's own `ctxlock.yaml` cannot switch off or ignore the checks it is judged by: its `harnesses`, `limits` and `lint` settings are not used. The knowledge folders it declares are still read as knowledge, which only adds checks.
 
 ## Skills
 
-Skills are shared in folders no agent reads as they are: a single skill folder, or a collection such as `skills/<name>/SKILL.md`. `check` reads every `SKILL.md` that is not already an installed skill as if it were installed at `.agents/skills/<name>/`, so it gets the skill rules and the safety rules. Paths in the output stay the target's own, and the agent column says `any agent that installs it`.
+Skills are shared in folders no agent reads as they are: a single skill folder, or a collection such as `skills/<name>/SKILL.md`. `check` reads every `SKILL.md` that is not an installed skill's own as if it were installed at `.agents/skills/<folder>/`, so it gets the skill rules and the safety rules. That includes a skill nested in another, one inside a folder the target declares as knowledge, and a `SKILL.md` that is a link. A target that is itself one skill is installed under the `name` in its frontmatter, so a folder cloned under another name is not a finding. Paths in the output stay the target's own, and the agent column says `any agent that installs it`.
 
 Real output for Anthropic's public skills repository, on 2026-11-24:
 
