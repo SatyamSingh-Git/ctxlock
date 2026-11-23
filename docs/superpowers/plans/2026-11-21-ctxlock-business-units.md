@@ -46,13 +46,13 @@ A fresh Opus reviewer read the whole plan's diff, built it, and checked its clai
 
 Suite 745/745.
 
-**Deferred minors:**
-- L9's message for a concept dated by its own stale_after says "(stale-after in ctxlock.yaml)", where there is none (src/lint/rules/l9-stale.ts).
-- In a UTC+ timezone, a stale_after later in a UTC day can be flagged up to a day early, since L9 and verify compare local dates; CI runs in UTC (src/units/okf.ts).
-- A link to a skill's SKILL.md makes no edge, since the skill unit's path is its folder (src/graph/graph.ts).
-- A link starting with /, which GitHub reads from the repository root, makes no edge (src/units/links.ts).
+**Deferred minors** (all six fixed by 2026-11-24: one as D106, five at Satyam's request, one commit each):
+- (fixed, e95f4a8) L9's message for a concept dated by its own stale_after says "(stale-after in ctxlock.yaml)", where there is none (src/lint/rules/l9-stale.ts). It now names the frontmatter's stale_after when that is the date being enforced.
+- (fixed, 7211224) In a UTC+ timezone, a concept can be flagged before its stale_after, since its date was taken in UTC and L9 and verify compare local dates (src/units/okf.ts). The early case is an instant at or near UTC midnight: 2026-12-01T00:00:00Z was due by 30 November, so Tokyo flagged it from 15:00Z the day before. Dates are now taken in local time, so a concept is flagged at or after its instant, at most a day late. Tests run with TZ=UTC, as CI does.
+- (fixed, 71bb25a) A link to a skill's SKILL.md makes no edge, since the skill unit's path is its folder (src/graph/graph.ts). A link to the folder or any file in it now reaches the skill.
+- (fixed, 6328a9e) A link starting with /, which GitHub reads from the repository root, makes no edge (src/units/links.ts). It is now read from the root.
 - (fixed, D106) A pull request can take a folder out of knowledge: and edit a concept in it in one change; the diff shows the units as removed, and L1 never reads the edit. The lock and an OKF index.md had the same hole. The head is now scanned with the base's folders as well as its own (src/scan.ts).
-- A link written with backslashes never resolves (src/units/links.ts).
+- (fixed, 4437f42) A link written with backslashes never resolves (src/units/links.ts). A backslash before a name is a separator; `\.` stays an escaped dot, as CommonMark reads it.
 
 ## Phase 4, split (D100)
 
