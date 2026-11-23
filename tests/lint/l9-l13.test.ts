@@ -6,7 +6,9 @@ import { coverage } from '../../src/lint/rules/l11-coverage.js';
 import { shadowedAgentsMd } from '../../src/lint/rules/l13-shadowed.js';
 import { staleReferences } from '../../src/lint/rules/l9-stale.js';
 import type { Rule } from '../../src/lint/types.js';
+import { scanRepo } from '../../src/scan.js';
 import { lintContext } from '../helpers/lint.js';
+import { memReader } from '../helpers/mem-reader.js';
 
 async function run(rule: Rule, files: Record<string, string>, today = '2026-11-05') {
   const ctx = { ...(await lintContext(files)), today };
@@ -172,6 +174,22 @@ describe('L9-stale', () => {
       ['L9-stale', 'should', 'AGENTS.md', 'AGENTS.md was due for review by 2026-11-04 (stale-after in ctxlock.yaml)'],
     ]);
     expect(await run(staleReferences, files('2026-11-05'), '2026-11-05')).toEqual([]);
+  });
+
+  it("a concept past its own stale_after names the frontmatter, and one past ctxlock.yaml's names ctxlock.yaml", async () => {
+    const concept = '---\ntype: Reference\nstale_after: 2026-11-05T00:00:00Z\n---\n# NRR\n';
+    const stale = async (yaml: string) =>
+      (await scanRepo(memReader({ 'ctxlock.yaml': `version: 1\nknowledge: [kb]\n${yaml}`, 'kb/nrr.md': concept }), { today: '2026-11-06' })).findings
+        .filter((f) => f.rule === 'L9-stale')
+        .map((f) => f.message);
+
+    expect(await stale('')).toEqual(['kb/nrr.md is past its stale_after, 2026-11-05T00:00:00Z, in its frontmatter']);
+    // ctxlock.yaml wins, and is named when it is what makes the concept stale.
+    expect(await stale('units:\n  kb/nrr.md:\n    stale-after: 2026-11-01\n')).toEqual(['kb/nrr.md was due for review by 2026-11-01 (stale-after in ctxlock.yaml)']);
+    // A rule's frontmatter is not OKF, even when ctxlock.yaml's date matches what it would give.
+    const rule = { '.claude/rules/r.md': concept, 'ctxlock.yaml': 'version: 1\nunits:\n  .claude/rules/r.md:\n    stale-after: 2026-11-04\n' };
+    const ruleFindings = (await scanRepo(memReader(rule), { today: '2026-11-06' })).findings.filter((f) => f.rule === 'L9-stale').map((f) => f.message);
+    expect(ruleFindings).toEqual(['.claude/rules/r.md was due for review by 2026-11-04 (stale-after in ctxlock.yaml)']);
   });
 
   it('an @import of a missing .md file is info, in instructions and rules', async () => {

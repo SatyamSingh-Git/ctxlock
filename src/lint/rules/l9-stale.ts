@@ -3,6 +3,7 @@ import { findImports } from '../../harness/imports.js';
 import type { Finding, Unit } from '../../model.js';
 import { gitignoreMatcher } from '../../repo/gitignore.js';
 import { codeOnly, inlineCode } from '../../units/markdown.js';
+import { okfTrust } from '../../units/okf.js';
 import { lineAndColumn, readOnce } from '../files.js';
 import type { Rule } from '../types.js';
 
@@ -109,7 +110,12 @@ export const staleReferences: Rule = {
       }
 
       const due = registry.units[unit.path]?.staleAfter;
-      if (due !== undefined && due < today) report('L9-stale', 'should', `${unit.path} was due for review by ${due} (stale-after in ctxlock.yaml)`);
+      // A concept's own stale_after fills stale-after when ctxlock.yaml has none (D103); the date it gives
+      // says which of the two is due.
+      const fromFile = unit.kind === 'knowledge' && okfTrust(unit.frontmatter).staleAfter === due;
+      if (due !== undefined && due < today) {
+        report('L9-stale', 'should', fromFile ? `${unit.path} is past its stale_after, ${String(unit.frontmatter!.stale_after)}, in its frontmatter` : `${unit.path} was due for review by ${due} (stale-after in ctxlock.yaml)`);
+      }
 
       // Claude Code resolves imports in instructions and rules, relative to the importing file.
       if (unit.kind !== 'instructions' && unit.kind !== 'rule') continue;

@@ -61,6 +61,12 @@ ctxlock reads them as the concept's `verified-at` and `stale-after`, so `lint`, 
 
 A time without an offset fills nothing, and `L17-format` reports it.
 
+A concept past its own `stale_after` is an `L9-stale` finding that names the frontmatter:
+
+```
+should  L9-stale  kb/nrr.md  kb/nrr.md is past its stale_after, 2026-11-05T00:00:00Z, in its frontmatter
+```
+
 When `ctxlock verify` re-checks a concept dated this way and its probes hold, it prints the new `verified` and `stale_after` to set in the concept's frontmatter, not lines for `ctxlock.yaml`.
 
 **`ctxlock.yaml` wins** when both are set (§4.1 of the design), and `L17-trust-differs` says when they disagree. An Ossie model has no trust fields of its own, so its owner and dates live in `ctxlock.yaml`.
