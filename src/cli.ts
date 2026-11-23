@@ -5,6 +5,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { fileURLToPath } from 'node:url';
 import { Command, CommanderError, InvalidArgumentError, Option } from 'commander';
 import { applyFill } from './build/apply.js';
+import { CheckError, checkTarget } from './check.js';
 import { findDrift } from './build/drift.js';
 import { GENERATED_FILE, generatedStatus } from './build/generated.js';
 import { BuildError, suggestIndex } from './build/index-suggest.js';
@@ -40,6 +41,7 @@ import { renderBuild } from './report/build.js';
 import { renderEval } from './report/eval.js';
 import { renderDiffMarkdown, renderErrorMarkdown } from './report/markdown.js';
 import { printable, renderDiff, renderScan } from './report/render.js';
+import { renderCheck } from './report/check.js';
 import { renderSync } from './report/sync.js';
 import { localDate, type ScanResult, scanRepo } from './scan.js';
 import { UpstreamError, fetchUpstream } from './sync/fetch.js';
@@ -383,6 +385,18 @@ export async function main(argv: string[], io: Io): Promise<number> {
     });
 
   program
+    .command('check <target>')
+    .description('is a folder or git URL safe to open? lists what would run in each agent and must-fix findings, running and checking out nothing; exits 1 if anything runs or must be fixed')
+    .option('--ref <ref>', 'for a git URL, the branch, tag or commit to read (default: its default branch)')
+    .option('--cache <dir>', "where a git URL is fetched to (default: the user's cache folder)")
+    .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
+    .action(async (target: string, opts: { ref?: string; cache?: string; format: 'text' | 'json' }) => {
+      const result = await checkTarget(target, { ...(opts.ref === undefined ? {} : { ref: opts.ref }), cache: cacheOf(opts.cache) });
+      io.stdout(renderCheck(result, opts.format));
+      if (result.runs.length + result.must.length > 0) code = 1;
+    });
+
+  program
     .command('who-uses <unit> [dir]')
     .description('list what depends on a unit, the consumers that use it, and the agents predicted to load it')
     .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
@@ -693,7 +707,7 @@ export async function main(argv: string[], io: Io): Promise<number> {
     // Commander has already printed its own message; help and version exit 0.
     if (err instanceof CommanderError) return err.exitCode === 0 ? 0 : 2;
     // Anything else is a bug or input ctxlock cannot handle. It still exits 2, because 1 means must-fix.
-    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, DiagnosisError, IssueError, FixesError, BuildError, UpstreamError, LockError].some((type) => err instanceof type);
+    const known = [UsageError, RegistryError, RefNotFound, EvalError, ProbeError, ClaudeNotFound, DraftError, DiagnosisError, IssueError, FixesError, BuildError, UpstreamError, LockError, CheckError].some((type) => err instanceof type);
     const reason = err instanceof Error ? err.message : String(err);
     io.stderr(known ? `${reason}\n` : `ctxlock could not run: ${reason}\n`);
     if (markdown) io.stdout(renderErrorMarkdown(reason));

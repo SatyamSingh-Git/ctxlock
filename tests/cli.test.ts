@@ -1205,3 +1205,39 @@ describe('ctxlock verify', { timeout: 120_000 }, () => {
     expect((await run(dir)).stdout).toBe("ctxlock verify · no unit's stale-after has passed; name one with --unit\n");
   });
 });
+
+describe('ctxlock check', () => {
+  const hook = JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: 'command', command: './setup.sh' }] }] } });
+
+  it('exits 1 when opening the folder would run something, and 0 when nothing runs', async () => {
+    const risky = tempDir();
+    writeTree(risky, { '.claude/settings.json': hook });
+    const plain = tempDir();
+    writeTree(plain, { 'AGENTS.md': 'Use pnpm.\n' });
+
+    const flagged = await cli('check', risky);
+    expect(flagged.code).toBe(1);
+    expect(flagged.stdout).toContain('Runs code when opened (1):');
+    expect(flagged.stdout).toContain('Review before opening: 1 thing runs code, 0 must-fix.');
+    expect(await cli('check', plain)).toMatchObject({ code: 0, stdout: expect.stringContaining('Nothing here runs code when opened') });
+  });
+
+  it('--format json gives the result', async () => {
+    const dir = tempDir();
+    writeTree(dir, { '.claude/settings.json': hook });
+
+    const json = JSON.parse((await cli('check', dir, '--format', 'json')).stdout);
+    expect(json).toMatchObject({ version: 1, target: dir, runs: [{ agent: 'Claude Code', file: '.claude/settings.json' }] });
+  });
+
+  it('exits 2 for a folder that does not exist, and for a URL that cannot be fetched', async () => {
+    const nope = join(tempDir(), 'nope');
+    const missing = await cli('check', nope);
+    expect(missing.code).toBe(2);
+    // A known error, not "ctxlock could not run", which is kept for a crash.
+    expect(missing.stderr).toBe(`no such folder: ${nope}\n`);
+    const unreachable = await cli('check', 'https://127.0.0.1:9/none.git', '--cache', tempDir());
+    expect(unreachable.code).toBe(2);
+    expect(unreachable.stderr).toContain('cannot fetch');
+  });
+});
