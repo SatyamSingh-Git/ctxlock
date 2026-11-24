@@ -119,6 +119,9 @@ describe('fetchUpstream', { timeout: 60_000 }, () => {
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
     vi.stubEnv('GIT_ASKPASS', join(work, 'askpass.sh').replaceAll('\\', '/'));
     vi.stubEnv('GIT_CONFIG_GLOBAL', config);
+    // Git for Windows' system config adds Git Credential Manager, which on the sync side opens its sign-in
+    // window and waits; only the stub helper may answer here.
+    vi.stubEnv('GIT_CONFIG_NOSYSTEM', '1');
     // So the sync direction cannot wait on a real terminal when the tests run in one; askpass and the helper still answer.
     vi.stubEnv('GIT_TERMINAL_PROMPT', '0');
     try {
