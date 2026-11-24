@@ -25,7 +25,7 @@ inputs:
     description: "auto: run the behavioral check when a Claude credential is set. false: never run it."
     default: auto
   fail-on-regression:
-    description: Fail the check when a probe from the base branch passed every base run and no head run.
+    description: Fail the check when a probe from the base branch that passes at least 0.9 of its base runs regresses (one-sided Fisher p <= 0.05).
     default: 'false'
   claude-code-version:
     description: The Claude Code version the behavioral check installs.

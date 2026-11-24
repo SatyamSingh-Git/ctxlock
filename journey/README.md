@@ -2,7 +2,16 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [21 — is this safe to open?](21-check.md).
+**Latest:** [20 — verdicts that a test supports](20-honest-verdicts.md).
+- Plan 14, Now 1 of the risk review: `improved` and `regressed` need a one-sided Fisher p ≤ 0.05, a gap of half the runs without it is `uncertain`, only a probe passing at least 0.9 of its base runs gates, diagnose replays at 3 runs a side, and `--extend` gives a close call a second round.
+- Live A/A, with nothing changed: the old rule called one probe of 11 a regression; the new verdicts called none, and `--extend` settled it.
+- Found: a probe that turned red on both sides because the agent now types `cd` first, caught by the new "fails on the base" note; and a plan whose rule and own test disagreed.
+
+[21 — is this safe to open?](21-check.md), written alongside 20.
+- Plan 15, Now 4's first part: `ctxlock check <folder-or-git-url>` says what would run when a stranger's repository or a skill is opened, and what is hidden, with no setup.
+- Found: a credential fix that would have broken `sync`, a repository that could switch L1 off with its own `ctxlock.yaml`, and a skills collection called clean because no agent reads its path.
+
+**Earlier:** [19 — every agent's files, for safety](19-other-agents.md).
 - After a strategy review, 0.1.0 shipped on npm and the Marketplace, and the files of nine more agents now get ctxlock's safety checks. Claude Code and Codex predictions are unchanged.
 - Every path was confirmed from its source first. That found two planned paths that do not exist, hook formats unlike Claude's, and plugin folders that run code.
 - A live scan found a false frontmatter finding on a Cursor rule, and that `scan` did not show a unit's agent.

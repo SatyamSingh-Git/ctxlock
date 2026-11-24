@@ -168,8 +168,10 @@ A git URL is fetched without a checkout, hooks or credentials, at the default br
 Runs the probes in `evals/probes/` against Claude Code, with the base's context and with the head's, and reports which probes changed. Unlike the four commands above, it runs an agent, and sends the repository's context to Anthropic's API through Claude Code to do it. [Evals](evals.md) explains probes, isolation, the options and the result.
 
 ```
-ctxlock eval --base <ref> [--head <ref>] [dir] [--format text|json|markdown] [--runs <n>] [--fail-on-regression]
+ctxlock eval --base <ref> [--head <ref>] [dir] [--format text|json|markdown] [--runs <n>] [--extend <n>] [--fail-on-regression]
 ```
+
+A probe is `improved` or `regressed` only when a one-sided Fisher exact test gives p ≤ 0.05; a gap of half the runs or more without that is `uncertain`, and `--extend <n>` runs such a probe on to `n` runs per arm. `--fail-on-regression` gates only on a base probe that passes at least 0.9 of its base runs.
 
 It needs a git repository and Claude Code on `PATH`, or `--claude <path>`. A pull request that changes no unit a probe names runs nothing, so Claude Code is not needed then.
 
@@ -341,7 +343,7 @@ Routed at 3 sessions or more: 1 unit. Write drafts with --drafts <folder>.
 Asks Claude what went wrong in the moments a unit was in context when you stopped or corrected the agent, and checks the smallest fix by replay. It runs your own `claude`, as `eval` does. [Misses](misses.md#diagnosing-a-unit) has the details.
 
 ```
-ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>] [--ablate] [--drafts <folder>] [--open] [--gh <path>]
+ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs <n>] [--extend <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>] [--ablate] [--drafts <folder>] [--open] [--gh <path>]
 ```
 
 **The diagnosis:**
@@ -353,14 +355,14 @@ ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs 
 - **A probe:** made from your correction.
 
 **The replay** runs in two throwaway copies of the repository: one as it is, one with the fix.
-- **"validated"** means the probe fails without the fix and passes with it, and none of the unit's own probes gets worse.
-- **Defaults:** `--runs` 2 a side, `--max-runs` 16 and `--max-minutes` 15.
+- **"validated"** means the probe fails without the fix and passes with it by `eval`'s exact test, and none of the unit's own probes gets worse. A probe that only looks better makes the replay "inconclusive"; `--extend <n>` runs it on to `n` a side.
+- **Defaults:** `--runs` 3 a side, the fewest that can show a fix works, `--max-runs` 24 and `--max-minutes` 15.
 
 **`--drafts <folder>`** writes the proposal, the diagnosis, the fix as a diff, the probe and the replay, as `<unit>.fix.md`. It leaves an edited one alone.
 
 **`--open`** files that proposal as a GitHub issue through your own `gh` (`--gh <path>` names another), in the repository the unit belongs to, for a `defect` or `gap` only. A rerun updates the same issue, and reopens it if it was closed. It holds nothing from the session itself.
 
-**`--ablate`** replays the probe with the unit taken out as well, in `--runs` more runs from what `--max-runs` has left, and says whether the unit itself causes the miss, doesn't drive it, or helps.
+**`--ablate`** replays the probe with the unit taken out as well, in `--runs` more runs from what `--max-runs` has left, and says whether the unit itself causes the miss, doesn't drive it, helps, or looks different without enough runs to tell.
 
 **It never writes to the repository.** A unit need not be routed to be diagnosed, but it must have been in context for at least one signal.
 

@@ -105,7 +105,7 @@ These are signals, not a diagnosis: the unit was in context when the agent was s
 `ctxlock diagnose <unit>` asks Claude what went wrong in the moments the unit was in context, and when the unit is at fault, proposes the smallest fix and checks it by replay. It runs your own `claude`, as [`eval`](evals.md) does, so it costs runs from your plan. A unit need not be routed, but it must have been in context for at least one signal.
 
 ```
-ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>] [--ablate] [--drafts <folder>] [--open] [--gh <path>]
+ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs <n>] [--extend <n>] [--max-runs <n>] [--max-minutes <n>] [--model <model>] [--claude <path>] [--workdir <dir>] [--ablate] [--drafts <folder>] [--open] [--gh <path>]
 ```
 
 This is real output, from a repository whose rule said `npm install` while its `package.json` named pnpm, and a session in which the person wrote "no, we use pnpm here" ([report](../docs/dogfood/2026-11-12-diagnose.md)):
@@ -133,6 +133,8 @@ Replay, 2 runs a side: validated
 Runs: 5
 ```
 
+That run is from before the replay's default became 3 runs a side ([D120](../journey/decisions.md)). Today its replay would be 0/3 against 3/3, 7 runs in all.
+
 **What it sends to Claude,** and nothing else:
 - the unit's text;
 - for each signal it was in context for, the opening of the prompt that began the turn;
@@ -158,15 +160,18 @@ The reply is checked against the unit: every line it quotes must be in the file,
 - **The probe** is a task built from your correction and what the agent should then do, as an [`eval` probe](evals.md). Its prompt is redacted again. Its id names the unit and its bytes, so a later fix to the same unit gets a probe of its own.
 
 **The replay** runs the probe, and every probe the unit already has, in two throwaway copies of the repository: one as it is, one with the fix. It runs as `eval` runs, with every command and edit the agent tries denied.
-- **"validated":** the probe is `improved`, its pass rate up by at least half, and none of the unit's own probes `regressed`.
-- **"not-validated"** is reported as it is. So is **"inconclusive"**: a probe was cut short by `--max-runs` or `--max-minutes`, or has fewer than 2 runs on a side that finished without an error. That is also why `--runs` must be at least 2.
-- **How strong it is:** at the default 2 runs a side, 0 of 2 to 2 of 2 is a direction, not proof. `--runs 3` makes 0 of 3 to 3 of 3 a one-sided Fisher p of 0.05, the bar `eval` gates on.
-- **Defaults:** `--max-runs` 16 and `--max-minutes` 15.
+- **"validated":** the probe is `improved`, by the exact test `eval` uses ([what the verdicts mean](evals.md#reading-the-result)), and none of the unit's own probes `regressed`.
+- **"not-validated"** is reported as it is.
+- **"inconclusive"** is reported as it is too. Either a probe was cut short by `--max-runs` or `--max-minutes`, or it has fewer than 2 runs on a side that finished without an error. Or the probe is `uncertain`: the fix looks better, but not by enough runs to show it. The proposal then says to run again with more `--runs` or with `--extend`.
+- **Why `--runs` must be at least 3:** below 3 runs a side, no result passes the test. At 2 a side the best is 0/2 against 2/2, a one-sided p of 1/6, so no fix could ever be validated. At 3 a side, 0/3 against 3/3 gives 0.05.
+- **`--extend <n>`:** runs an `uncertain` probe on to `n` runs a side, then judges it again on every run, as `eval --extend` does. The ablation is not extended.
+- **Defaults:** `--runs` 3, `--max-runs` 24 and `--max-minutes` 15. 24 fits the miss's probe and two of the unit's own at 3 runs a side, 18 runs, with room left for `--ablate`.
 
 **`--ablate` replays the probe once more, with the unit taken out:** its file, or a skill's whole folder, and any link to it. It compares the repository as it is with the repository without the unit, at the same number of runs a side. The side with the unit is the replay's own base, so only the side without it runs: `--runs` more runs, out of what `--max-runs` has left after the replay, and with its own `--max-minutes`. When too few runs are left, the output says so. The text and the proposal then say which of these it found:
 - **`improved`:** taking it out does what was wanted, so the unit itself causes the miss;
 - **`unchanged`:** the unit doesn't drive the miss. The agent does the same without it, and a fix that adds what was wanted can still help, as a `gap`'s does;
-- **`regressed`:** the unit helps.
+- **`regressed`:** the unit helps;
+- **`uncertain`:** not known. Taking it out looks different, but not by enough runs to show it.
 
 When the miss didn't happen even with the unit in place, it says so instead, since taking the unit out then tells nothing. When runs were cut short or errored, it says which.
 

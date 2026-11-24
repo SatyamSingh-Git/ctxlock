@@ -252,7 +252,7 @@ Probes run only when the pull request changes a unit a probe names, so most pull
 | `claude_code_oauth_token` | none | A token from `claude setup-token`. Turns on the behavioral check |
 | `anthropic_api_key` | none | An Anthropic API key, used instead of the token when both are set |
 | `eval` | `auto` | `false` never runs the behavioral check, even with a credential |
-| `fail-on-regression` | `'false'` | `'true'` fails the check when a probe passed every base run and no head run |
+| `fail-on-regression` | `'false'` | `'true'` fails the check when a base probe that passes at least 0.9 of its base runs regresses, by a one-sided Fisher p ≤ 0.05 |
 | `claude-code-version` | `2.1.292` | The Claude Code version the behavioral check installs |
 
 [The Action's page](the-guide/github-action.md) covers credentials, cost and the cache.
@@ -318,7 +318,7 @@ flowchart LR
   - [x] **More signals:** an abandoned session is a signal, and a search that found nothing is evidence in a signal's turn. Clustering corrections by their text waits for enough real ones to check it against ([plan](docs/superpowers/plans/2026-11-21-ctxlock-loop-signals.md), [report](docs/dogfood/2026-11-21-signals.md)).
 - [x] **0.1.0 on npm and the GitHub Marketplace** (2026-11-23).
 - [ ] **Results you can trust, before anyone else relies on them.** This is the order of work now ([D117](journey/decisions.md), from a review of ctxlock's risks on 2026-11-24). ctxlock can prove that a context change flips what an agent does. It can't prove a lift in task success, so it shouldn't claim one.
-  - [ ] **Honest verdicts:** `improved` and `regressed` only when a test supports them, flaky probes kept out of the gate, an interval for the difference, and an optional second round of runs when a result is close (Plan 14).
+  - [x] **Honest verdicts:** `improved` and `regressed` only when a test supports them, flaky probes kept out of the gate, an interval for the difference, and an optional second round of runs when a result is close ([plan](docs/superpowers/plans/2026-11-24-ctxlock-honest-verdicts.md), [guide](the-guide/evals.md#reading-the-result)).
   - [ ] **A drift watch:** each prediction says which agent version it was checked against, and a daily watch, a canary repository and a dated log catch a loader that changed.
   - [ ] **A sharper Claude Code collector:** loads read from transcripts too, how each load was observed, and the load record proposed to OpenTelemetry.
   - [ ] **What an adopter needs:** suppressions with a reason, exceptions with an owner and an expiry, SARIF, published precision per rule, `npx ctxlock check`, and `init --pr`.

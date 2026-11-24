@@ -80,7 +80,8 @@ ctxlock eval --base origin/main --head HEAD --format markdown
 | `--head <ref>` | the working tree | The ref to check |
 | `--format` | `text` | `text`, `json` or `markdown` |
 | `--runs <n>` | `eval.runs`, or 3 | Runs per arm |
-| `--max-runs <n>` | `eval.max-runs`, or 24 | The most runs one check may start |
+| `--extend <n>` | off | Run a probe that comes out `uncertain` on to `n` runs per arm, then judge it again on every run (below). Must be more than `--runs` |
+| `--max-runs <n>` | `eval.max-runs`, or 24 | The most runs one check may start, `--extend`'s included |
 | `--max-minutes <n>` | `eval.max-minutes`, or 20 | No run starts after this many minutes |
 | `--model <model>` | `eval.model`, or `sonnet` | The model Claude Code runs. The report names the model each run actually used |
 | `--claude <path>` | `claude` on `PATH` | Claude Code's executable |
@@ -137,17 +138,33 @@ The agent followed the changed line in every head run, even though the repositor
 
 | Status | Meaning |
 |---|---|
-| `improved` | The head's pass rate is at least 0.5 above the base's |
-| `regressed` | At least 0.5 below |
-| `unchanged` | Anything closer |
+| `improved` | The head passes more often, and a one-sided Fisher exact test puts the chance of a gap that large, with nothing changed, at 0.05 or less |
+| `regressed` | The same, the other way |
+| `uncertain` | The pass rates differ by 0.5 or more, but not by enough runs to pass that test |
+| `unchanged` | They differ by less than 0.5, without passing the test |
 | `inconclusive` | Fewer than 2 valid runs in an arm, or the time budget cut the probe short |
 | `not run` | The run or time budget ran out first |
 
-A run that fails, because Claude Code is logged out, rate-limited or timed out, counts as an error, not as a fail. The report gives each arm's 95% interval (Wilson). With 3 runs, a 3 of 3 arm's interval still reaches down to 0.44: probes find large effects, such as a command that changed in every run, not small ones.
+The test is why `uncertain` exists. A probe's runs vary even when nothing changed, and at 3 runs a side a gap of 2 of 3 against 0 of 3 comes up by chance often enough that calling it a regression would cry wolf. At 3 a side, only a full flip, 3/3 against 0/3, passes the test (p = 0.05). More runs can show smaller changes. The smallest drop each count can show at a one-sided p of 0.05, 4 times in 5, from a base passing 0.9 to 1.0 of its runs:
+
+| Runs a side | Smallest drop it can show |
+|---|---|
+| 3 | 93 points, and only from a base that passes every run |
+| 5 | 84 points |
+| 10 | 49–59 points |
+| 20 | 32–38 points |
+
+These figures are from the review behind this design ([D118](../journey/decisions.md)), not measured here. Probes find large effects, such as a command that changed in every run, not small ones.
+
+**A second round** (`--extend <n>`). A probe that comes out `uncertain` runs on to `n` runs per arm, then the test runs again on every run. Cached runs count toward both rounds. If the extra runs would not fit `--max-runs`, with every probe already planned counted, the probe keeps its first verdict and says `not extended: run budget (<n> runs)`. Probes that came out anything else are not extended.
+
+A run that fails, because Claude Code is logged out, rate-limited or timed out, counts as an error, not as a fail. The markdown report gives each arm's 95% interval (Wilson) and the difference in pass rates, head minus base, with its own 95% interval (Newcombe's, from the two Wilson intervals): `difference −1.00 (−1.00 to −0.21)`. With 3 runs, a 3 of 3 arm's interval still reaches down to 0.44.
+
+**Notes on the base.** A probe from the base that passes some base runs and not others, more than 0.2 and less than 0.8 of them, is marked `flaky on the base (2/3): it never gates`. One that fails every base run, with at least 2 valid, is marked `fails on the base: the probe or the base context is broken, so it can only improve`.
 
 **Did the agent see the change?** For each probe, the report says in how many head runs Claude Code loaded the probe's unit. Claude Code reports most loads through its `InstructionsLoaded` hook. It does not report an `AGENTS.md` it reads because the project has no `CLAUDE.md`, though the agent follows it, so those loads are marked *predicted*.
 
-**The gate** (`--fail-on-regression`). A probe fails it when every base run passed and no head run did, with at least 3 valid runs in each arm, and the time budget did not cut it short. At 3 against 3 that is a one-sided Fisher p of 0.05, the strongest result 3 runs can give. Probes the pull request adds never gate; the base's definition of a probe is the one that runs, and the report says when the pull request edits it. If the pull request breaks its own probe files, the report says which, and the base's probes still run.
+**The gate** (`--fail-on-regression`). A probe fails it when it `regressed`, passed at least 0.9 of its base runs, has at least 3 valid runs in each arm, and the time budget did not cut it short. Only a steady probe gates: one whose base is flaky cannot tell a pull request's change from its own noise. At 3 runs a side the only gating result is 3/3 against 0/3; with `--extend 10`, 10/10 against 6/10 gates too. Probes the pull request adds never gate; the base's definition of a probe is the one that runs, and the report says when the pull request edits it. If the pull request breaks its own probe files, the report says which, and the base's probes still run.
 
 **The cache.** Results from a git ref are cached by its tree, the probe, the model, Claude Code's version and ctxlock's, under `--cache`. On your machine, a base you check against again is not run again. Runs that failed are not cached, and a cache file that is torn or not ctxlock's is a miss: the arm runs again and replaces it. In the Action, the cache lasts for one pull request (see [its page](github-action.md#the-behavioral-check)). The working tree is never cached.
 

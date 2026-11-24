@@ -300,3 +300,23 @@ Plan 7's first rule joined a signal to the units loaded in its turn, since the p
 *Cost:* two fix commits in the plan's last task, and a reversed decision (D80). The live run caught it before any review or release.
 
 *Changed:* before a plan fixes a rule that joins two sources, it checks a few real records of each against the other, timestamps included.
+
+### A plan that left main red between tasks
+
+Plan 14's Task 1 changed what `status` returns. Five diagnose tests depended on the old labels, at 2 runs a side, and the plan moved them to 3 in Task 3. Its Task 1 step said so: "leave diagnose's to Task 3". Task 1 was pushed with those five failing, and CI on `main` failed (d6c0a1c).
+
+*Cause:* the plan cut its tasks by file, not by green suite, and the executor followed it past the push rule. Another session in the same tree saw the red tests first.
+
+*Cost:* one red push. Task 3 was done next, ahead of Task 2, and the next push (ad1a0d0) was green.
+
+*Changed:* a task whose change breaks tests owned by a later task takes those fixes with it, or the two become one task. A plan step that says to leave a test failing is a plan defect, ruled on before the push.
+
+### npx ran a package the project does not use
+
+To lint two files, I ran `npx biome check`. The project does not use Biome, so npx fetched and ran the npm package named `biome`, version 0.3.3, an old tool for environment variables. Its only visible effect was an empty `~/.biome` folder, now removed. Its dependency core-js ran a postinstall script that prints a banner.
+
+*Cause:* a linter assumed from habit, not read from `package.json`, whose scripts are `typecheck`, `test` and `build`. npx installs and runs whatever has the name when nothing local has it.
+
+*Cost:* nothing broke. But it ran code from a stranger's package on the user's machine, the very thing `ctxlock check` exists to warn about.
+
+*Changed:* the project's checks are read from `package.json` first, and npx gets `--no-install` when the tool is meant to be local.

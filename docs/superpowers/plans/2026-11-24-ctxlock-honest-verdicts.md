@@ -31,11 +31,11 @@ Satyam's call on 2026-11-24 was "update the plan towards it", after the review. 
 
 | Task | Status | Commits |
 |---|---|---|
-| 1 | | |
-| 2 | | |
-| 3 | | |
-| 4 | | |
-| 5 | | |
+| 1 | done | d6c0a1c |
+| 2 | done | c77a1e8 |
+| 3 | done, before Task 2, so main went green a push sooner | ad1a0d0 |
+| 4 | done | 220c722 |
+| 5 | done | this commit |
 
 ## Decisions this plan makes
 
