@@ -355,7 +355,7 @@ ctxlock diagnose <unit> [dir] [--format text|json] [--since YYYY-MM-DD] [--runs 
 - **A probe:** made from your correction.
 
 **The replay** runs in two throwaway copies of the repository: one as it is, one with the fix.
-- **"validated"** means the probe fails without the fix and passes with it by `eval`'s exact test, and none of the unit's own probes gets worse. A probe that only looks better makes the replay "inconclusive"; `--extend <n>` runs it on to `n` a side.
+- **"validated"** means the probe fails without the fix and passes with it by `eval`'s exact test, and none of the unit's own probes gets worse, or looks worse without enough runs to tell. A miss that only looks better, or an own probe that only looks worse, makes the replay "inconclusive"; `--extend <n>` runs it on to `n` a side, within `--max-runs`.
 - **Defaults:** `--runs` 3 a side, the fewest that can show a fix works, `--max-runs` 24 and `--max-minutes` 15.
 
 **`--drafts <folder>`** writes the proposal, the diagnosis, the fix as a diff, the probe and the replay, as `<unit>.fix.md`. It leaves an edited one alone.

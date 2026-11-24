@@ -2,7 +2,7 @@ import { stringify } from 'yaml';
 import type { ArmResult, ProbeOutcome } from '../eval/eval.js';
 import type { Expectation, Probe } from '../eval/probes.js';
 import { fenced, marked } from '../loop/draft.js';
-import type { Proposal, Replay } from '../loop/propose.js';
+import { looksWorse, type Proposal, type Replay } from '../loop/propose.js';
 import { sessions } from './graph.js';
 import { code, plural } from './markdown.js';
 import { kindsText } from './misses.js';
@@ -41,10 +41,17 @@ const PROBE_SAYS: Record<Replay['status'], string> = {
   'not-validated': 'The replay did not validate the fix, so neither it nor the probe is ready to commit as it is.',
   inconclusive: 'The replay was cut short, so whether the fix works is not known. Run it again with more --max-runs or --max-minutes.',
 };
-const probeSays = (replay: Replay | null) =>
-  replay?.miss.status === 'uncertain'
-    ? 'The replay looks better with the fix, but not by enough runs to show it, so whether the fix works is not known. Run again with more --runs or --extend.'
-    : PROBE_SAYS[replay?.status ?? 'inconclusive'];
+function probeSays(replay: Replay | null): string {
+  if (replay?.miss.status === 'uncertain' && replay.miss.reason?.startsWith('not extended')) {
+    return `The replay looks better with the fix, but not by enough runs to show it, and --extend did not fit in the ${replay.miss.reason.slice('not extended: '.length)}. Run again with more --max-runs.`;
+  }
+  if (replay?.miss.status === 'uncertain') return 'The replay looks better with the fix, but not by enough runs to show it, so whether the fix works is not known. Run again with more --runs or --extend.';
+  if (replay?.others.some(looksWorse)) {
+    return "One of the unit's own probes looks worse with the fix, but not by enough runs to show it, so whether the fix is safe is not known. Run again with more --runs or --extend.";
+  }
+  return PROBE_SAYS[replay?.status ?? 'inconclusive'];
+}
+const verdict = (o: ProbeOutcome) => (o.reason ? `${o.status} (${o.reason})` : o.status);
 const untrusted = (p: Proposal) => p.unit.signals.filter((s) => s.untrusted).length;
 const steered = (p: Proposal) =>
   untrusted(p) ? [`${untrusted(p)} of the ${plural(p.unit.signals.length, 'signal')} came after the agent read a web page or an MCP tool's output, which may have steered it.`] : [];
@@ -65,7 +72,7 @@ export function renderDiagnosis(p: Proposal, format: 'text' | 'json'): string {
     out.push('', `Probe ${printable(d.probe.id)}:`, `  prompt  ${printable(d.probe.prompt)}`, `  expect  ${printable(expectation(d.probe))}`);
   }
   if (p.replay) {
-    const row = (o: ProbeOutcome, role: string) => [`  ${printable(o.probe.id)}`, role, passes('base', o.base), passes('head', o.head), o.status];
+    const row = (o: ProbeOutcome, role: string) => [`  ${printable(o.probe.id)}`, role, passes('base', o.base), passes('head', o.head), verdict(o)];
     out.push('', `Replay, ${p.replay.runsPerArm} runs a side: ${p.replay.status}`, table([row(p.replay.miss, 'the miss'), ...p.replay.others.map((o) => row(o, 'existing'))]));
     const a = p.replay.ablation;
     if (a && 'skipped' in a) out.push('', `Without the unit: not run, as ${a.skipped}.`);
@@ -97,7 +104,7 @@ export function renderProposal(p: Proposal, repo: string): string {
     out.push('', '## The fix', '', fenced(diff, 'diff'), '', '## The probe', '', probeSays(p.replay), '', fenced(probe, 'yaml'));
   }
   if (p.replay) {
-    const said = (o: ProbeOutcome) => `${code(o.probe.id)}: ${passes('base', o.base)}, ${passes('head', o.head)}, ${o.status}`;
+    const said = (o: ProbeOutcome) => `${code(o.probe.id)}: ${passes('base', o.base)}, ${passes('head', o.head)}, ${verdict(o)}`;
     out.push('', `- **Replay:** ${p.replay.status}, ${p.replay.runsPerArm} runs a side`, `  - the miss, ${said(p.replay.miss)}`, ...p.replay.others.map((o) => `  - ${said(o)}`));
     const a = p.replay.ablation;
     if (a && 'skipped' in a) out.push(`- **Without the unit:** not run, as ${a.skipped}.`);

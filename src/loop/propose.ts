@@ -45,10 +45,12 @@ export interface DiagnoseOptions {
 }
 
 // D86: validated when the miss's probe goes from failing to passing with the fix, and nothing on the
-// unit gets worse. A run the budgets cut short says nothing either way, and nor does a miss that
-// only looks better (D120).
+// unit gets worse. A run the budgets cut short says nothing either way, nor does a miss that only
+// looks better, nor one of the unit's probes that only looks worse (D120).
+export const looksWorse = (o: ProbeOutcome) => o.status === 'uncertain' && (o.difference?.value ?? 0) < 0;
+
 function judge(miss: ProbeOutcome, others: ProbeOutcome[]): Replay['status'] {
-  if (miss.status === 'uncertain' || [miss, ...others].some((o) => o.status === 'not-run' || o.status === 'inconclusive')) return 'inconclusive';
+  if (miss.status === 'uncertain' || others.some(looksWorse) || [miss, ...others].some((o) => o.status === 'not-run' || o.status === 'inconclusive')) return 'inconclusive';
   return miss.status === 'improved' && !others.some((o) => o.status === 'regressed') ? 'validated' : 'not-validated';
 }
 

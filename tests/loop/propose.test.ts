@@ -163,6 +163,30 @@ describe('diagnose', { timeout: 120_000 }, () => {
     expect(worse.replay!.status).toBe('not-validated');
   });
 
+  it("a fix that may make the unit's other probe worse, 3/3 to 1/3, is inconclusive, not validated", async () => {
+    // Runs 2 to 7 are the miss's, 8 to 13 the other probe's, base first: run 9 is its first head run.
+    const file = join(tempDir(), 'scenario.json');
+    writeFileSync(
+      file,
+      JSON.stringify({
+        counterFile: join(tempDir(), 'count'),
+        behaviours: [
+          { when: { promptContains: 'You are diagnosing a miss' }, text: `\`\`\`json\n${JSON.stringify(DEFECT)}\n\`\`\``, calls: [] },
+          { when: { runs: [9] }, calls: [{ tool: 'Bash', input: { command: 'npm install dayjs' } }] },
+          { when: { file: '.claude/rules/deps.md', contains: 'pnpm' }, calls: [{ tool: 'Bash', input: { command: 'pnpm add dayjs' } }] },
+          { calls: [{ tool: 'Bash', input: { command: 'npm install dayjs' } }] },
+        ],
+      }),
+    );
+    process.env.FAKE_CLAUDE_SCENARIO = file;
+
+    const p = await run(repo('npm install'));
+
+    expect(p.replay!.miss.status).toBe('improved');
+    expect(p.replay!.others).toMatchObject([{ status: 'uncertain', base: { passed: 3 }, head: { passed: 1 } }]);
+    expect(p.replay!.status).toBe('inconclusive');
+  });
+
   it('a preference verdict runs no replay', async () => {
     scenario({ verdict: 'preference', reason: 'A one-off wish.', quotes: [] });
 

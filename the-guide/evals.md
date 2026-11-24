@@ -156,7 +156,7 @@ The test is why `uncertain` exists. A probe's runs vary even when nothing change
 
 These figures are from the review behind this design ([D118](../journey/decisions.md)), not measured here. Probes find large effects, such as a command that changed in every run, not small ones.
 
-**A second round** (`--extend <n>`). A probe that comes out `uncertain` runs on to `n` runs per arm, then the test runs again on every run. Cached runs count toward both rounds. If the extra runs would not fit `--max-runs`, with every probe already planned counted, the probe keeps its first verdict and says `not extended: run budget (<n> runs)`. Probes that came out anything else are not extended.
+**A second round** (`--extend <n>`). Once every probe has had its first round, each one that came out `uncertain` runs on to `n` runs per arm, in order, and the test runs again on every run. So an extension never takes the runs or the time a first round needed. Cached runs count toward both rounds. If the extra runs would not fit `--max-runs`, the probe keeps its first verdict and says `not extended: run budget (<n> runs)`. If the time budget runs out during the extension, the verdict is on every run that finished, it says `extension cut short: time budget (<n> min)`, and it never gates. Probes that came out anything else are not extended.
 
 A run that fails, because Claude Code is logged out, rate-limited or timed out, counts as an error, not as a fail. The markdown report gives each arm's 95% interval (Wilson) and the difference in pass rates, head minus base, with its own 95% interval (Newcombe's, from the two Wilson intervals): `difference −1.00 (−1.00 to −0.21)`. With 3 runs, a 3 of 3 arm's interval still reaches down to 0.44.
 

@@ -177,10 +177,10 @@ export function baseNote(base: ArmResult): 'flaky' | 'fails' | undefined {
   return undefined;
 }
 
-// Head-only probes never gate: the pull request wrote them. A probe the time budget cut short is
-// inconclusive, and never gates.
+// Head-only probes never gate: the pull request wrote them. A probe the time budget cut short, in
+// either round, never gates: its reason says so.
 export const gated = (o: ProbeOutcome) =>
-  o.source === 'base' && o.status === 'regressed' && o.base!.valid >= 3 && o.head!.valid >= 3 && o.base!.passed / o.base!.valid >= 0.9;
+  o.source === 'base' && o.status === 'regressed' && !o.reason && o.base!.valid >= 3 && o.head!.valid >= 3 && o.base!.passed / o.base!.valid >= 0.9;
 
 const treeOf = async (root: string, ref: string) => (await exec('git', ['-C', root, 'rev-parse', `${ref}^{tree}`])).stdout.trim();
 
@@ -330,7 +330,7 @@ export async function runProbes(
       const cost = toRun(records, opts.runs);
       if (!overBudget && planned + cost <= opts.maxRuns) planned += cost;
       else overBudget = true;
-      return { ...c, keys, records, cached: { base: records.base.length, head: records.head.length }, runnable: !overBudget, started: false, complete: false, unextended: false };
+      return { ...c, keys, records, cached: { base: records.base.length, head: records.head.length }, runnable: !overBudget, started: false, complete: false, unextended: false, cutShort: false };
     });
 
     let n = 0;
@@ -371,15 +371,25 @@ export async function runProbes(
       if (!plan.runnable) break;
       await runUpTo(plan, opts.runs);
       plan.complete = arms.every((arm) => plan.records[arm].length >= opts.runs);
-      if (!plan.complete) continue;
+    }
+    // D121's second round starts only once every first round is done, so an extension never takes
+    // time or runs a first round needed.
+    for (const plan of plans) {
+      const extendTo = opts.extendTo;
+      if (extendTo === undefined || !plan.complete) continue;
       const first = (arm: ArmName) => summarise(plan.probe, plan.records[arm], plan.cached[arm]);
-      if (opts.extendTo !== undefined && status(first('base'), first('head')) === 'uncertain') {
-        const extra = toRun(plan.records, opts.extendTo);
-        if (planned + extra <= opts.maxRuns) {
-          planned += extra;
-          await runUpTo(plan, opts.extendTo);
-        } else plan.unextended = true;
+      if (status(first('base'), first('head')) !== 'uncertain') continue;
+      const extra = toRun(plan.records, extendTo);
+      if (planned + extra > opts.maxRuns) {
+        plan.unextended = true;
+        continue;
       }
+      planned += extra;
+      await runUpTo(plan, extendTo);
+      plan.cutShort = arms.some((arm) => plan.records[arm].length < extendTo);
+    }
+    for (const plan of plans) {
+      if (!plan.complete) continue;
       for (const arm of arms) {
         const key = plan.keys[arm];
         const keep = plan.records[arm].filter((r) => r.error === null);
@@ -404,6 +414,7 @@ export async function runProbes(
         const ran = { probe, source, changedInHead, selectedFor, ...sides, difference: difference(sides.base, sides.head) };
         outcome = plan.complete ? { ...ran, status: status(sides.base, sides.head) } : { ...ran, status: 'inconclusive', reason: `time budget (${opts.maxMinutes} min)` };
         if (plan.unextended) outcome.reason = `not extended: run budget (${opts.maxRuns} runs)`;
+        if (plan.cutShort) outcome.reason = `extension cut short: time budget (${opts.maxMinutes} min)`;
         const note = source === 'base' && sides.base ? baseNote(sides.base) : undefined;
         if (note) outcome.baseNote = note;
       }

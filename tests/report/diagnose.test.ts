@@ -89,6 +89,16 @@ describe('renderProposal', () => {
     const uncertain = renderProposal({ ...PROPOSAL, replay: { ...PROPOSAL.replay!, status: 'inconclusive', miss: outcome(miss, 1, 3, 'uncertain') } }, 'acme/web');
     expect(uncertain).toContain('The replay looks better with the fix, but not by enough runs to show it, so whether the fix works is not known. Run again with more --runs or --extend.');
     expect(uncertain).not.toContain('cut short');
+    // One of the unit's own probes may have got worse.
+    const worse = renderProposal({ ...PROPOSAL, replay: { ...PROPOSAL.replay!, status: 'inconclusive', others: [{ ...outcome(miss, 3, 1, 'uncertain'), difference: { value: -0.6667, interval: [-0.94, 0.06] } }] } }, 'acme/web');
+    expect(worse).toContain("One of the unit's own probes looks worse with the fix, but not by enough runs to show it, so whether the fix is safe is not known. Run again with more --runs or --extend.");
+    expect(worse).not.toContain('cut short');
+    // The miss could not be extended: --max-runs, not --extend, is what to raise.
+    const unextended = renderProposal({ ...PROPOSAL, replay: { ...PROPOSAL.replay!, status: 'inconclusive', miss: { ...outcome(miss, 1, 3, 'uncertain'), reason: 'not extended: run budget (24 runs)' } } }, 'acme/web');
+    expect(unextended).toContain('The replay looks better with the fix, but not by enough runs to show it, and --extend did not fit in the run budget (24 runs). Run again with more --max-runs.');
+    expect(unextended).toMatch(/ {2}- the miss, `miss-deps`: base \S+, head \S+, uncertain \(not extended: run budget \(24 runs\)\)\n/);
+    const text = renderDiagnosis({ ...PROPOSAL, replay: { ...PROPOSAL.replay!, status: 'inconclusive', miss: { ...outcome(miss, 1, 3, 'uncertain'), reason: 'not extended: run budget (24 runs)' } } }, 'text');
+    expect(text).toMatch(/miss-deps\s+the miss\s+base \S+\s+head \S+\s+uncertain \(not extended: run budget \(24 runs\)\)\n/);
   });
 
   it('says how many signals came after web or MCP content, in the text, the json and the proposal', () => {

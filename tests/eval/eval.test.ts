@@ -243,9 +243,9 @@ describe('runEval', { timeout: 120_000 }, () => {
     expect(o).toMatchObject({ status: 'uncertain', reason: 'not extended: run budget (8 runs)', base: { valid: 3 }, head: { passed: 1, valid: 3 } });
     expect(claudeRuns()).toBe(6);
 
-    // Two close calls: the first's extension takes the budget the second would need. The second
-    // probe's base starts at run 21, so its head's first run is 22.
-    closeCall([2, 22]);
+    // Two close calls: the first's extension takes the budget the second would need. Both first
+    // rounds run before any extension, so the second probe's first head run is run 8.
+    closeCall([2, 8]);
     const two = await repo(
       { 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'one' }, { id: 'two' }) },
       { 'AGENTS.md': 'Use npm.\n' },
@@ -255,6 +255,34 @@ describe('runEval', { timeout: 120_000 }, () => {
       ['one', 'regressed', 10, undefined],
       ['two', 'uncertain', 3, 'not extended: run budget (30 runs)'],
     ]);
+  });
+
+  it("an extension waits for every probe's first round, so it cannot take the time a later probe needed", async () => {
+    // 'one' is 3/3 against 1/3, uncertain; 'two' then runs 7 to 12 and is 3/3 against 0/3. The clock
+    // allows the 12 first-round runs and nothing after: the start is call 1, each run's check one more.
+    closeCall();
+    const root = await repo({ 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'one' }, { id: 'two' }) }, { 'AGENTS.md': 'Use npm.\n' });
+    let calls = 0;
+
+    const r = await runEval(options(root, { extendTo: 10, maxRuns: 40, now: () => (++calls > 13 ? 21 * 60_000 : 0) }));
+
+    expect(r.outcomes.map((o) => [o.probe.id, o.status, o.head?.valid, o.reason])).toEqual([
+      ['one', 'uncertain', 3, 'extension cut short: time budget (20 min)'],
+      ['two', 'regressed', 3, undefined],
+    ]);
+    expect(r.gateFailures).toEqual(['two']);
+  });
+
+  it('an extension the time budget cut short keeps its verdict on every run, says so, and never gates', async () => {
+    // Runs 1 to 9 start, then the time is up: base 5/5 against head 1/4 is p = 0.048, regressed.
+    closeCall();
+    const root = await repo({ 'AGENTS.md': 'Use pnpm.\n', 'evals/probes/p.yaml': probeFile({ id: 'deps' }) }, { 'AGENTS.md': 'Use npm.\n' });
+    let calls = 0;
+
+    const r = await runEval(options(root, { extendTo: 10, now: () => (++calls > 10 ? 21 * 60_000 : 0) }));
+
+    expect(r.outcomes[0]).toMatchObject({ status: 'regressed', reason: 'extension cut short: time budget (20 min)', base: { passed: 5, valid: 5 }, head: { passed: 1, valid: 4 } });
+    expect(r.gateFailures).toEqual([]);
   });
 
   it('cached runs count once in an extended probe', async () => {

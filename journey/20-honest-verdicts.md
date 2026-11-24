@@ -32,6 +32,21 @@ Satyam said to update the plan toward the review. Plan 14 ([plan](../docs/superp
 - **The arms take turns.** The test fake could make odd runs differ, but base and head runs alternate, so all of one arm's runs are odd or all are even. No scenario could give one pass in three. The fake now takes a list of run numbers.
 - **`npx` ran a stranger's package** ([mistakes](mistakes.md#npx-ran-a-package-the-project-does-not-use)).
 
+## The final review
+
+A fresh reviewer checked the statistics against exact rationals, 2.3 million one-sided tests with no wrong decision. It also confirmed the interval against Newcombe's own worked example. It found four things to fix, all now fixed with a test that failed first:
+- **An extension took time that a later probe's first round needed.** The extension ran right after its own probe's first round. With `--max-minutes`, a later probe could go unrun, and a regression it would have gated passed. The second round now starts only after every first round.
+- **An extension the time budget cut short got a full verdict**, no reason, and could gate. It now says `extension cut short` and never gates.
+- **diagnose validated a fix while one of the unit's own probes went from 3/3 to 1/3.** Before Plan 14 that drop was `regressed` and blocked the fix. Under D118 it is `uncertain`, which the replay ignored. A probe that only looks worse now makes the replay inconclusive.
+- **diagnose hid `not extended`**, then told the user to use `--extend`. The replay rows now give the reason, and the proposal says to raise `--max-runs`.
+
+Nine minor findings wait, among them:
+- with `--extend`, a base cached at 10 runs feeds the first round's verdict;
+- the markdown "Not run" block lists a probe that ran but was not extended;
+- a regressed base probe passing 0.8 to 0.9 of its base runs gets no note saying why it does not gate;
+- the exact test overflows at 515 runs a side;
+- D42's status still says it stands.
+
 ## What is next
 
 The final review of the plan, then Now 2 of D117: a drift watch, so a loader or an agent version that changed is caught by ctxlock, not by a probe that happens to turn red.

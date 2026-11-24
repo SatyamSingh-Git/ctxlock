@@ -162,9 +162,14 @@ The reply is checked against the unit: every line it quotes must be in the file,
 **The replay** runs the probe, and every probe the unit already has, in two throwaway copies of the repository: one as it is, one with the fix. It runs as `eval` runs, with every command and edit the agent tries denied.
 - **"validated":** the probe is `improved`, by the exact test `eval` uses ([what the verdicts mean](evals.md#reading-the-result)), and none of the unit's own probes `regressed`.
 - **"not-validated"** is reported as it is.
-- **"inconclusive"** is reported as it is too. Either a probe was cut short by `--max-runs` or `--max-minutes`, or it has fewer than 2 runs on a side that finished without an error. Or the probe is `uncertain`: the fix looks better, but not by enough runs to show it. The proposal then says to run again with more `--runs` or with `--extend`.
+- **"inconclusive"** is reported as it is too, in one of three cases:
+  - a probe was cut short by `--max-runs` or `--max-minutes`, or has fewer than 2 runs on a side that finished without an error;
+  - the miss's probe is `uncertain`: the fix looks better, but not by enough runs to show it;
+  - one of the unit's own probes is `uncertain` and lower with the fix: it may have got worse.
+
+  The proposal says which, and to run again with more `--runs` or with `--extend`.
 - **Why `--runs` must be at least 3:** below 3 runs a side, no result passes the test. At 2 a side the best is 0/2 against 2/2, a one-sided p of 1/6, so no fix could ever be validated. At 3 a side, 0/3 against 3/3 gives 0.05.
-- **`--extend <n>`:** runs an `uncertain` probe on to `n` runs a side, then judges it again on every run, as `eval --extend` does. The ablation is not extended.
+- **`--extend <n>`:** runs an `uncertain` probe on to `n` runs a side, then judges it again on every run, as `eval --extend` does. The ablation is not extended. The extension needs room in `--max-runs`: the miss and one of the unit's own probes take 12 runs at 3 a side, and extending the miss to 10 takes 14 more, so `--extend 10` needs `--max-runs 26` or more. When it does not fit, the replay row says `not extended: run budget`, and the proposal says to raise `--max-runs`.
 - **Defaults:** `--runs` 3, `--max-runs` 24 and `--max-minutes` 15. 24 fits the miss's probe and two of the unit's own at 3 runs a side, 18 runs, with room left for `--ablate`.
 
 **`--ablate` replays the probe once more, with the unit taken out:** its file, or a skill's whole folder, and any link to it. It compares the repository as it is with the repository without the unit, at the same number of runs a side. The side with the unit is the replay's own base, so only the side without it runs: `--runs` more runs, out of what `--max-runs` has left after the replay, and with its own `--max-minutes`. When too few runs are left, the output says so. The text and the proposal then say which of these it found:
