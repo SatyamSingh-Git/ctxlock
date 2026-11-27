@@ -1,7 +1,7 @@
 import type { Finding, Severity } from '../../model.js';
 import { sha256Hex } from '../../units/digest.js';
-import { maskCode } from '../../units/markdown.js';
-import { lineAndColumn, quote, textFiles } from '../files.js';
+import { htmlComments, quote, textFiles } from '../files.js';
+import { parseDirective } from '../suppress.js';
 import type { Rule } from '../types.js';
 
 // Invisible characters that can carry or reorder text an agent reads but a reviewer cannot see.
@@ -143,10 +143,10 @@ export const htmlComment: Rule = {
     const findings: Finding[] = [];
     for await (const { unit, path, text } of textFiles(ctx, undefined, true)) {
       if (!path.endsWith('.md')) continue;
-      // An unclosed comment hides everything after it, so it runs to the end of the file.
-      for (const match of maskCode(text).matchAll(/<!--[\s\S]*?(?:-->|$)/g)) {
-        const { line, column } = lineAndColumn(text, match.index);
-        const comment = text.slice(match.index, match.index + match[0].length);
+      for (const { comment, line, column } of htmlComments(text)) {
+        // A suppression's reason is shown in its L18 finding instead. Where suppressions are not honoured,
+        // as in check on a stranger's repository, it is hidden text like any other comment.
+        if (ctx.suppressions !== false && parseDirective(comment)) continue;
         findings.push({
           rule: 'L1-html-comment',
           severity: MARKER.test(comment) ? 'info' : 'must',

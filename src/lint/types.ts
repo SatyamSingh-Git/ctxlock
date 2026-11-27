@@ -21,6 +21,9 @@ export interface LintContext {
   // From ctxlock.lock; an unreadable lock gives no upstreams and its error.
   lock: Lock;
   lockError: string | null;
+  // false where the repository is someone else's (check): no directive or exception applies, and a
+  // directive is hidden text like any other comment.
+  suppressions?: boolean;
   // Whether agnix ran in this scan; without it, a suppression of an agnix rule cannot be told stale.
   agnixRan?: boolean;
 }

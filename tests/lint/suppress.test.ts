@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runLint } from '../../src/lint/run.js';
+import { parseDirective } from '../../src/lint/suppress.js';
 import type { Finding, Severity } from '../../src/model.js';
 import { lintContext } from '../helpers/lint.js';
 
@@ -78,5 +79,101 @@ describe('exceptions', () => {
     expect(l18(await runLint(ctx))).toEqual([]);
     ctx.agnixRan = true;
     expect(l18(await runLint(ctx)).map(([rule]) => rule)).toEqual(['L18-unused']);
+  });
+});
+
+describe('inline directives', () => {
+  it.each([
+    ['<!-- ctxlock-ignore-next-line L5-instruction-count: one list -->', { scope: 'next-line', rules: ['L5-instruction-count'], reason: 'one list' }],
+    ['<!--ctxlock-ignore-file L6-skill-length L9-stale:generated-->', { scope: 'file', rules: ['L6-skill-length', 'L9-stale'], reason: 'generated' }],
+    ['<!-- ctxlock-ignore-file agnix:CC-SK-001: theirs -->', { scope: 'file', rules: ['agnix:CC-SK-001'], reason: 'theirs' }],
+    ['<!-- ctxlock-ignore-file L99-new-rule: from a newer ctxlock -->', { scope: 'file', rules: ['L99-new-rule'], reason: 'from a newer ctxlock' }],
+  ])('parseDirective accepts %s', (comment, parsed) => {
+    expect(parseDirective(comment)).toEqual(parsed);
+  });
+
+  it.each([
+    '<!-- ctxlock-ignore-file L6-skill-length -->',
+    '<!-- ctxlock-ignore-file L6-skill-length: -->',
+    `<!-- ctxlock-ignore-file L6-skill-length: ${'x'.repeat(201)} -->`,
+    '<!-- ctxlock-ignore-file L1-hidden-unicode: fine -->',
+    '<!-- ctxlock-ignore-file L2-risky-instruction: fine -->',
+    '<!-- ctxlock-ignore-file L0-skill-spec: fine -->',
+    '<!-- ctxlock-ignore-file L14-generated: fine -->',
+    '<!-- ctxlock-ignore-file L16-lock: fine -->',
+    '<!-- ctxlock-ignore-file L18-unused: fine -->',
+    '<!-- ctxlock-ignore-file L6-skill-length L1-html-comment: both -->',
+    '<!-- ctxlock-ignore-file l5-instruction-count: lower -->',
+    '<!-- ctxlock-ignore-file L6-skill-length:\nsecond line -->',
+    '<!-- ctxlock-ignore L5-instruction-count: no scope -->',
+  ])('parseDirective refuses %s', (comment) => {
+    expect(parseDirective(comment)).toBeNull();
+  });
+
+  it("a next-line directive quiets the next non-blank line's finding of that rule, and says why", async () => {
+    for (const eol of ['\n', '\r\n']) {
+      const text = ['<!-- ctxlock-ignore-next-line L5-instruction-count: on purpose -->', '', '- rule', '- other', ''].join(eol);
+      const out = await runLint(await lintContext({ 'AGENTS.md': text }), [finding('L5-instruction-count', 'should', 'AGENTS.md', { line: 3 }), finding('L5-instruction-count', 'should', 'AGENTS.md', { line: 4 })]);
+
+      expect(out.filter((f) => f.rule === 'L5-instruction-count').map((f) => f.line)).toEqual([4]);
+      expect(out).toContainEqual({ rule: 'L18-suppressed', severity: 'info', path: 'AGENTS.md', line: 1, message: 'ctxlock-ignore-next-line quiets 1 finding of L5-instruction-count: on purpose' });
+    }
+  });
+
+  it('a file directive quiets that rule anywhere in the file, with or without a line', async () => {
+    const out = await runLint(await lintContext({ 'AGENTS.md': 'Intro.\n\n<!-- ctxlock-ignore-file L5-instruction-count: generated -->\n' }), [
+      finding('L5-instruction-count', 'should', 'AGENTS.md', { line: 1 }),
+      finding('L5-instruction-count', 'should', 'AGENTS.md'),
+      finding('L5-instruction-count', 'should', 'CLAUDE.md'),
+    ]);
+
+    expect(out.filter((f) => f.rule === 'L5-instruction-count').map((f) => f.path)).toEqual(['CLAUDE.md']);
+    expect(l18(out)).toEqual([['L18-suppressed', 'info', 'AGENTS.md', 'ctxlock-ignore-file quiets 2 findings of L5-instruction-count: generated']]);
+  });
+
+  it('a directive that quiets nothing is unused, and one naming an unknown rule says so', async () => {
+    const out = await runLint(await lintContext({ 'AGENTS.md': '<!-- ctxlock-ignore-file L9-stale: why -->\n<!-- ctxlock-ignore-file L99-new-rule: why -->\n' }));
+
+    expect(l18(out)).toEqual([
+      ['L18-unused', 'should', 'AGENTS.md', 'ctxlock-ignore-file L9-stale quiets nothing: why'],
+      ['L18-unused', 'should', 'AGENTS.md', 'ctxlock-ignore-file L99-new-rule quiets nothing; ctxlock has no rule L99-new-rule: why'],
+    ]);
+  });
+
+  it('two directives on one finding: the first is used, the second unused', async () => {
+    const text = '<!-- ctxlock-ignore-file L5-instruction-count: first -->\n<!-- ctxlock-ignore-file L5-instruction-count: second -->\n';
+    const out = await runLint(await lintContext({ 'AGENTS.md': text }), [finding('L5-instruction-count', 'should', 'AGENTS.md')]);
+
+    expect(l18(out).map(([rule, , , message]) => [rule, message])).toEqual([
+      ['L18-unused', 'ctxlock-ignore-file L5-instruction-count quiets nothing: second'],
+      ['L18-suppressed', 'ctxlock-ignore-file quiets 1 finding of L5-instruction-count: first'],
+    ]);
+  });
+
+  it('a directive in a code block is documentation, and is reported as a comment', async () => {
+    const text = 'To quiet a rule:\n\n```md\n<!-- ctxlock-ignore-file L5-instruction-count: x -->\n```\n\nOr `<!-- ctxlock-ignore-file L5-instruction-count: x -->` inline.\n';
+    const out = await runLint(await lintContext({ 'AGENTS.md': text }), [finding('L5-instruction-count', 'should', 'AGENTS.md')]);
+
+    expect(out.filter((f) => f.rule === 'L5-instruction-count')).toHaveLength(1);
+    expect(l18(out)).toEqual([]);
+  });
+
+  it('an exception wins before a directive', async () => {
+    const files = { ...yaml(exception({ rule: 'L5-instruction-count', path: 'AGENTS.md' })), 'AGENTS.md': '<!-- ctxlock-ignore-file L5-instruction-count: also -->\n' };
+    const out = await runLint(await lintContext(files), [finding('L5-instruction-count', 'should', 'AGENTS.md')]);
+
+    expect(l18(out).map(([rule, , , message]) => [rule, message])).toEqual([
+      ['L18-unused', 'ctxlock-ignore-file L5-instruction-count quiets nothing: also'],
+      ['L18-suppressed', 'exception for L5-instruction-count on AGENTS.md quiets 1 finding, owner @sam, until 2026-11-05: one-off'],
+    ]);
+  });
+
+  it('with suppressions off, nothing is quieted and nothing is reported', async () => {
+    const ctx = await lintContext({ ...yaml(exception({ rule: 'L5-instruction-count', path: 'AGENTS.md' })), 'AGENTS.md': '<!-- ctxlock-ignore-file L6-skill-length: x -->\n' });
+    ctx.suppressions = false;
+    const out = await runLint(ctx, [finding('L5-instruction-count', 'should', 'AGENTS.md'), finding('L6-skill-length', 'should', 'AGENTS.md')]);
+
+    expect(out.filter((f) => f.rule === 'L5-instruction-count' || f.rule === 'L6-skill-length')).toHaveLength(2);
+    expect(l18(out)).toEqual([]);
   });
 });

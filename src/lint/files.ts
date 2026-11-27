@@ -1,5 +1,6 @@
 import type { Unit } from '../model.js';
 import type { RepoReader } from '../repo/reader.js';
+import { maskCode } from '../units/markdown.js';
 import type { LintContext } from './types.js';
 
 // ignoreBOM keeps a leading BOM in the text, so L1 can allow it at offset 0 and flag it anywhere else.
@@ -49,6 +50,15 @@ export function lineAndColumn(text: string, offset: number): { line: number; col
   const before = text.slice(0, offset);
   const lineStart = before.lastIndexOf('\n') + 1;
   return { line: before.split('\n').length, column: [...before.slice(lineStart)].length + 1 };
+}
+
+// Every HTML comment outside code, as GitHub renders the markdown. An unclosed comment hides everything
+// after it, so it runs to the end of the file.
+export function htmlComments(text: string): Array<{ comment: string; line: number; column: number }> {
+  return [...maskCode(text).matchAll(/<!--[\s\S]*?(?:-->|$)/g)].map((match) => ({
+    comment: text.slice(match.index, match.index + match[0].length),
+    ...lineAndColumn(text, match.index),
+  }));
 }
 
 export const quote = (s: string) => {

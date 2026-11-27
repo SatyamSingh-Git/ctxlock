@@ -158,6 +158,16 @@ describe('checkTarget on a folder', () => {
     expect(result.worthALook.map((f) => f.rule)).toContain('L2-risky-instruction');
   });
 
+  it("a stranger's suppression comment is hidden text in check, and quiets nothing there", async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'AGENTS.md': '<!-- ctxlock-ignore-file L5-instruction-count: trust me -->\nUse pnpm.\n' });
+
+    const result = await check(dir);
+
+    expect(result.must).toContainEqual(expect.objectContaining({ rule: 'L1-html-comment', path: 'AGENTS.md', line: 1 }));
+    expect(JSON.stringify(result)).not.toContain('L18-');
+  });
+
   it('a folder that does not exist is a CheckError', async () => {
     await expect(check(join(tempDir(), 'missing'))).rejects.toThrow(CheckError);
   });

@@ -16,7 +16,7 @@ import { generatedDrift } from './rules/l14-generated.js';
 import { graphRefs } from './rules/l15-graph.js';
 import { lockDrift } from './rules/l16-lock.js';
 import { format } from './rules/l17-format.js';
-import { quiet } from './suppress.js';
+import { findDirectives, quiet } from './suppress.js';
 import type { LintContext, Rule } from './types.js';
 
 export const RULES: Rule[] = [
@@ -60,7 +60,7 @@ export async function runLint(ctx: LintContext, extra: Finding[] = []): Promise<
     if (override !== 'off') rated.push(override ? { ...f, severity: override } : f);
   }
   const kept = new Map<string, Finding>();
-  for (const finding of quiet(rated, ctx, [])) {
+  for (const finding of quiet(rated, ctx, ctx.suppressions === false ? [] : await findDirectives(ctx))) {
     const key = JSON.stringify([finding.rule, finding.severity, finding.path, finding.line, finding.column, finding.message]);
     if (!kept.has(key)) kept.set(key, finding);
   }

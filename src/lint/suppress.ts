@@ -1,6 +1,7 @@
 import picomatch from 'picomatch';
 import type { Finding } from '../model.js';
 import type { LintException } from '../registry/registry.js';
+import { htmlComments, textFiles } from './files.js';
 import type { LintContext } from './types.js';
 
 export interface Directive {
@@ -11,6 +12,49 @@ export interface Directive {
   reason: string;
   // The first non-blank line after a next-line directive; null for a file directive or none.
   target: number | null;
+}
+
+export const KNOWN_RULES: ReadonlySet<string> = new Set([
+  'L0-encoding', 'L0-frontmatter', 'L0-skill-spec', 'L0-symlink-outside',
+  'L1-hidden-unicode', 'L1-html-comment',
+  'L2-exec-config', 'L2-exec-config-changed', 'L2-exec-config-unread', 'L2-parse', 'L2-risky-instruction',
+  'L3-budget', 'L4-discoverable', 'L5-instruction-count', 'L6-skill-length', 'L7-duplicate-skill', 'L8-procedure',
+  'L9-import-missing', 'L9-stale', 'L10-owner', 'L11-coverage', 'L13-agents-md-shadowed', 'L14-generated',
+  'L15-graph', 'L16-lock', 'L17-format', 'L17-trust-differs',
+  'L18-exception-expired', 'L18-suppressed', 'L18-unused',
+]);
+
+// Safety rules are excepted only in ctxlock.yaml, judged from the base. A directive in a synced or
+// generated file is itself a hand edit to it, so it would excuse its own drift. L18 reports on quieting.
+const NEVER_INLINE = /^L(?:0|1|2|14|16|18)-/;
+const ID = /^(?:L\d+-[a-z0-9]+(?:-[a-z0-9]+)*|agnix:[A-Za-z0-9_.-]+)$/;
+// Ids are tokens with no colon, or agnix:<id>; the first colon after them starts the reason.
+const DIRECTIVE = /^<!--[ \t]*ctxlock-ignore-(next-line|file)[ \t]+((?:(?:agnix:[A-Za-z0-9_.-]+|[^\s:]+)[ \t]*)+):([^\n]*?)-->$/;
+
+// One line, a scope, rule ids by syntax (a newer ctxlock's rule is still a rule), and a reason of at most
+// 200 characters. Anything else is an ordinary comment.
+export function parseDirective(comment: string): Pick<Directive, 'scope' | 'rules' | 'reason'> | null {
+  const m = DIRECTIVE.exec(comment);
+  if (!m) return null;
+  const rules = m[2]!.trim().split(/[ \t]+/);
+  const reason = m[3]!.trim();
+  if (!rules[0] || !rules.every((r) => ID.test(r) && !NEVER_INLINE.test(r)) || reason.length === 0 || [...reason].length > 200) return null;
+  return { scope: m[1] as Directive['scope'], rules, reason };
+}
+
+export async function findDirectives(ctx: LintContext): Promise<Directive[]> {
+  const directives: Directive[] = [];
+  for await (const { path, text } of textFiles(ctx, undefined, true)) {
+    if (!path.endsWith('.md')) continue;
+    const lines = text.split(/\r?\n/);
+    for (const { comment, line } of htmlComments(text)) {
+      const parsed = parseDirective(comment);
+      if (!parsed) continue;
+      const next = lines.findIndex((l, i) => i >= line && l.trim() !== '');
+      directives.push({ path, line, ...parsed, target: parsed.scope === 'next-line' && next !== -1 ? next + 1 : null });
+    }
+  }
+  return directives;
 }
 
 const CONFIG = 'ctxlock.yaml';
@@ -26,7 +70,8 @@ const quiets = (d: Directive, f: Finding) => f.path === d.path && d.rules.includ
 // Exceptions, then directives, then lint.ignore: a finding quieted by one step is not there for the next,
 // so it counts as used only once. The L18 findings come after every step, so nothing can drop them.
 export function quiet(found: Finding[], ctx: LintContext, directives: Directive[]): Finding[] {
-  const { exceptions, ignore } = ctx.registry.lint;
+  const { ignore } = ctx.registry.lint;
+  const exceptions = ctx.suppressions === false ? [] : ctx.registry.lint.exceptions;
   const live = exceptions.filter((e) => ctx.today <= e.expires);
   const report: Finding[] = [];
 
@@ -68,7 +113,9 @@ export function quiet(found: Finding[], ctx: LintContext, directives: Directive[
     if (n > 0) {
       report.push({ rule: 'L18-suppressed', severity: 'info', ...at, message: `ctxlock-ignore-${d.scope} quiets ${findings(n)} of ${d.rules.join(', ')}: ${d.reason}` });
     } else if (ctx.agnixRan || !agnixOnly(d.rules)) {
-      report.push({ rule: 'L18-unused', severity: 'should', ...at, message: `ctxlock-ignore-${d.scope} ${d.rules.join(' ')} quiets nothing: ${d.reason}` });
+      const unknown = d.rules.filter((r) => !r.startsWith('agnix:') && !KNOWN_RULES.has(r));
+      const why = unknown.length > 0 ? `; ctxlock has no rule ${unknown.join(', ')}` : '';
+      report.push({ rule: 'L18-unused', severity: 'should', ...at, message: `ctxlock-ignore-${d.scope} ${d.rules.join(' ')} quiets nothing${why}: ${d.reason}` });
     }
   }
   for (const { p, used } of patterns) {

@@ -43,6 +43,8 @@ export interface ScanOptions {
   // Knowledge and metric folders the base declared, scanned as well as the pull request's own, so taking
   // a folder out of ctxlock.yaml or the lock does not take its edits out of the check (D30).
   declared?: Declared;
+  // false for a repository that is not yours (check): its own suppressions must not move the verdict.
+  suppressions?: boolean;
 }
 
 export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Promise<ScanResult> {
@@ -70,7 +72,7 @@ export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Prom
   const contexts = await resolveAll({ reader, units, limits }, registry.harnesses);
   const extra = opts.agnix ? await agnixFindings(reader.root, opts.runAgnix) : [];
   const generated = await loadGenerated(reader);
-  const ctx = { reader, units, registry, codeowners, contexts, limits, today: opts.today ?? localDate(), generated: generated.files, generatedError: generated.error, lock: lock.lock, lockError: lock.error, agnixRan: opts.agnix ?? false };
+  const ctx = { reader, units, registry, codeowners, contexts, limits, today: opts.today ?? localDate(), generated: generated.files, generatedError: generated.error, lock: lock.lock, lockError: lock.error, agnixRan: opts.agnix ?? false, suppressions: opts.suppressions ?? true };
   const findings = await runLint(ctx, [...problems, ...extra]);
   const inventory = (await execConfig.check(ctx)).filter((f) => f.rule === 'L2-exec-config');
   return { root: reader.root, ref: reader.ref, units, registry, contexts, budget: budgetReport(contexts, limits), findings, generated, lock: lock.lock, codeowners, inventory, declared: { ...declared, knowledge: [...declared.knowledge, ...bundles] } };

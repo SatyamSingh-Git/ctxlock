@@ -100,7 +100,7 @@ export async function checkTarget(target: string, opts: { ref?: string; cache: s
       });
   };
 
-  const scan = await scanRepo(base, { settings: DEFAULTS });
+  const scan = await scanRepo(base, { settings: DEFAULTS, suppressions: false });
   collect(scan);
   // Skills are shared in folders no agent reads (skills/<name>/, or the folder itself), so each
   // SKILL.md that is not an installed skill's own is read as if it were installed. Being part of some
@@ -115,7 +115,7 @@ export async function checkTarget(target: string, opts: { ref?: string; cache: s
     // A skill shared as the target itself is installed under its own name; its folder's is whatever it was cloned as.
     const own = from ? undefined : splitFrontmatter((await base.readFile(real)).toString('utf8')).frontmatter?.name;
     const to = `.agents/skills/${from ? posix.basename(from) : typeof own === 'string' && SKILL_NAME.test(own) ? own : name}/`;
-    collect(await scanRepo(mounted(base, reachable, links, from, to), { settings: DEFAULTS }), from, to);
+    collect(await scanRepo(mounted(base, reachable, links, from, to), { settings: DEFAULTS, suppressions: false }), from, to);
   }
   return {
     target,
