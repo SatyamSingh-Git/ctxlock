@@ -64,7 +64,7 @@ export async function runLint(ctx: LintContext, extra: Finding[] = []): Promise<
     if (!kept.has(key)) kept.set(key, finding);
   }
 
-  return quiet([...kept.values()], ctx, ctx.suppressions === false ? [] : await findDirectives(ctx)).sort(
+  return (await quiet([...kept.values()], ctx, ctx.suppressions === false ? [] : await findDirectives(ctx))).sort(
     (a, b) =>
       RANK[a.severity] - RANK[b.severity] ||
       byCodeUnit(a.path, b.path) ||

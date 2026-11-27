@@ -535,7 +535,7 @@ info    L18-suppressed  AGENTS.md                      exception for L1-html-com
 | Rule | Severity | When |
 |---|---|---|
 | `L18-suppressed` | info | A directive or exception quieted at least one finding. The message says what, how many, and why; for an exception, also the owner and the date it ends |
-| `L18-unused` | should | A directive, an exception or a `lint.ignore` pattern quieted nothing in this run. A directive or exception naming only `agnix:` rules is reported only when agnix ran |
+| `L18-unused` | should | A directive, an exception or a `lint.ignore` pattern quieted nothing in this run. In a run without `--agnix`, a directive naming only `agnix:` rules, or an ignore pattern whose files exist, is an info instead: it may be there for agnix's findings, and its reason or pattern is still shown |
 | `L18-exception-expired` | should | An exception is past its date, so its findings are back |
 
 The order is: `severity` (with `off`) first, then exceptions, then directives, then `lint.ignore`. A finding quieted by one step is not there for the next, so an exception for a rule that is `off` is unused. Nothing quiets L18 itself: `lint.ignore` does not drop it, and `lint.severity` cannot name it.
