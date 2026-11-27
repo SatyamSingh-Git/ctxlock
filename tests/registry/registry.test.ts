@@ -26,6 +26,16 @@ describe('loadRegistry', () => {
     });
   });
 
+  it('a date must be a real day of the calendar, not only look like one', async () => {
+    const exception = (expires: string) => `version: 1\nlint:\n  exceptions:\n    - rule: L9-stale\n      path: AGENTS.md\n      owner: "@sam"\n      reason: x\n      expires: ${expires}\n`;
+
+    expect((await load(exception('2028-02-29'))).lint.exceptions[0]!.expires).toBe('2028-02-29');
+    for (const bad of ['2027-02-29', '2027-02-31', '2027-13-01', '2027-00-10']) {
+      expect((await errorOf(exception(bad))).message).toContain('not a real date');
+    }
+    expect((await errorOf('version: 1\nunits:\n  AGENTS.md:\n    stale-after: 2027-04-31\n')).message).toContain('not a real date');
+  });
+
   it('lint.exceptions is validated: owner, reason and expiry, and a fingerprint or text for the safety rules', async () => {
     const one = (fields: string) => `version: 1\nlint:\n  exceptions:\n    - ${fields.split('\n').join('\n      ')}\n`;
     const full = 'rule: L5-instruction-count\npath: ./docs/AGENTS.md\nowner: "@sam"\nreason: one list\nexpires: 2027-01-01';

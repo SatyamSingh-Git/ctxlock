@@ -79,7 +79,17 @@ const EVAL_DEFAULTS = { model: 'sonnet', runs: 3, maxRuns: 24, maxMinutes: 20 };
 export class RegistryError extends Error {}
 
 const FILE = 'ctxlock.yaml';
-const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected a YYYY-MM-DD date');
+// A day that round-trips through the calendar, so 2027-02-31 is refused rather than read as March 3.
+const date = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected a YYYY-MM-DD date')
+  .refine(
+    (d) => {
+      const time = Date.parse(`${d}T00:00:00Z`);
+      return !Number.isNaN(time) && new Date(time).toISOString().startsWith(d);
+    },
+    { message: 'not a real date' },
+  );
 const harness = z.enum(['claude-code', 'codex']);
 
 // An exception for a safety rule must name the one finding it excuses, so it cannot also cover the
