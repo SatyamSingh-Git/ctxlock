@@ -54,18 +54,17 @@ export async function runLint(ctx: LintContext, extra: Finding[] = []): Promise<
   for (const rule of RULES) found.push(...(await rule.check(ALL_UNITS.has(rule) ? ctx : known)));
 
   const { severity } = ctx.registry.lint;
-  const rated: Finding[] = [];
+  // Duplicates go before quieting, so a suppression counts each finding once.
+  const kept = new Map<string, Finding>();
   for (const f of found) {
     const override = severity[f.rule];
-    if (override !== 'off') rated.push(override ? { ...f, severity: override } : f);
-  }
-  const kept = new Map<string, Finding>();
-  for (const finding of quiet(rated, ctx, ctx.suppressions === false ? [] : await findDirectives(ctx))) {
-    const key = JSON.stringify([finding.rule, finding.severity, finding.path, finding.line, finding.column, finding.message]);
+    if (override === 'off') continue;
+    const finding = override ? { ...f, severity: override } : f;
+    const key = JSON.stringify([finding.rule, finding.severity, finding.path, finding.line, finding.column, finding.message, finding.data?.fingerprint]);
     if (!kept.has(key)) kept.set(key, finding);
   }
 
-  return [...kept.values()].sort(
+  return quiet([...kept.values()], ctx, ctx.suppressions === false ? [] : await findDirectives(ctx)).sort(
     (a, b) =>
       RANK[a.severity] - RANK[b.severity] ||
       byCodeUnit(a.path, b.path) ||

@@ -222,3 +222,12 @@ describe('final review', () => {
     expect(l18(quieted).map(([rule]) => rule)).toEqual(['L18-suppressed']);
   });
 });
+
+describe('minor fixes', () => {
+  it('a finding reported twice is one finding, and is counted once', async () => {
+    const twice = finding('L9-stale', 'should', 'AGENTS.md', { line: 2 });
+    const out = await runLint(await lintContext({ 'AGENTS.md': '<!-- ctxlock-ignore-file L9-stale: old script -->\nnpm run x\n' }), [twice, { ...twice }]);
+
+    expect(l18(out)).toEqual([['L18-suppressed', 'info', 'AGENTS.md', 'ctxlock-ignore-file quiets 1 finding of L9-stale: old script']]);
+  });
+});
