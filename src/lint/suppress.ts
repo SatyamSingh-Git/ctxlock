@@ -47,7 +47,8 @@ export function parseDirective(comment: string): Pick<Directive, 'scope' | 'rule
 export async function findDirectives(ctx: LintContext): Promise<Directive[]> {
   const directives: Directive[] = [];
   for await (const { path, text } of textFiles(ctx, undefined, true)) {
-    if (!path.endsWith('.md')) continue;
+    // Finding comments outside code parses the markdown; most files have no directive to find.
+    if (!path.endsWith('.md') || !text.includes('ctxlock-ignore')) continue;
     const lines = text.split(/\r?\n/);
     const front = frontmatterEnd(text);
     for (const { comment, line } of htmlComments(text)) {
