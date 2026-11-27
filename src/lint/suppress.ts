@@ -1,7 +1,7 @@
 import picomatch from 'picomatch';
 import type { Finding } from '../model.js';
 import type { LintException } from '../registry/registry.js';
-import { htmlComments, textFiles } from './files.js';
+import { frontmatterEnd, htmlComments, textFiles } from './files.js';
 import type { LintContext } from './types.js';
 
 export interface Directive {
@@ -49,8 +49,9 @@ export async function findDirectives(ctx: LintContext): Promise<Directive[]> {
   for await (const { path, text } of textFiles(ctx, undefined, true)) {
     if (!path.endsWith('.md')) continue;
     const lines = text.split(/\r?\n/);
+    const front = frontmatterEnd(text);
     for (const { comment, line } of htmlComments(text)) {
-      const parsed = parseDirective(comment);
+      const parsed = line > front ? parseDirective(comment) : null;
       if (!parsed) continue;
       const next = lines.findIndex((l, i) => i >= line && l.trim() !== '');
       directives.push({ path, line, ...parsed, target: parsed.scope === 'next-line' && next !== -1 ? next + 1 : null });

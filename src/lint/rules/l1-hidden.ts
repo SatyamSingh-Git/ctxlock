@@ -1,6 +1,6 @@
 import type { Finding, Severity } from '../../model.js';
 import { sha256Hex } from '../../units/digest.js';
-import { htmlComments, quote, textFiles } from '../files.js';
+import { frontmatterEnd, htmlComments, quote, textFiles } from '../files.js';
 import { parseDirective } from '../suppress.js';
 import type { Rule } from '../types.js';
 
@@ -143,10 +143,11 @@ export const htmlComment: Rule = {
     const findings: Finding[] = [];
     for await (const { unit, path, text } of textFiles(ctx, undefined, true)) {
       if (!path.endsWith('.md')) continue;
+      const front = frontmatterEnd(text);
       for (const { comment, line, column } of htmlComments(text)) {
         // A suppression's reason is shown in its L18 finding instead. Where suppressions are not honoured,
         // as in check on a stranger's repository, it is hidden text like any other comment.
-        if (ctx.suppressions !== false && parseDirective(comment)) continue;
+        if (ctx.suppressions !== false && line > front && parseDirective(comment)) continue;
         findings.push({
           rule: 'L1-html-comment',
           severity: MARKER.test(comment) ? 'info' : 'must',

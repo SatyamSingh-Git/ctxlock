@@ -239,6 +239,16 @@ describe('minor fixes', () => {
     ]);
   });
 
+  it('a directive in YAML frontmatter is not a directive, and is reported as the hidden comment it is', async () => {
+    const body = Array.from({ length: 600 }, (_, i) => `Step ${i}.`).join('\n');
+    const skill = `---\nname: big\ndescription: A long skill\n# <!-- ctxlock-ignore-file L6-skill-length: generated -->\n---\n${body}\n`;
+    const out = await runLint(await lintContext({ '.claude/skills/big/SKILL.md': skill }));
+
+    expect(out.map((f) => f.rule)).toContain('L6-skill-length');
+    expect(out).toContainEqual(expect.objectContaining({ rule: 'L1-html-comment', severity: 'must', line: 4 }));
+    expect(l18(out)).toEqual([]);
+  });
+
   it('a finding reported twice is one finding, and is counted once', async () => {
     const twice = finding('L9-stale', 'should', 'AGENTS.md', { line: 2 });
     const out = await runLint(await lintContext({ 'AGENTS.md': '<!-- ctxlock-ignore-file L9-stale: old script -->\nnpm run x\n' }), [twice, { ...twice }]);

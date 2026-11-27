@@ -1,5 +1,6 @@
 import type { Unit } from '../model.js';
 import type { RepoReader } from '../repo/reader.js';
+import { splitFrontmatter } from '../units/frontmatter.js';
 import { maskCode } from '../units/markdown.js';
 import type { LintContext } from './types.js';
 
@@ -59,6 +60,12 @@ export function htmlComments(text: string): Array<{ comment: string; line: numbe
     comment: text.slice(match.index, match.index + match[0].length),
     ...lineAndColumn(text, match.index),
   }));
+}
+
+// The last line of the YAML frontmatter, or 0 when there is none. A directive there is YAML text, not markdown.
+export function frontmatterEnd(text: string): number {
+  const { frontmatter, body } = splitFrontmatter(text);
+  return frontmatter === null ? 0 : text.replace(/\r\n/g, '\n').split('\n').length - body.split('\n').length;
 }
 
 export const quote = (s: string) => {
