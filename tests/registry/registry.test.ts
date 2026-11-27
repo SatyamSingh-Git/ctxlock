@@ -21,9 +21,25 @@ describe('loadRegistry', () => {
       consumers: [],
       upstreams: [],
       limits: {},
-      lint: { severity: {}, ignore: [] },
+      lint: { severity: {}, ignore: [], exceptions: [] },
       eval: { model: 'sonnet', runs: 3, maxRuns: 24, maxMinutes: 20 },
     });
+  });
+
+  it('lint.exceptions is validated: owner, reason and expiry, and a fingerprint or text for the safety rules', async () => {
+    const one = (fields: string) => `version: 1\nlint:\n  exceptions:\n    - ${fields.split('\n').join('\n      ')}\n`;
+    const full = 'rule: L5-instruction-count\npath: ./docs/AGENTS.md\nowner: "@sam"\nreason: one list\nexpires: 2027-01-01';
+
+    expect((await load(one(full))).lint.exceptions).toEqual([
+      { rule: 'L5-instruction-count', path: 'docs/AGENTS.md', owner: '@sam', reason: 'one list', expires: '2027-01-01' },
+    ]);
+    for (const broken of [full.replace(/owner.*\n/, ''), full.replace(/\nexpires.*/, ''), full.replace('2027-01-01', 'tomorrow')]) {
+      expect(await errorOf(one(broken))).toBeInstanceOf(RegistryError);
+    }
+    expect((await errorOf(one(full.replace('L5-instruction-count', 'L1-html-comment')))).message).toContain('fingerprint');
+    expect(await errorOf(one(full.replace('L5-instruction-count', 'L2-risky-instruction')))).toBeInstanceOf(RegistryError);
+    expect(await load(one(`${full.replace('L5-instruction-count', 'L2-risky-instruction')}\nmatch: curl`))).toBeTruthy();
+    expect((await errorOf('version: 1\nlint:\n  severity:\n    L18-unused: "off"\n')).message).toContain('L18-unused');
   });
 
   it("kebab-case unit fields map to camelCase and 2026-10-01 stays the string '2026-10-01'", async () => {

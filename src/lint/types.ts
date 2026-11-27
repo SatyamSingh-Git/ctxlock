@@ -21,6 +21,8 @@ export interface LintContext {
   // From ctxlock.lock; an unreadable lock gives no upstreams and its error.
   lock: Lock;
   lockError: string | null;
+  // Whether agnix ran in this scan; without it, a suppression of an agnix rule cannot be told stale.
+  agnixRan?: boolean;
 }
 
 export interface Rule {

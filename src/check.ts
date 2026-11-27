@@ -26,7 +26,7 @@ export interface CheckResult {
 // The safety rules: what reaches an agent unseen, and what runs. Inventory items are listed as runs.
 const SAFETY = /^L[012]-/;
 // The target is someone else's: its own ctxlock.yaml must not switch off or ignore what check reports.
-const DEFAULTS = { harnesses: ['claude-code', 'codex'] as HarnessId[], limits: {}, lint: { severity: {}, ignore: [] } };
+const DEFAULTS = { harnesses: ['claude-code', 'codex'] as HarnessId[], limits: {}, lint: { severity: {}, ignore: [], exceptions: [] } };
 
 // The folder `from` of the target, seen at `to` (an installed skill's place) and nothing else. A link
 // in it reads as the file it reaches, wherever that is, as the agent would read it through the link.

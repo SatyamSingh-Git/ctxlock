@@ -1,4 +1,3 @@
-import picomatch from 'picomatch';
 import { type Finding, modelled } from '../model.js';
 import { skillSpec } from './rules/l0-skill-spec.js';
 import { hiddenUnicode, htmlComment } from './rules/l1-hidden.js';
@@ -17,6 +16,7 @@ import { generatedDrift } from './rules/l14-generated.js';
 import { graphRefs } from './rules/l15-graph.js';
 import { lockDrift } from './rules/l16-lock.js';
 import { format } from './rules/l17-format.js';
+import { quiet } from './suppress.js';
 import type { LintContext, Rule } from './types.js';
 
 export const RULES: Rule[] = [
@@ -53,14 +53,14 @@ export async function runLint(ctx: LintContext, extra: Finding[] = []): Promise<
   const known = { ...ctx, units: ctx.units.filter(modelled) };
   for (const rule of RULES) found.push(...(await rule.check(ALL_UNITS.has(rule) ? ctx : known)));
 
-  const { severity, ignore } = ctx.registry.lint;
-  const ignored = picomatch(ignore, { dot: true });
-  const kept = new Map<string, Finding>();
+  const { severity } = ctx.registry.lint;
+  const rated: Finding[] = [];
   for (const f of found) {
     const override = severity[f.rule];
-    if (override === 'off') continue;
-    const finding = override ? { ...f, severity: override } : f;
-    if (finding.path !== undefined && ignore.length > 0 && ignored(finding.path)) continue;
+    if (override !== 'off') rated.push(override ? { ...f, severity: override } : f);
+  }
+  const kept = new Map<string, Finding>();
+  for (const finding of quiet(rated, ctx, [])) {
     const key = JSON.stringify([finding.rule, finding.severity, finding.path, finding.line, finding.column, finding.message]);
     if (!kept.has(key)) kept.set(key, finding);
   }

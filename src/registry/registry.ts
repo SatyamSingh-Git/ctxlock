@@ -50,6 +50,16 @@ export interface Upstream {
   allowExec: string[];
 }
 
+export interface LintException {
+  rule: string;
+  path: string;
+  fingerprint?: string;
+  match?: string;
+  owner: string;
+  reason: string;
+  expires: string; // YYYY-MM-DD, the last day it applies
+}
+
 export interface Registry {
   present: boolean;
   harnesses: HarnessId[];
@@ -60,7 +70,7 @@ export interface Registry {
   consumers: Consumer[];
   upstreams: Upstream[];
   limits: Partial<Limits>;
-  lint: { severity: Record<string, Severity | 'off'>; ignore: string[] };
+  lint: { severity: Record<string, Severity | 'off'>; ignore: string[]; exceptions: LintException[] };
   eval: { model: string; runs: number; maxRuns: number; maxMinutes: number };
 }
 
@@ -71,6 +81,27 @@ export class RegistryError extends Error {}
 const FILE = 'ctxlock.yaml';
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected a YYYY-MM-DD date');
 const harness = z.enum(['claude-code', 'codex']);
+
+// An exception for a safety rule must name the one finding it excuses, so it cannot also cover the
+// next one a pull request adds to the same file. L1's messages give only a code point and position, or
+// a comment's first 60 characters, so only its fingerprint names one.
+const lintException = z
+  .strictObject({
+    rule: z.string().min(1),
+    path: z.string().min(1).transform(repoPath),
+    fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/, 'expected sha256: and 64 hex digits').optional(),
+    match: z.string().min(1).optional(),
+    owner: z.string().min(1),
+    reason: z.string().min(1),
+    expires: date,
+  })
+  .superRefine((e, issues) => {
+    if (e.rule.startsWith('L1-') && e.fingerprint === undefined) {
+      issues.addIssue({ code: 'custom', path: ['fingerprint'], message: `an exception for ${e.rule} needs the finding's fingerprint, from ctxlock lint --format json` });
+    } else if (/^L[02]-/.test(e.rule) && e.fingerprint === undefined && e.match === undefined) {
+      issues.addIssue({ code: 'custom', path: ['match'], message: `an exception for ${e.rule} needs a fingerprint or a match` });
+    }
+  });
 
 // "path@tier". Only a bare word after the last @ is read as a tier, so an @ in a file or folder name,
 // as in docs/@scope/a.md or notes@v2.md, stays part of the path.
@@ -138,10 +169,16 @@ const schema = z.strictObject({
     .default({}),
   lint: z
     .strictObject({
-      severity: z.record(z.string(), z.enum(['must', 'should', 'info', 'off'])).default({}),
+      severity: z
+        .record(z.string(), z.enum(['must', 'should', 'info', 'off']))
+        .refine((s) => !Object.keys(s).some((rule) => rule.startsWith('L18-')), {
+          message: 'L18-suppressed, L18-unused and L18-exception-expired report on quieting itself, so their severity cannot change',
+        })
+        .default({}),
       ignore: z.array(z.string()).default([]),
+      exceptions: z.array(lintException).default([]),
     })
-    .default({ severity: {}, ignore: [] }),
+    .default({ severity: {}, ignore: [], exceptions: [] }),
   eval: z
     .strictObject({
       model: z.string().min(1).optional(),
@@ -162,7 +199,7 @@ export function describeIssue(issue: z.core.$ZodIssue): string {
 
 export async function loadRegistry(reader: RepoReader): Promise<Registry> {
   if (!(await reader.exists(FILE))) {
-    return { present: false, harnesses: ['claude-code', 'codex'], units: {}, knowledge: [], metrics: [], consumers: [], upstreams: [], limits: {}, lint: { severity: {}, ignore: [] }, eval: EVAL_DEFAULTS };
+    return { present: false, harnesses: ['claude-code', 'codex'], units: {}, knowledge: [], metrics: [], consumers: [], upstreams: [], limits: {}, lint: { severity: {}, ignore: [], exceptions: [] }, eval: EVAL_DEFAULTS };
   }
 
   let raw: unknown;

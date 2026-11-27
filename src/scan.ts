@@ -70,7 +70,7 @@ export async function scanRepo(reader: RepoReader, opts: ScanOptions = {}): Prom
   const contexts = await resolveAll({ reader, units, limits }, registry.harnesses);
   const extra = opts.agnix ? await agnixFindings(reader.root, opts.runAgnix) : [];
   const generated = await loadGenerated(reader);
-  const ctx = { reader, units, registry, codeowners, contexts, limits, today: opts.today ?? localDate(), generated: generated.files, generatedError: generated.error, lock: lock.lock, lockError: lock.error };
+  const ctx = { reader, units, registry, codeowners, contexts, limits, today: opts.today ?? localDate(), generated: generated.files, generatedError: generated.error, lock: lock.lock, lockError: lock.error, agnixRan: opts.agnix ?? false };
   const findings = await runLint(ctx, [...problems, ...extra]);
   const inventory = (await execConfig.check(ctx)).filter((f) => f.rule === 'L2-exec-config');
   return { root: reader.root, ref: reader.ref, units, registry, contexts, budget: budgetReport(contexts, limits), findings, generated, lock: lock.lock, codeowners, inventory, declared: { ...declared, knowledge: [...declared.knowledge, ...bundles] } };
