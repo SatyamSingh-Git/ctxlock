@@ -50,6 +50,12 @@ lint:
     L1-html-comment: should    # must | should | info | off
   ignore:
     - "vendor/**"
+  exceptions:
+    - rule: L5-instruction-count
+      path: AGENTS.md
+      owner: "@platform"
+      reason: one checklist on purpose; split it in Q1
+      expires: 2027-03-31
 
 # How ctxlock eval runs probes. Read from the base branch, like lint settings in diff.
 eval:
@@ -81,7 +87,8 @@ Quote owners that start with `@`; YAML reserves that character.
 | `consumers.<name>.models`, `.repos` | no | The models it pins and the repositories it runs in. Recorded now; the eval and sync work reads them later |
 | `limits.<name>` | no | A non-negative integer overriding a harness limit (see below). `0` is allowed; Codex treats it as "load no AGENTS.md". |
 | `lint.severity.<rule>` | no | Change a rule's severity, or turn it `off` |
-| `lint.ignore` | no | Globs of paths whose findings are dropped |
+| `lint.ignore` | no | Globs of paths whose findings are dropped. A pattern that drops nothing is an `L18-unused` should |
+| `lint.exceptions` | no | Findings excused one by one: `rule`, `path`, `owner`, `reason` and `expires`, plus a `fingerprint` (needed for L1) or a `match` (L0 and L2 need one of the two). See [Quieting a finding](rules.md#quieting-a-finding) |
 | `eval.model` | no | The model [`ctxlock eval`](evals.md) asks Claude Code for. Defaults to `sonnet` |
 | `eval.runs` | no | Runs per arm, 1 to 20. Defaults to 3 |
 | `eval.max-runs` | no | The most runs one check may start, at least 2. Defaults to 24 |

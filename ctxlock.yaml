@@ -1,0 +1,7 @@
+version: 1
+
+lint:
+  # Spike and test fixtures: other projects' context, copied to test against, not this project's own.
+  ignore:
+    - "spikes/**"
+    - "tests/fixtures/**"

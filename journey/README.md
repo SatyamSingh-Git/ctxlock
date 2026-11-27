@@ -2,7 +2,7 @@
 
 How ctxlock got here: what was tried, what changed, what worked, what broke, and what was learned. Each chapter is written when a stretch of work ends, and nothing is revised in hindsight. [decisions.md](decisions.md) and [mistakes.md](mistakes.md) are kept current throughout.
 
-**Latest:** [20 — verdicts that a test supports](20-honest-verdicts.md).
+**Latest:** [22 — quieting a finding, with a reason](22-suppressions.md).
 - Plan 14, Now 1 of the risk review: `improved` and `regressed` need a one-sided Fisher p ≤ 0.05, a gap of half the runs without it is `uncertain`, only a probe passing at least 0.9 of its base runs gates, diagnose replays at 3 runs a side, and `--extend` gives a close call a second round.
 - Live A/A, with nothing changed: the old rule called one probe of 11 a regression; the new verdicts called none, and `--extend` settled it.
 - Found: a probe that turned red on both sides because the agent now types `cd` first, caught by the new "fails on the base" note; and a plan whose rule and own test disagreed.

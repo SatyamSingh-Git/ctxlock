@@ -18,7 +18,9 @@ lint:
     - "vendor/**"
 ```
 
-> **Status:** the rules on this page are implemented and tested: L0–L11 and L13–L17. L12, a model-based contradiction check, is planned for later. `ctxlock lint` runs them ([commands](commands.md)).
+To quiet one finding instead of a whole rule, see [Quieting a finding](#quieting-a-finding).
+
+> **Status:** the rules on this page are implemented and tested: L0–L11 and L13–L18. L12, a model-based contradiction check, is planned for later. `ctxlock lint` runs them ([commands](commands.md)).
 
 > **Other agents' files.** On the files of Copilot, Cursor, Gemini, Antigravity, Devin, Kiro, Cline, OpenCode and Junie, only some rules run:
 > - L0, for encoding and symlinks everywhere, and for frontmatter in skills only;
@@ -120,6 +122,8 @@ One-line comments that are clearly markers, not notes, are `info` instead of `mu
 The grammar is strict on purpose: a comment with words in it, or one spread over several lines, stays `must`.
 
 Comments are invisible in the rendered markdown that reviewers read. Claude Code removes block-level comments before loading a file, but Codex and other agents read them as-is.
+
+A valid `ctxlock-ignore` directive is the one comment not reported here, because its reason is shown in an `L18-suppressed` or `L18-unused` finding instead ([Quieting a finding](#quieting-a-finding)). `ctxlock check` reports it like any other comment.
 
 **Fix:** turn the note into visible text, or move it out of the context file. To show the comment syntax itself, put it in inline code or a fenced block.
 
@@ -472,3 +476,66 @@ should  L17-trust-differs  kb/nrr.md  ctxlock.yaml says stale-after 2027-01-31, 
 ```
 
 **Fix:** change one to match the other, or remove the one in `ctxlock.yaml`.
+
+---
+
+## Quieting a finding
+
+When a finding is right about the file but your team has decided it is fine, quiet that one finding, with a reason. Turning the rule off would quiet every other finding too. There are two ways to do it.
+
+**An inline directive** goes in the markdown file itself, on its own line:
+
+```markdown
+<!-- ctxlock-ignore-next-line L5-instruction-count: one list on purpose; split in Q1 -->
+<!-- ctxlock-ignore-file L6-skill-length L9-stale: generated from openapi.yaml -->
+```
+
+- **`next-line`** quiets the named rules' findings on the next non-blank line. **`file`** quiets them anywhere in the file.
+- **The grammar is strict.** It is one line, with one or more exact rule ids (`L<number>-…` or `agnix:…`), a colon, and a reason of up to 200 characters. Anything else is an ordinary HTML comment, and `L1-html-comment` reports it.
+- **A directive inside a code block or inline code** is an example, not a directive.
+- **The safety rules cannot be quieted inline:** L0, L1 and L2, and also L14 and L16, because a directive added to a generated or synced file is itself a hand edit to that file. A pull request that adds a hidden character must not be able to excuse it in the same file.
+- **A rule id ctxlock does not have** is still accepted, so a repository written for a newer ctxlock does not fail. `L18-unused` says so.
+
+**An exception** goes in `ctxlock.yaml` under `lint.exceptions`, and works for any rule, safety rules included:
+
+```yaml
+lint:
+  exceptions:
+    - rule: L1-html-comment
+      path: AGENTS.md
+      fingerprint: sha256:131eac0d…   # the finding's data.fingerprint, from ctxlock lint --format json
+      owner: "@legal"
+      reason: the license header legal requires
+      expires: 2027-03-01
+```
+
+- **`rule` is exact, and `path` is one exact file.** There are no globs, because an exception is one decision about one file.
+- **`owner`, `reason` and `expires` are required.** The exception applies up to and including `expires`. After that, its findings come back, and `L18-exception-expired` names the owner.
+- **The safety rules need you to name the one finding being excused**, so an exception for one hidden comment does not also cover the next one a pull request adds.
+  - An `L1-` exception needs the finding's `fingerprint`. L1's messages give only a code point and a position, or a comment's first 60 characters, so only the fingerprint names one finding.
+  - Other `L0-` and `L2-` exceptions need a `fingerprint` or a `match`, a piece of text the finding's message must contain.
+  - Other rules may use either, or neither.
+- **In `ctxlock diff` and the Action, exceptions come from the base branch,** like the rest of `lint`. A pull request can propose an exception, but it applies only once merged.
+
+**Nothing is quieted unseen.** Every directive and exception that quiets something is listed with its reason, so a reviewer sees it in `lint` output, and a new one in the pull request comment. Every directive, exception and `lint.ignore` pattern that quiets nothing is listed too, so ignores do not outlive what they were for. Real output from a small repository with an exception, a directive in a long generated skill, and an ignore left over from a deleted `vendor/` folder:
+
+```
+should  L18-unused      ctxlock.yaml                   lint.ignore pattern "vendor/**" quiets nothing
+info    L11-coverage    .claude/skills/api/SKILL.md    .claude/skills/api/SKILL.md reaches claude-code only
+info    L18-suppressed  .claude/skills/api/SKILL.md:5  ctxlock-ignore-file quiets 1 finding of L6-skill-length: generated from openapi.yaml; edit the spec instead
+info    L18-suppressed  AGENTS.md                      exception for L1-html-comment on AGENTS.md quiets 1 finding, owner @legal, until 2027-03-01: the license header legal requires
+```
+
+**`ctxlock check` honours none of this.** It judges someone else's repository, so their suppressions do not count, and each directive is reported as the hidden comment it is.
+
+## L18: quieting itself
+
+| Rule | Severity | When |
+|---|---|---|
+| `L18-suppressed` | info | A directive or exception quieted at least one finding. The message says what, how many, and why; for an exception, also the owner and the date it ends |
+| `L18-unused` | should | A directive, an exception or a `lint.ignore` pattern quieted nothing in this run. A directive or exception naming only `agnix:` rules is reported only when agnix ran |
+| `L18-exception-expired` | should | An exception is past its date, so its findings are back |
+
+The order is: `severity` (with `off`) first, then exceptions, then directives, then `lint.ignore`. A finding quieted by one step is not there for the next, so an exception for a rule that is `off` is unused. Nothing quiets L18 itself: `lint.ignore` does not drop it, and `lint.severity` cannot name it.
+
+**Fix:** for `L18-unused`, delete what quiets nothing. For `L18-exception-expired`, fix the finding, or have the owner renew the date.
