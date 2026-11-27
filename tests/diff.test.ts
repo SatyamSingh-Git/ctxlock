@@ -187,6 +187,21 @@ describe('ctxlock diff', () => {
     expect(JSON.parse(stdout).newFindings).toContainEqual(expect.objectContaining({ rule: 'L18-suppressed', path: 'AGENTS.md' }));
   });
 
+  it('a directive that quiets more findings than on the base shows in the diff', async () => {
+    const agents = (lines: string) => `<!-- ctxlock-ignore-file L9-stale: the scripts land next sprint -->\n${lines}`;
+    const pkg = JSON.stringify({ scripts: {} });
+    const { dir, shas } = await gitRepo([
+      { 'package.json': pkg, 'AGENTS.md': agents('Run `pnpm test`.\n') },
+      { 'package.json': pkg, 'AGENTS.md': agents('Run `pnpm test`.\nRun `npm run lint`.\n') },
+    ]);
+
+    const { stdout } = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, dir, '--format', 'json');
+
+    expect(JSON.parse(stdout).newFindings).toContainEqual(
+      expect.objectContaining({ rule: 'L18-suppressed', message: 'ctxlock-ignore-file quiets 2 findings of L9-stale: the scripts land next sprint' }),
+    );
+  });
+
   it('a new inline directive shows in the diff with its reason', async () => {
     const skill = (extra: string) => `---\nname: big\ndescription: A long skill\n---\n${extra}${Array.from({ length: 600 }, (_, i) => `Step ${i}.`).join('\n')}\n`;
     const { dir, shas } = await gitRepo([

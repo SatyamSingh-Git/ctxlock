@@ -24,8 +24,10 @@ export interface DiffResult {
 // Positions and counts in messages move with unrelated edits ("at 14:7", "is 33902 bytes",
 // "(1 unit)" becoming "(4 units)"), so findings are matched without them. A finding about hidden
 // content carries a fingerprint of all of it, since its message quotes only the start.
+// A suppression's message holds no position, only what it quiets, how many, until when and why, so it
+// is matched whole: quieting more than on the base is a change a reviewer should see.
 const key = (f: Finding) =>
-  `${f.rule}|${f.unitId ?? f.path ?? ''}|${f.data?.fingerprint ?? f.message.replace(/\b\d+\b/g, '#').replace(/# (\w+?)s\b/g, '# $1')}`;
+  `${f.rule}|${f.unitId ?? f.path ?? ''}|${f.data?.fingerprint ?? (f.rule === 'L18-suppressed' ? f.message : f.message.replace(/\b\d+\b/g, '#').replace(/# (\w+?)s\b/g, '# $1'))}`;
 
 // Findings in `from` with no counterpart in `against`, matched one to one, so a second copy of a
 // finding a file already had still counts as new.
