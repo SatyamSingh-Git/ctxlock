@@ -27,9 +27,11 @@ export const KNOWN_RULES: ReadonlySet<string> = new Set([
 // Safety rules are excepted only in ctxlock.yaml, judged from the base. A directive in a synced or
 // generated file is itself a hand edit to it, so it would excuse its own drift. L18 reports on quieting.
 const NEVER_INLINE = /^L(?:0|1|2|14|16|18)-/;
-const ID = /^(?:L\d+-[a-z0-9]+(?:-[a-z0-9]+)*|agnix:[A-Za-z0-9_.-]+)$/;
-// Ids are tokens with no colon, or agnix:<id>; the first colon after them starts the reason.
-const DIRECTIVE = /^<!--[ \t]*ctxlock-ignore-(next-line|file)[ \t]+((?:(?:agnix:[A-Za-z0-9_.-]+|[^\s:]+)[ \t]*)+):([^\n]*?)-->$/;
+const SAFETY = /^L[012]-/;
+// Each id is spelled one way only and ids are separated by required spaces, so a comment that is not
+// a directive fails at once; a looser token here backtracked exponentially on a missing colon.
+const ID = '(?:L(?:0|[1-9][0-9]*)-[a-z0-9]+(?:-[a-z0-9]+)*|agnix:[A-Za-z0-9_.-]+)';
+const DIRECTIVE = new RegExp(`^<!--[ \\t]*ctxlock-ignore-(next-line|file)[ \\t]+(${ID}(?:[ \\t]+${ID})*)[ \\t]*:([^\\n]*?)-->$`);
 
 // One line, a scope, rule ids by syntax (a newer ctxlock's rule is still a rule), and a reason of at most
 // 200 characters. Anything else is an ordinary comment.
@@ -38,7 +40,7 @@ export function parseDirective(comment: string): Pick<Directive, 'scope' | 'rule
   if (!m) return null;
   const rules = m[2]!.trim().split(/[ \t]+/);
   const reason = m[3]!.trim();
-  if (!rules[0] || !rules.every((r) => ID.test(r) && !NEVER_INLINE.test(r)) || reason.length === 0 || [...reason].length > 200) return null;
+  if (rules.some((r) => NEVER_INLINE.test(r)) || reason.length === 0 || [...reason].length > 200) return null;
   return { scope: m[1] as Directive['scope'], rules, reason };
 }
 
@@ -76,8 +78,11 @@ export function quiet(found: Finding[], ctx: LintContext, directives: Directive[
   const report: Finding[] = [];
 
   const exceptionUse = new Map<LintException, number>();
+  // A safety exception excuses the one finding it names: a fingerprint is only the hidden characters
+  // themselves, so a second identical character a pull request adds must stay a must.
+  const spent = (e: LintException) => SAFETY.test(e.rule) && (exceptionUse.get(e) ?? 0) > 0;
   let kept = found.filter((f) => {
-    const e = live.find((x) => excepts(x, f));
+    const e = live.find((x) => !spent(x) && excepts(x, f));
     if (e) exceptionUse.set(e, (exceptionUse.get(e) ?? 0) + 1);
     return !e;
   });
@@ -112,7 +117,10 @@ export function quiet(found: Finding[], ctx: LintContext, directives: Directive[
     const at = { path: d.path, line: d.line };
     if (n > 0) {
       report.push({ rule: 'L18-suppressed', severity: 'info', ...at, message: `ctxlock-ignore-${d.scope} quiets ${findings(n)} of ${d.rules.join(', ')}: ${d.reason}` });
-    } else if (ctx.agnixRan || !agnixOnly(d.rules)) {
+    } else if (!ctx.agnixRan && agnixOnly(d.rules)) {
+      // Not stale, but its reason is still hidden text, so it is shown here rather than nowhere.
+      report.push({ rule: 'L18-unused', severity: 'info', ...at, message: `ctxlock-ignore-${d.scope} ${d.rules.join(' ')} is for agnix, which did not run, so ctxlock cannot tell what it quiets: ${d.reason}` });
+    } else {
       const unknown = d.rules.filter((r) => !r.startsWith('agnix:') && !KNOWN_RULES.has(r));
       const why = unknown.length > 0 ? `; ctxlock has no rule ${unknown.join(', ')}` : '';
       report.push({ rule: 'L18-unused', severity: 'should', ...at, message: `ctxlock-ignore-${d.scope} ${d.rules.join(' ')} quiets nothing${why}: ${d.reason}` });

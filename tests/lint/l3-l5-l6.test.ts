@@ -146,8 +146,8 @@ describe('L5-instruction-count', () => {
       }),
     ).toEqual([]);
     expect(await run(instructionCount, { 'AGENTS.md': `${items(151)}\n${notItems}\n` })).toEqual([
-      ['should', undefined, "151 list items are always in Claude Code's context at the repository root; models start dropping instructions past 150"],
-      ['should', undefined, "151 list items are always in Codex's context at the repository root; models start dropping instructions past 150"],
+      ['should', 'AGENTS.md', "151 list items are always in Claude Code's context at the repository root; models start dropping instructions past 150"],
+      ['should', 'AGENTS.md', "151 list items are always in Codex's context at the repository root; models start dropping instructions past 150"],
     ]);
   });
 
@@ -162,7 +162,7 @@ describe('L5-instruction-count', () => {
         'docs/more.md': items(30),
         '.claude/rules/style.md': items(21),
       }),
-    ).toEqual([['should', undefined, "151 list items are always in Claude Code's context at the repository root; models start dropping instructions past 150"]]);
+    ).toEqual([['should', 'CLAUDE.md', "151 list items are always in Claude Code's context at the repository root; models start dropping instructions past 150"]]);
   });
 
   it('a CLAUDE.md symlinked to AGENTS.md is read through the file it points to', async () => {
@@ -176,7 +176,7 @@ describe('L5-instruction-count', () => {
 
   it('Codex counts only the part of a file it loads', async () => {
     expect(await run(instructionCount, { 'AGENTS.md': `${'x'.repeat(32760)}\n${items(151)}\n` })).toEqual([
-      ['should', undefined, "151 list items are always in Claude Code's context at the repository root; models start dropping instructions past 150"],
+      ['should', 'AGENTS.md', "151 list items are always in Claude Code's context at the repository root; models start dropping instructions past 150"],
     ]);
   });
 });

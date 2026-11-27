@@ -486,15 +486,16 @@ When a finding is right about the file but your team has decided it is fine, qui
 **An inline directive** goes in the markdown file itself, on its own line:
 
 ```markdown
-<!-- ctxlock-ignore-next-line L5-instruction-count: one list on purpose; split in Q1 -->
-<!-- ctxlock-ignore-file L6-skill-length L9-stale: generated from openapi.yaml -->
+<!-- ctxlock-ignore-next-line L9-stale: the script is added by the release job -->
+<!-- ctxlock-ignore-file L5-instruction-count L6-skill-length: generated from openapi.yaml -->
 ```
 
-- **`next-line`** quiets the named rules' findings on the next non-blank line. **`file`** quiets them anywhere in the file.
+- **`next-line`** quiets the named rules' findings on the next non-blank line. **`file`** quiets them anywhere in the file, including findings about the whole file, such as `L5-instruction-count`, which names the file with the most list items.
 - **The grammar is strict.** It is one line, with one or more exact rule ids (`L<number>-…` or `agnix:…`), a colon, and a reason of up to 200 characters. Anything else is an ordinary HTML comment, and `L1-html-comment` reports it.
 - **A directive inside a code block or inline code** is an example, not a directive.
 - **The safety rules cannot be quieted inline:** L0, L1 and L2, and also L14 and L16, because a directive added to a generated or synced file is itself a hand edit to that file. A pull request that adds a hidden character must not be able to excuse it in the same file.
 - **A rule id ctxlock does not have** is still accepted, so a repository written for a newer ctxlock does not fail. `L18-unused` says so.
+- **A directive for `agnix:` rules only**, in a run without `--agnix`, is an `L18-unused` info that quotes its reason. ctxlock cannot tell whether it is stale, but its text is still shown.
 
 **An exception** goes in `ctxlock.yaml` under `lint.exceptions`, and works for any rule, safety rules included:
 
@@ -515,6 +516,7 @@ lint:
   - An `L1-` exception needs the finding's `fingerprint`. L1's messages give only a code point and a position, or a comment's first 60 characters, so only the fingerprint names one finding.
   - Other `L0-` and `L2-` exceptions need a `fingerprint` or a `match`, a piece of text the finding's message must contain.
   - Other rules may use either, or neither.
+  - **A safety exception excuses one finding.** A fingerprint covers only the hidden characters themselves, so if a pull request adds a second identical one, that one stays a `must`.
 - **In `ctxlock diff` and the Action, exceptions come from the base branch,** like the rest of `lint`. A pull request can propose an exception, but it applies only once merged.
 
 **Nothing is quieted unseen.** Every directive and exception that quiets something is listed with its reason, so a reviewer sees it in `lint` output, and a new one in the pull request comment. Every directive, exception and `lint.ignore` pattern that quiets nothing is listed too, so ignores do not outlive what they were for. Real output from a small repository with an exception, a directive in a long generated skill, and an ignore left over from a deleted `vendor/` folder:

@@ -16,6 +16,8 @@ export const instructionCount: Rule = {
 
     for (const { harness, site, entries } of contexts) {
       let total = 0;
+      // The file with the most items, where a person would split the list or say it is on purpose.
+      let most = { file: '', count: -1 };
       for (const { unitId, path, mode, loadedBytes } of entries) {
         if (mode !== 'always') continue;
         // An entry's path can be a symlink, which the reader never reads through.
@@ -30,6 +32,7 @@ export const instructionCount: Rule = {
           counts.set(key, count);
         }
         total += count;
+        if (count > most.count) most = { file, count };
       }
       if (total > limits.alwaysOnInstructionItems) {
         const at = site === '' ? 'the repository root' : site;
@@ -37,6 +40,7 @@ export const instructionCount: Rule = {
           rule: 'L5-instruction-count',
           severity: 'should',
           message: `${total} list items are always in ${NAMES[harness]}'s context at ${at}; models start dropping instructions past ${limits.alwaysOnInstructionItems}`,
+          path: most.file,
         });
       }
     }

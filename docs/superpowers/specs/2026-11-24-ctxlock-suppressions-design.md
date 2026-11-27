@@ -57,8 +57,8 @@ Option C, as Satyam chose:
 Two forms, each one line, in a markdown context file (a unit, or a file of a skill):
 
 ```markdown
-<!-- ctxlock-ignore-next-line L5-instruction-count: one list on purpose; split in Q1 -->
-<!-- ctxlock-ignore-file L6-skill-length L9-stale: generated from the API spec -->
+<!-- ctxlock-ignore-next-line L9-stale: the script is added by the release job -->
+<!-- ctxlock-ignore-file L5-instruction-count L6-skill-length: generated from the API spec -->
 ```
 
 - **Grammar** (strict, my call): `<!--`, spaces, `ctxlock-ignore-next-line` or `ctxlock-ignore-file`, one or more rule ids separated by spaces, a colon, a reason, spaces, `-->`.

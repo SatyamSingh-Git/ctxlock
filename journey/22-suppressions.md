@@ -20,3 +20,9 @@ Satyam chose option C on 2026-11-24 and approved the design on 2026-11-27. Under
 - **A message-text match is too weak for L1.** Its messages give only a code point and a position, so an exception matching "U+200B" would also have excused the next one a pull request added to the same file. L1 exceptions now need the finding's fingerprint (D128).
 - **A test of mine was wrong, not the code.** The first mutation run showed every mutant killing exactly two tests. That pointed to a test failing on the unmutated code: I had expected the L18 lines in the order they are added, but lint sorts warnings before info. The baseline is now checked before every mutation run.
 - **Dogfooding changed the plan.** I first gave this repository three exceptions for the OKF fixtures' attribution comments. But a `ctxlock.yaml` also turns on `L10-owner`, which added eleven warnings for fixtures. `lint.ignore` is the honest tool for test data, so the exceptions went.
+- **The final review found three ways around the promises, each reproduced end to end, and all fixed:**
+  - The directive grammar backtracked exponentially. A directive missing its colon took 65 seconds, so a stranger's upstream could hang `sync`.
+  - A directive naming only `agnix:` rules hid its reason with no finding at all, on every run without agnix.
+  - A base exception for one hidden character also excused a second identical one (D131).
+
+  It also found that the guide's lead example, quieting `L5-instruction-count`, could never work: L5 findings had no file (D132).
