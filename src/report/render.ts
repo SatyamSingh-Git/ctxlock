@@ -25,7 +25,8 @@ function counts(findings: Finding[]): string {
 
 function findingLines(findings: Finding[]): string {
   if (findings.length === 0) return 'no findings';
-  const rows = findings.map((f) => [f.severity, f.rule, f.path === undefined ? '' : `${f.path}${f.line ? `:${f.line}` : ''}`, f.message]);
+  // Paths and messages quote the repository's own text, which can hold a terminal escape.
+  const rows = findings.map((f) => [f.severity, f.rule, f.path === undefined ? '' : `${f.path}${f.line ? `:${f.line}` : ''}`, f.message].map(printable));
   return `${table(rows)}\n\n${counts(findings)}`;
 }
 
@@ -98,7 +99,7 @@ function diffText(d: DiffResult): string {
     d.newFindings.length ? findingLines(d.newFindings) : '  none',
     '',
     'Execution-affecting changes:',
-    ...(d.execChanges.length ? d.execChanges.map((f) => `  ${f.severity} ${f.path ?? ''}  ${f.message}`) : ['  none']),
+    ...(d.execChanges.length ? d.execChanges.map((f) => printable(`  ${f.severity} ${f.path ?? ''}  ${f.message}`)) : ['  none']),
     '',
     `Resolved: ${d.resolvedFindings.length}`,
   ].join('\n');
