@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import MarkdownIt from 'markdown-it';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -160,6 +161,35 @@ describe('ctxlock diff', () => {
     const result = JSON.parse(stdout);
     expect(result.newFindings.map((f: { rule: string }) => f.rule)).toContain('L1-hidden-unicode');
     expect(result.execChanges).toHaveLength(1);
+  });
+
+  it('an exception added with the must it excepts does not pass the pull request; on the base it does', async () => {
+    const fingerprint = `sha256:${createHash('sha256').update(zwsp).digest('hex')}`;
+    const excepted = `version: 1\nlint:\n  exceptions:\n    - rule: L1-hidden-unicode\n      path: AGENTS.md\n      fingerprint: ${fingerprint}\n      owner: "@sam"\n      reason: a joiner our glossary needs\n      expires: 2099-01-01\n`;
+    const together = await gitRepo([{ 'AGENTS.md': 'Use pnpm.\n' }, { 'ctxlock.yaml': excepted, 'AGENTS.md': `Use pnpm.${zwsp}\n` }]);
+
+    expect((await cli('diff', '--base', together.shas[0]!, '--head', together.shas[1]!, together.dir)).code).toBe(1);
+
+    const first = await gitRepo([{ 'ctxlock.yaml': excepted, 'AGENTS.md': 'Use pnpm.\n' }, { 'ctxlock.yaml': excepted, 'AGENTS.md': `Use pnpm.${zwsp}\n` }]);
+    const { code, stdout } = await cli('diff', '--base', first.shas[0]!, '--head', first.shas[1]!, first.dir, '--format', 'json');
+
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout).newFindings).toContainEqual(expect.objectContaining({ rule: 'L18-suppressed', path: 'AGENTS.md' }));
+  });
+
+  it('a new inline directive shows in the diff with its reason', async () => {
+    const skill = (extra: string) => `---\nname: big\ndescription: A long skill\n---\n${extra}${Array.from({ length: 600 }, (_, i) => `Step ${i}.`).join('\n')}\n`;
+    const { dir, shas } = await gitRepo([
+      { '.claude/skills/big/SKILL.md': skill('') },
+      { '.claude/skills/big/SKILL.md': skill('<!-- ctxlock-ignore-file L6-skill-length: generated from the spec -->\n') },
+    ]);
+
+    const { code, stdout } = await cli('diff', '--base', shas[0]!, '--head', shas[1]!, dir, '--format', 'json');
+
+    expect(code).toBe(0);
+    expect(JSON.parse(stdout).newFindings).toContainEqual(
+      expect.objectContaining({ rule: 'L18-suppressed', path: '.claude/skills/big/SKILL.md', message: 'ctxlock-ignore-file quiets 1 finding of L6-skill-length: generated from the spec' }),
+    );
   });
 
   it.each([
