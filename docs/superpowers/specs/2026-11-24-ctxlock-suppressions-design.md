@@ -1,6 +1,6 @@
 # Suppressions, audited exceptions and unused ignores: design
 
-Status: draft for Satyam's approval. Satyam chose option C and the single-filter approach on 2026-11-24. Everything marked "my call" is the author's and open to correction. A builder check raised five gaps, settled here as my calls:
+Status: approved by Satyam on 2026-11-27. Satyam chose option C and the single-filter approach on 2026-11-24. Everything marked "my call" is the author's and open to correction. A builder check raised five gaps, settled here as my calls:
 - `check`'s verdict;
 - rule ids checked by syntax;
 - `fingerprint` for safety exceptions;
