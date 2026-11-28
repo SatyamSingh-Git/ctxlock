@@ -117,6 +117,7 @@ permissions:
   contents: read
   pull-requests: write
   security-events: write   # for the upload
+  actions: read            # private repositories only, for the upload
 
 jobs:
   context:
@@ -130,14 +131,20 @@ jobs:
           sarif: 'true'
 ```
 
-- **The push to main matters.** Code scanning tells what a pull request introduces by comparing it with an analysis of the base branch. On a push with `sarif` on and no base, the Action uploads only the SARIF: there is no diff, comment or behavioral check, and the job passes unless the SARIF could not be written.
+- **The push to main matters.** Code scanning tells what a pull request introduces by comparing it with an analysis of the base branch. On a `push` event with `sarif` on and no base, the Action uploads only the SARIF: there is no diff, comment or behavioral check, and the job passes unless the SARIF could not be written. Any other event without a base, such as `workflow_dispatch` or `merge_group`, still could not run, so a misconfigured check stays red.
 - **Pull requests still pass or fail on `diff`, judged from the base branch.** The SARIF comes from `lint` on the pull request's own head, so the head's `ctxlock.yaml` decides which alerts show, never whether ctxlock's check passes.
 - **Code scanning adds a check of its own, "Code scanning results".** By default it fails on new `error` results. A `must` is an `error`, a `should` a `warning`, and an `info` a `note`.
   - That usually agrees with ctxlock's check. It differs when `fail-on-must` is `'false'`, or when the pull request changes `ctxlock.yaml`.
   - The threshold, and whether that check is required, are set in the repository's code-scanning settings and rulesets.
-- **A finding stays one alert when it moves.** Each result's fingerprint is the key `diff` uses to decide what is new: rule, file, and message without numbers. Two identical findings stay two alerts.
+- **A finding stays one alert when it moves.** Each result's fingerprint is built from the key `diff` uses to decide what is new, plus the file:
+  - the rule;
+  - the unit, or the file when there is no unit;
+  - the hidden text's own fingerprint for L1, or else the message without numbers;
+  - then the file itself, so a finding in one file of a skill never takes over another file's alert.
+
+  Two identical findings in one file stay two alerts.
 - **Findings with no file in the repository are left out**, such as "no owners" when there is no `ctxlock.yaml`, or a generated file that is missing. They still appear in `lint`'s output and in the pull request comment.
-- **Where the upload cannot work, the Action warns instead of failing.** That covers pull requests from forks, which get a read-only token, and private repositories without GitHub Code Security.
+- **Where the upload cannot work, the Action warns instead of failing.** That covers pull requests from forks, which get a read-only token, private repositories without GitHub Code Security, and private repositories whose workflow leaves out `actions: read`.
 - **In VS Code**, write the file with `npx ctxlock lint --format sarif > ctxlock.sarif` and open it with Microsoft's SARIF Viewer extension.
 
 This repository's own `self-test` workflow uploads this way. Its first upload, from a push to main on 2026-11-28, made an analysis with tool `ctxlock`, category `ctxlock` and 0 results, because `ctxlock lint .` is clean here. The pull-request side, with annotations on changed lines, has not been checked live yet.

@@ -52,6 +52,25 @@ describe('renderSarif', () => {
     expect(results(sarif([f('L9-stale', 'should', 'AGENTS.md', 3, undefined, 'other text')]))[0]!.partialFingerprints.primaryLocationLineHash).not.toBe(at(3));
   });
 
+  it('the same finding in two files of one skill is two alerts, each keeping its own identity', () => {
+    const inSkill = (path: string) => ({ ...f('L1-hidden-unicode', 'must', path, 1, 4, 'hidden character U+200B'), unitId: 'skill/.claude/skills/foo' });
+    const hashes = results(sarif([inSkill('.claude/skills/foo/SKILL.md'), inSkill('.claude/skills/foo/b.md')])).map((r) => r.partialFingerprints.primaryLocationLineHash as string);
+
+    expect(hashes.every((h) => h.endsWith(':1'))).toBe(true);
+    expect(hashes[0]).not.toBe(hashes[1]);
+    expect(results(sarif([inSkill('.claude/skills/foo/b.md')]))[0]!.partialFingerprints.primaryLocationLineHash).toBe(hashes[1]);
+  });
+
+  it('each rule carries the descriptions and help GitHub requires, and columns are code points', () => {
+    const log = sarif([f('L9-stale', 'should', 'AGENTS.md', 2)]);
+    const rule = log.runs[0].tool.driver.rules[0];
+
+    expect(rule.shortDescription.text).toBe('L9-stale');
+    expect(rule.fullDescription.text).toContain('the-guide/rules.md');
+    expect(rule.help.text).toContain('the-guide/rules.md');
+    expect(log.runs[0].columnKind).toBe('unicodeCodePoints');
+  });
+
   it('a control character in a message survives as JSON', () => {
     const message = `hook runs "x${String.fromCodePoint(0x1b)}[2J"`;
 

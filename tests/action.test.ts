@@ -125,13 +125,21 @@ describe('the GitHub Action', () => {
   });
 
   it('a push with sarif on and no base skips the diff instead of failing', () => {
-    const skipped = stand('Check context', { BASE: '', SARIF: 'true' });
+    const skipped = stand('Check context', { BASE: '', SARIF: 'true', GITHUB_EVENT_NAME: 'push' });
 
     expect(skipped.status).toBe(0);
     expect(skipped.output).toContain('skipped=true');
     expect(skipped.output).not.toContain('exit-code=');
     expect(existsSync(join(skipped.dir, 'ctxlock.md'))).toBe(false);
-    expect(stand('Check context', { BASE: '', SARIF: 'false' }).output).toContain('exit-code=2');
+    expect(stand('Check context', { BASE: '', SARIF: 'false', GITHUB_EVENT_NAME: 'push' }).output).toContain('exit-code=2');
+  });
+
+  it('only a push skips the diff: another event with no base still could not run, sarif or not', () => {
+    for (const event of ['workflow_dispatch', 'merge_group', 'schedule']) {
+      const run = stand('Check context', { BASE: '', SARIF: 'true', GITHUB_EVENT_NAME: event });
+      expect(run.output, event).toContain('exit-code=2');
+      expect(run.output, event).not.toContain('skipped=true');
+    }
   });
 
   it('Write SARIF keeps the file when lint exits 1 on a must, and says when there is none', () => {

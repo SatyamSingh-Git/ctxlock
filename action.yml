@@ -31,7 +31,7 @@ inputs:
     description: The Claude Code version the behavioral check installs.
     default: '2.1.292'
   sarif:
-    description: "Upload lint's findings to GitHub code scanning. The workflow needs `security-events: write`; on a push without a base, only the upload runs."
+    description: "Upload lint's findings to GitHub code scanning. The workflow needs `security-events: write`, and `actions: read` in a private repository; on a push without a base, only the upload runs."
     default: 'false'
 
 outputs:
@@ -65,8 +65,9 @@ runs:
         SARIF: ${{ inputs.sarif }}
       run: |
         report="$RUNNER_TEMP/ctxlock.md"
-        # A push to the default branch has no base: with SARIF on, that run is code scanning's analysis of the branch.
-        if [ -z "$BASE" ] && [ "$SARIF" = "true" ]; then
+        # A push to the default branch has no base: with SARIF on, that run is code scanning's analysis of the
+        # branch. Any other event without a base is a misconfiguration, and still could not run.
+        if [ -z "$BASE" ] && [ "$SARIF" = "true" ] && [ "$GITHUB_EVENT_NAME" = "push" ]; then
           echo "skipped=true" >> "$GITHUB_OUTPUT"
           exit 0
         fi
@@ -163,7 +164,7 @@ runs:
     - name: SARIF upload warning
       if: always() && steps.upload.outcome == 'failure'
       shell: bash
-      run: echo "::warning title=ctxlock::the SARIF upload failed. Pull requests from forks get a read-only token, private repositories need GitHub Code Security, and the workflow needs security-events write"
+      run: echo "::warning title=ctxlock::the SARIF upload failed. Pull requests from forks get a read-only token, private repositories need GitHub Code Security and actions read, and the workflow needs security-events write"
 
     - name: Job summary
       if: always()
