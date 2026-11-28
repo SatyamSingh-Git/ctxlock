@@ -67,7 +67,7 @@ runs:
         report="$RUNNER_TEMP/ctxlock.md"
         # A push to the default branch has no base: with SARIF on, that run is code scanning's analysis of the
         # branch. Any other event without a base is a misconfiguration, and still could not run.
-        if [ -z "$BASE" ] && [ "$SARIF" = "true" ] && [ "$GITHUB_EVENT_NAME" = "push" ]; then
+        if [ -z "$BASE" ] && [ "${SARIF,,}" = "true" ] && [ "$GITHUB_EVENT_NAME" = "push" ]; then
           echo "skipped=true" >> "$GITHUB_OUTPUT"
           exit 0
         fi
@@ -199,7 +199,7 @@ runs:
           echo "::error title=ctxlock::could not write the SARIF; the job log has the reason"
           exit 1
         fi
-        if [ "$SARIF" = "true" ] && [ "$SARIF_WRITTEN" != "true" ]; then
+        if [ "${SARIF,,}" = "true" ] && [ "$SARIF_WRITTEN" != "true" ]; then
           echo "::warning title=ctxlock::could not write the SARIF; the job log has the reason"
         fi
         status=0
