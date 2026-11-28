@@ -254,6 +254,7 @@ Probes run only when the pull request changes a unit a probe names, so most pull
 | `eval` | `auto` | `false` never runs the behavioral check, even with a credential |
 | `fail-on-regression` | `'false'` | `'true'` fails the check when a base probe that passes at least 0.9 of its base runs regresses, by a one-sided Fisher p ≤ 0.05 |
 | `claude-code-version` | `2.1.292` | The Claude Code version the behavioral check installs |
+| `sarif` | `'false'` | `'true'` uploads `lint`'s findings to GitHub code scanning; the workflow needs `security-events: write` ([details](the-guide/github-action.md#code-scanning)) |
 
 [The Action's page](the-guide/github-action.md) covers credentials, cost and the cache.
 

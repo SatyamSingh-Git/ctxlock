@@ -17,6 +17,7 @@ ctxlock reads your repository's agent context and reports on it. The checks neve
 | Option | Meaning |
 |---|---|
 | `--format text` | Readable output (the default) |
+| `--format sarif` | `lint` only. A SARIF 2.1.0 log of the findings, for GitHub code scanning and the VS Code SARIF Viewer. Findings with no file in the repository are left out ([code scanning](github-action.md#code-scanning)) |
 | `--format json` | Machine-readable output: IDs, paths, digests and findings. Files are not copied into it, but some finding messages quote a short excerpt: up to 60 characters of a hidden comment or a risky line, or the line a frontmatter error points at |
 | `--agnix` | Also run [agnix](https://github.com/agent-sh/agnix), a linter with several hundred rules for agent config, through `npx`. npx downloads it on first use. Its errors become `should` findings and its warnings `info`, with rules named `agnix:<rule>`. If it cannot run, you get one `agnix:unavailable` finding saying why |
 

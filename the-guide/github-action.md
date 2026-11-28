@@ -49,6 +49,7 @@ The Action builds ctxlock from its own source on the runner (Node 22, `npm ci`, 
 | `eval` | `auto` | `false` never runs the behavioral check, even with credentials |
 | `fail-on-regression` | `'false'` | `'true'` fails the check on a gated regression (see [evals](evals.md#reading-the-result)) |
 | `claude-code-version` | `2.1.292` | The Claude Code version installed for the behavioral check |
+| `sarif` | `'false'` | `'true'` uploads `lint`'s findings to GitHub code scanning. The workflow needs `security-events: write`. See [Code scanning](#code-scanning) |
 
 | Output | Meaning |
 |---|---|
@@ -101,6 +102,45 @@ The comment starts with `### ctxlock · context check` and a status line (`❌ 2
 - the behavioral section, `### ctxlock · behavioral check`, when it ran: a table of probes with base and head results, whether the agent loaded the changed unit, the tokens per run, and the cost. Without credentials, a line saying it was skipped.
 
 Every path, name, owner and message from your repository is shown as code, so a file cannot use the comment to notify someone with `@name` (not even an owner the change needs), hide text, or load images. Line breaks in that text become spaces, so it cannot end the code early. When ctxlock cannot run, the comment gives the reason the same way. If it crashed before writing anything, the comment says so and the reason is in the job log; ctxlock's error output never goes into the comment.
+
+## Code scanning
+
+With `sarif: 'true'`, the Action also runs `ctxlock lint --format sarif` and uploads the result with `github/codeql-action/upload-sarif@v4`, category `ctxlock`. Findings then appear as code-scanning alerts in the repository's Security tab, and as annotations on the lines a pull request changes.
+
+```yaml
+on:
+  pull_request:
+  push:
+    branches: [main]   # code scanning compares pull requests with this analysis
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write   # for the upload
+
+jobs:
+  context:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: SatyamSingh-Git/ctxlock@v0
+        with:
+          sarif: 'true'
+```
+
+- **The push to main matters.** Code scanning tells what a pull request introduces by comparing it with an analysis of the base branch. On a push with `sarif` on and no base, the Action uploads only the SARIF: there is no diff, comment or behavioral check, and the job passes unless the SARIF could not be written.
+- **Pull requests still pass or fail on `diff`, judged from the base branch.** The SARIF comes from `lint` on the pull request's own head, so the head's `ctxlock.yaml` decides which alerts show, never whether ctxlock's check passes.
+- **Code scanning adds a check of its own, "Code scanning results".** By default it fails on new `error` results. A `must` is an `error`, a `should` a `warning`, and an `info` a `note`.
+  - That usually agrees with ctxlock's check. It differs when `fail-on-must` is `'false'`, or when the pull request changes `ctxlock.yaml`.
+  - The threshold, and whether that check is required, are set in the repository's code-scanning settings and rulesets.
+- **A finding stays one alert when it moves.** Each result's fingerprint is the key `diff` uses to decide what is new: rule, file, and message without numbers. Two identical findings stay two alerts.
+- **Findings with no file in the repository are left out**, such as "no owners" when there is no `ctxlock.yaml`, or a generated file that is missing. They still appear in `lint`'s output and in the pull request comment.
+- **Where the upload cannot work, the Action warns instead of failing.** That covers pull requests from forks, which get a read-only token, and private repositories without GitHub Code Security.
+- **In VS Code**, write the file with `npx ctxlock lint --format sarif > ctxlock.sarif` and open it with Microsoft's SARIF Viewer extension.
+
+This repository's own `self-test` workflow uploads this way. Its first upload, from a push to main on 2026-11-28, made an analysis with tool `ctxlock`, category `ctxlock` and 0 results, because `ctxlock lint .` is clean here. The pull-request side, with annotations on changed lines, has not been checked live yet.
 
 ## Pull requests from forks
 
