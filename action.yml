@@ -30,6 +30,9 @@ inputs:
   claude-code-version:
     description: The Claude Code version the behavioral check installs.
     default: '2.1.292'
+  sarif:
+    description: "Upload lint's findings to GitHub code scanning. The workflow needs `security-events: write`; on a push without a base, only the upload runs."
+    default: 'false'
 
 outputs:
   exit-code:
@@ -59,8 +62,14 @@ runs:
       # Only ctxlock writes the report, which shows repository text as code; its stderr stays in the job log.
       env:
         BASE: ${{ inputs.base }}
+        SARIF: ${{ inputs.sarif }}
       run: |
         report="$RUNNER_TEMP/ctxlock.md"
+        # A push to the default branch has no base: with SARIF on, that run is code scanning's analysis of the branch.
+        if [ -z "$BASE" ] && [ "$SARIF" = "true" ]; then
+          echo "skipped=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
         if [ -z "$BASE" ]; then
           printf '%s\n\n%s\n' '### ctxlock · context check' 'ctxlock could not run: no base ref. On pull_request events it is set automatically; otherwise pass the base input.' > "$report"
           code=2
@@ -128,6 +137,34 @@ runs:
         cat "$out" >> "$report"
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
 
+    # lint exits 1 on a must and still writes the whole log, so only an empty file means it could not run.
+    - name: Write SARIF
+      id: sarif
+      if: always() && inputs.sarif == 'true'
+      shell: bash
+      run: |
+        out="$RUNNER_TEMP/ctxlock.sarif"
+        set +e
+        node "$GITHUB_ACTION_PATH/dist/cli.js" lint --format sarif "$GITHUB_WORKSPACE" > "$out"
+        set -e
+        if [ -s "$out" ]; then echo "written=true" >> "$GITHUB_OUTPUT"; fi
+
+    # Forks get a read-only token and private repositories need GitHub Code Security, so a failed upload
+    # warns instead of failing the check.
+    - name: Upload SARIF
+      id: upload
+      if: always() && steps.sarif.outputs.written == 'true'
+      continue-on-error: true
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ runner.temp }}/ctxlock.sarif
+        category: ctxlock
+
+    - name: SARIF upload warning
+      if: always() && steps.upload.outcome == 'failure'
+      shell: bash
+      run: echo "::warning title=ctxlock::the SARIF upload failed. Pull requests from forks get a read-only token, private repositories need GitHub Code Security, and the workflow needs security-events write"
+
     - name: Job summary
       if: always()
       shell: bash
@@ -151,7 +188,19 @@ runs:
         FAIL_ON_MUST: ${{ inputs.fail-on-must }}
         EVAL_CODE: ${{ steps.eval.outputs.exit-code }}
         FAIL_ON_REGRESSION: ${{ inputs.fail-on-regression }}
+        SARIF: ${{ inputs.sarif }}
+        SKIPPED: ${{ steps.diff.outputs.skipped }}
+        SARIF_WRITTEN: ${{ steps.sarif.outputs.written }}
       run: |
+        # A push that only uploads SARIF passes unless the SARIF could not be written.
+        if [ "$SKIPPED" = "true" ]; then
+          if [ "$SARIF_WRITTEN" = "true" ]; then exit 0; fi
+          echo "::error title=ctxlock::could not write the SARIF; the job log has the reason"
+          exit 1
+        fi
+        if [ "$SARIF" = "true" ] && [ "$SARIF_WRITTEN" != "true" ]; then
+          echo "::warning title=ctxlock::could not write the SARIF; the job log has the reason"
+        fi
         status=0
         case "$CODE" in
           0) ;;

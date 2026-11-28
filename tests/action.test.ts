@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
@@ -23,9 +23,21 @@ function check(base: string, exit: number, out = '') {
   return { step: step.status, report: readFileSync(join(dir, 'ctxlock.md'), 'utf8'), code: /exit-code=(\S*)/.exec(readFileSync(join(dir, 'output'), 'utf8'))?.[1] };
 }
 
-function result(code: string, failOnMust: string, evalCode = '', failOnRegression = 'false') {
-  const env = { ...process.env, CODE: code, FAIL_ON_MUST: failOnMust, EVAL_CODE: evalCode, FAIL_ON_REGRESSION: failOnRegression };
+function result(code: string, failOnMust: string, evalCode = '', failOnRegression = 'false', sarif = 'false', skipped = '', written = '') {
+  const env = { ...process.env, CODE: code, FAIL_ON_MUST: failOnMust, EVAL_CODE: evalCode, FAIL_ON_REGRESSION: failOnRegression, SARIF: sarif, SKIPPED: skipped, SARIF_WRITTEN: written };
   return spawnSync(BASH, ['-c', script('Result')], { env, encoding: 'utf8' }).status;
+}
+
+// A step's script with a stand-in dist/cli.js that prints `out` and exits with `exit`.
+function stand(name: string, vars: Record<string, string>, exit = 0, out = '') {
+  const dir = tempDir();
+  mkdirSync(join(dir, 'dist'));
+  writeFileSync(join(dir, 'dist/cli.js'), `process.stdout.write(${JSON.stringify(out)}); process.exit(${exit});`);
+  writeFileSync(join(dir, 'output'), '');
+  const env = { ...process.env, GITHUB_ACTION_PATH: dir, GITHUB_WORKSPACE: dir, RUNNER_TEMP: dir, GITHUB_OUTPUT: join(dir, 'output'), ...vars };
+  // As GitHub runs a bash step: -e and pipefail, so a command that fails without set +e stops the step.
+  const step = spawnSync(BASH, ['--noprofile', '--norc', '-eo', 'pipefail', '-c', script(name)], { env, encoding: 'utf8' });
+  return { dir, status: step.status, output: readFileSync(join(dir, 'output'), 'utf8') };
 }
 
 // The Behavioral check step, after a static report, against a stand-in for dist/cli.js. The stand-in
@@ -110,6 +122,44 @@ describe('the GitHub Action', () => {
     const r = behavioral({ TOKEN: 'tok', EVAL: 'false' });
     expect(r.report).toBe('### ctxlock · context check\n');
     expect(r.code).toBeUndefined();
+  });
+
+  it('a push with sarif on and no base skips the diff instead of failing', () => {
+    const skipped = stand('Check context', { BASE: '', SARIF: 'true' });
+
+    expect(skipped.status).toBe(0);
+    expect(skipped.output).toContain('skipped=true');
+    expect(skipped.output).not.toContain('exit-code=');
+    expect(existsSync(join(skipped.dir, 'ctxlock.md'))).toBe(false);
+    expect(stand('Check context', { BASE: '', SARIF: 'false' }).output).toContain('exit-code=2');
+  });
+
+  it('Write SARIF keeps the file when lint exits 1 on a must, and says when there is none', () => {
+    const must = stand('Write SARIF', {}, 1, '{"version":"2.1.0"}');
+
+    expect(must.status).toBe(0);
+    expect(readFileSync(join(must.dir, 'ctxlock.sarif'), 'utf8')).toBe('{"version":"2.1.0"}');
+    expect(must.output).toContain('written=true');
+
+    const crashed = stand('Write SARIF', {}, 2, '');
+    expect(crashed.status).toBe(0);
+    expect(crashed.output).not.toContain('written=');
+  });
+
+  it('the Result step: a skipped diff passes when the SARIF was written, and fails when it was not', () => {
+    expect(result('', 'true', '', 'false', 'true', 'true', 'true')).toBe(0);
+    expect(result('', 'true', '', 'false', 'true', 'true', '')).toBe(1);
+    // A pull request still decides by the diff, whatever happened to the SARIF.
+    expect([result('0', 'true', '', 'false', 'true', '', ''), result('1', 'true', '', 'false', 'true', '', 'true')]).toEqual([0, 1]);
+  });
+
+  it('the upload continues on error, is pinned to v4 with category ctxlock, and a failure warns', () => {
+    const all = (parse(readFileSync('action.yml', 'utf8')) as { inputs: Record<string, { default: string }>; runs: { steps: Array<Record<string, any>> } });
+    const upload = all.runs.steps.find((s) => s.name === 'Upload SARIF')!;
+
+    expect(upload).toMatchObject({ uses: 'github/codeql-action/upload-sarif@v4', 'continue-on-error': true, with: { category: 'ctxlock' } });
+    expect(all.runs.steps.find((s) => s.name === 'SARIF upload warning')!.if).toContain("steps.upload.outcome == 'failure'");
+    expect(all.inputs.sarif!.default).toBe('false');
   });
 
   it('passes inputs to scripts only through env, never through ${{ }} inside them', () => {
