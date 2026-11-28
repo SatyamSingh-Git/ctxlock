@@ -15,7 +15,7 @@ ctxlock's findings lived in its own output and in one pull request comment. Deve
 
 ## What went wrong, and was caught
 
-- **A builder check found the plan's fingerprint field did nothing.** The draft put ctxlock's key under its own name in `partialFingerprints`. GitHub asks for its own field, `primaryLocationLineHash`, which `upload-sarif` fills only when it is missing, so the key moved there. A third-party page says GitHub reads no other field; GitHub's own docs do not say so.
+- **A builder check found the plan's fingerprint field did nothing.** The draft put ctxlock's key under its own name in `partialFingerprints`. GitHub's SARIF support page says, in its `partialFingerprints` row, "Code scanning only uses the `primaryLocationLineHash`", and `upload-sarif` fills that field only when it is missing. So the key moved there. (I first read only a third-party page saying so, and wrote here that GitHub did not; the final review and a fetch of the page itself on 2026-11-28 showed it does.)
 - **It also found the default-branch gap.** Without an analysis of main, every pull request would have shown every old finding as new. The Action now uploads on pushes (D136).
 - **A mutation survived because the test harness was not GitHub.** GitHub runs a bash step with `-e` and `pipefail`, and the old helper ran plain `bash -c`. So a Write SARIF step that stopped on lint's exit 1 passed the tests. The new helper runs steps as GitHub does.
 - **A shell quoting mistake of mine ran text as commands.** A documentation edit passed through a shell string with backticks, and bash ran each backticked word. Nothing destructive ran, and the three files it touched were restored from git. Docs are now edited only with the editor tool.
