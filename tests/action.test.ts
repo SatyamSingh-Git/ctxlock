@@ -170,6 +170,12 @@ describe('the GitHub Action', () => {
     expect(all.inputs.sarif!.default).toBe('false');
   });
 
+  it('a push that only uploads SARIF installs no Claude Code and restores no eval cache', () => {
+    for (const name of ['Install Claude Code', 'Restore eval cache']) {
+      expect(steps.find((s) => s.name === name) as { if?: string }, name).toMatchObject({ if: expect.stringContaining("steps.diff.outputs.skipped != 'true'") });
+    }
+  });
+
   it('passes inputs to scripts only through env, never through ${{ }} inside them', () => {
     for (const step of steps) expect(step.run ?? '', step.name).not.toMatch(/\$\{\{/);
   });
