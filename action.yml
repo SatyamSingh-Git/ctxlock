@@ -36,7 +36,7 @@ inputs:
 
 outputs:
   exit-code:
-    description: 0 clean, 1 must-fix issues, 2 could not run.
+    description: 0 clean, 1 must-fix issues, 2 could not run. Empty on a push that only uploads SARIF, where no diff runs.
     value: ${{ steps.diff.outputs.exit-code }}
   eval-exit-code:
     description: The behavioral check's exit code, 0 done, 1 a gated regression, 2 could not run. Empty when it did not run.

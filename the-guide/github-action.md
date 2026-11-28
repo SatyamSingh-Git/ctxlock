@@ -53,7 +53,7 @@ The Action builds ctxlock from its own source on the runner (Node 22, `npm ci`, 
 
 | Output | Meaning |
 |---|---|
-| `exit-code` | `0` clean, `1` must-fix issues, `2` could not run, including a crash |
+| `exit-code` | `0` clean, `1` must-fix issues, `2` could not run, including a crash. Empty on a push that only uploads SARIF, where no diff runs ([code scanning](#code-scanning)) |
 | `eval-exit-code` | The behavioral check: `0` done, `1` a gated regression, `2` could not run. Empty when it did not run |
 
 ## The behavioral check
