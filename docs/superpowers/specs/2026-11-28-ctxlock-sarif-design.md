@@ -1,6 +1,6 @@
 # SARIF output: design
 
-Status: draft for Satyam's approval. On 2026-11-28 Satyam chose:
+Status: approved by Satyam on 2026-11-28. On 2026-11-28 Satyam chose:
 - approach A: ctxlock writes the file, and the Action uploads it only when asked;
 - the single-renderer build.
 
