@@ -1,10 +1,15 @@
 name: self-test
 
-on: pull_request
+on:
+  pull_request:
+  # A push to main is code scanning's analysis of the branch, which pull requests are compared with.
+  push:
+    branches: [main]
 
 permissions:
   contents: read
   pull-requests: write
+  security-events: write
 
 jobs:
   ctxlock:
@@ -14,3 +19,5 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./
+        with:
+          sarif: 'true'
