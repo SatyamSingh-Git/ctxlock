@@ -26,18 +26,18 @@ export interface DiffResult {
 // content carries a fingerprint of all of it, since its message quotes only the start.
 // A suppression's message holds no position, only what it quiets, how many, until when and why, so it
 // is matched whole: quieting more than on the base is a change a reviewer should see.
-const key = (f: Finding) =>
+export const findingKey = (f: Finding) =>
   `${f.rule}|${f.unitId ?? f.path ?? ''}|${f.data?.fingerprint ?? (f.rule === 'L18-suppressed' ? f.message : f.message.replace(/\b\d+\b/g, '#').replace(/# (\w+?)s\b/g, '# $1'))}`;
 
 // Findings in `from` with no counterpart in `against`, matched one to one, so a second copy of a
 // finding a file already had still counts as new.
 function unmatched(from: Finding[], against: Finding[]): Finding[] {
   const left = new Map<string, number>();
-  for (const f of against) left.set(key(f), (left.get(key(f)) ?? 0) + 1);
+  for (const f of against) left.set(findingKey(f), (left.get(findingKey(f)) ?? 0) + 1);
   return from.filter((f) => {
-    const n = left.get(key(f)) ?? 0;
+    const n = left.get(findingKey(f)) ?? 0;
     if (n === 0) return true;
-    left.set(key(f), n - 1);
+    left.set(findingKey(f), n - 1);
     return false;
   });
 }

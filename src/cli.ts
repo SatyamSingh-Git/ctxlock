@@ -41,6 +41,7 @@ import { renderBuild } from './report/build.js';
 import { renderEval } from './report/eval.js';
 import { renderDiffMarkdown, renderErrorMarkdown } from './report/markdown.js';
 import { printable, renderDiff, renderScan } from './report/render.js';
+import { renderSarif } from './report/sarif.js';
 import { renderCheck } from './report/check.js';
 import { renderSync } from './report/sync.js';
 import { localDate, type ScanResult, scanRepo } from './scan.js';
@@ -264,13 +265,14 @@ export async function main(argv: string[], io: Io): Promise<number> {
     program
       .command(`${view} [dir]`)
       .description(description)
-      .addOption(new Option('--format <format>', 'output format').choices(['text', 'json']).default('text'))
+      .addOption(new Option('--format <format>', 'output format').choices(view === 'lint' ? ['text', 'json', 'sarif'] : ['text', 'json']).default('text'))
       .option('--agnix', 'also run agnix through npx (downloads it on first use)')
-      .action(async (dir: string | undefined, opts: { format: 'text' | 'json'; agnix?: boolean }) => {
+      .action(async (dir: string | undefined, opts: { format: 'text' | 'json' | 'sarif'; agnix?: boolean }) => {
         const root = resolve(dir ?? '.');
         if (!isDirectory(root)) throw new UsageError(`ctxlock: ${dir} is not a directory`);
-        const result = await scanRepo(fsReader(root), { agnix: opts.agnix ?? false });
-        io.stdout(renderScan(result, view, opts.format));
+        const reader = fsReader(root);
+        const result = await scanRepo(reader, { agnix: opts.agnix ?? false });
+        io.stdout(opts.format === 'sarif' ? renderSarif(result.findings, new Set(await reader.listFiles()), VERSION) : renderScan(result, view, opts.format));
         if (view === 'lint' && result.findings.some((f) => f.severity === 'must')) code = 1;
       });
   }

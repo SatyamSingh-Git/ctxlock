@@ -1287,3 +1287,22 @@ describe('ctxlock check', () => {
     expect(unreachable.stderr).toContain('cannot fetch');
   });
 });
+
+describe('ctxlock lint --format sarif', () => {
+  it('prints SARIF and exits 1 on a must', async () => {
+    const dir = tempDir();
+    writeTree(dir, { 'AGENTS.md': `Use pnpm.${String.fromCodePoint(0x200b)}\n` });
+
+    const { code, stdout } = await cli('lint', dir, '--format', 'sarif');
+    const result = JSON.parse(stdout).runs[0].results.find((r: { ruleId: string }) => r.ruleId === 'L1-hidden-unicode');
+
+    expect(code).toBe(1);
+    expect(result.locations[0].physicalLocation.artifactLocation.uri).toBe('AGENTS.md');
+  });
+
+  it('scan and budget refuse --format sarif', async () => {
+    const dir = tempDir();
+    expect((await cli('scan', dir, '--format', 'sarif')).code).toBe(2);
+    expect((await cli('budget', dir, '--format', 'sarif')).code).toBe(2);
+  });
+});
