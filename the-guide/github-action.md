@@ -134,7 +134,11 @@ jobs:
 - **The push to main matters.** Code scanning tells what a pull request introduces by comparing it with an analysis of the base branch. On a `push` event with `sarif` on and no base, the Action uploads only the SARIF: there is no diff, comment or behavioral check, and the job passes unless the SARIF could not be written. Any other event without a base, such as `workflow_dispatch` or `merge_group`, still could not run, so a misconfigured check stays red.
 - **Pull requests still pass or fail on `diff`, judged from the base branch.** The SARIF comes from `lint` on the pull request's own head, so the head's `ctxlock.yaml` decides which alerts show, never whether ctxlock's check passes.
 - **Code scanning adds a check of its own, "Code scanning results".** By default it fails on new `error` results. A `must` is an `error`, a `should` a `warning`, and an `info` a `note`.
-  - That usually agrees with ctxlock's check. It differs when `fail-on-must` is `'false'`, or when the pull request changes `ctxlock.yaml`.
+  - That usually agrees with ctxlock's check. It differs in four cases:
+    - **`fail-on-must` is `'false'`.**
+    - **The pull request changes `ctxlock.yaml`.** The SARIF uses the head's settings, while ctxlock's check uses the base's.
+    - **The pull request adds or changes a hook, MCP server or other execution config.** ctxlock's check fails on that (`L2-exec-config-changed`), but in `lint`'s SARIF each such item is an `L2-exec-config` note, so code scanning does not fail on it.
+    - **The base branch has no `ctxlock` analysis yet.** This is the case before the first push upload, or for a pull request into a branch that never runs the workflow on push. Code scanning then has nothing to compare the pull request with.
   - The threshold, and whether that check is required, are set in the repository's code-scanning settings and rulesets.
 - **A finding stays one alert when it moves.** Each result's fingerprint is built from the key `diff` uses to decide what is new, plus the file:
   - the rule;
